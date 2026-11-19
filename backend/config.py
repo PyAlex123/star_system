@@ -1,0 +1,160 @@
+"""Настройки приложения. Читаются из .env один раз при старте."""
+import hashlib
+import os
+import secrets
+import shutil
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+
+load_dotenv(BASE_DIR / ".env")
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on", "да"}
+
+
+def _prefix(raw: str) -> str:
+    """Нормализует подпуть: '' | '/stars'. Без завершающего слэша."""
+    value = (raw or "").strip().strip("/")
+    return f"/{value}" if value else ""
+
+
+# ── Где лежат изменяемые данные ──────────────────────────────────────────────
+# Всё, что приложение пишет, собрано в одном каталоге: его достаточно
+# смонтировать в Docker одним томом и копировать целиком для бэкапа.
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "").strip() or (BASE_DIR / "data")).resolve()
+DB_FILE = DATA_DIR / "stars_db.json"
+UPLOADS_DIR = DATA_DIR / "uploads"
+AVATARS_UPLOAD_DIR = UPLOADS_DIR / "avatars"
+PRIZES_UPLOAD_DIR = UPLOADS_DIR / "prizes"
+SECRET_FILE = DATA_DIR / "jwt_secret.txt"
+
+
+def _migrate_legacy_data() -> None:
+    """Разовый перенос со старой раскладки (всё в корне проекта) в data/.
+
+    Нужен, чтобы при обновлении не потерялись уже накопленные звёзды и фотографии.
+    """
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    legacy_db = BASE_DIR / "stars_db.json"
+    if legacy_db.exists() and not DB_FILE.exists():
+        shutil.move(str(legacy_db), str(DB_FILE))
+
+    legacy_secret = BASE_DIR / ".jwt_secret"
+    if legacy_secret.exists() and not SECRET_FILE.exists():
+        shutil.move(str(legacy_secret), str(SECRET_FILE))
+
+    legacy_uploads = STATIC_DIR / "uploads"
+    if legacy_uploads.is_dir() and not UPLOADS_DIR.exists():
+        shutil.move(str(legacy_uploads), str(UPLOADS_DIR))
+
+    for directory in (AVATARS_UPLOAD_DIR, PRIZES_UPLOAD_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+_migrate_legacy_data()
+
+
+def _load_or_create_secret() -> str:
+    """JWT-секрет: из .env, иначе из файла, иначе создаём новый.
+
+    Храним в файле, чтобы при перезапуске сервера дети не вылетали из кабинета.
+    """
+    from_env = os.getenv("JWT_SECRET", "").strip()
+    if from_env:
+        return from_env
+
+    if SECRET_FILE.exists():
+        saved = SECRET_FILE.read_text(encoding="utf-8").strip()
+        if saved:
+            return saved
+
+    generated = secrets.token_urlsafe(48)
+    SECRET_FILE.write_text(generated, encoding="utf-8")
+    return generated
+
+
+# ── Основные настройки ───────────────────────────────────────────────────────
+
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+BOT_USERNAME = os.getenv("BOT_USERNAME", "").strip().lstrip("@")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000").strip().rstrip("/")
+URL_PREFIX = _prefix(os.getenv("URL_PREFIX", ""))
+SCHOOL_NAME = os.getenv("SCHOOL_NAME", "Наша школа").strip()
+DEV_LOGIN = _bool("DEV_LOGIN", False)
+USE_WEBHOOK = _bool("USE_WEBHOOK", False)
+JWT_SECRET = _load_or_create_secret()
+
+IS_HTTPS = BASE_URL.startswith("https://")
+
+# Пароль учителя.
+TEACHER_PASSWORD = os.getenv("TEACHER_PASSWORD", "").strip()
+TEACHER_PASSWORD_IS_GENERATED = False
+if not TEACHER_PASSWORD:
+    if IS_HTTPS:
+        # Боевой сервер. Молча придумать пароль и спрятать его в логи — ловушка:
+        # после перезапуска контейнера учитель не сможет войти.
+        sys.exit(
+            "\n  ОСТАНОВЛЕНО: в .env не задан TEACHER_PASSWORD.\n"
+            "  Сайт опубликован по HTTPS, поэтому панель учителя обязана иметь постоянный пароль.\n"
+            "  Добавьте строку вида  TEACHER_PASSWORD=придумайте-длинный-пароль  в .env и запустите снова.\n"
+        )
+    TEACHER_PASSWORD = secrets.token_urlsafe(9)
+    TEACHER_PASSWORD_IS_GENERATED = True
+
+# Срок жизни сессий
+STUDENT_SESSION_DAYS = 30
+TEACHER_SESSION_HOURS = 12
+
+# Правила начисления звёзд
+MAX_LESSON_BANK = 10      # максимум звёзд на один урок для всего класса
+MAX_STUDENT_STARS = 5     # максимум звёзд одному ученику за урок
+
+# Загрузка картинок
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+AVATAR_SIZE = 320
+PRIZE_IMAGE_WIDTH = 800
+
+BOT_ENABLED = bool(BOT_TOKEN)
+
+# Путь, на который Telegram шлёт обновления в режиме webhook.
+# Выводим из токена: значение стабильное между перезапусками и не угадывается снаружи.
+# Внутри приложения маршрут живёт без подпути: nginx срезает префикс,
+# прежде чем передать запрос (location /stars/ { proxy_pass .../; }).
+WEBHOOK_SECRET = (hashlib.sha256(f"webhook:{BOT_TOKEN}".encode()).hexdigest()[:40]
+                  if BOT_TOKEN else "")
+WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}" if WEBHOOK_SECRET else ""
+
+
+def site_url(path: str = "") -> str:
+    """Полный внешний адрес страницы с учётом подпути."""
+    base = os.getenv("BASE_URL", BASE_URL).strip().rstrip("/")
+    return f"{base}{URL_PREFIX}{path}"
+
+
+def webapp_url() -> str:
+    """Адрес кабинета для кнопки в боте. Читается в момент отправки сообщения,
+    поэтому смена адреса (например, туннеля) не требует правки кода."""
+    return site_url("/app")
+
+
+def webhook_url() -> str:
+    """Адрес, который мы сообщаем Telegram. Здесь подпуть обязателен."""
+    return site_url(WEBHOOK_PATH)
+
+
+def deep_link(token: str) -> str:
+    """Ссылка, которая зашивается в QR-код карточки ученика."""
+    if not BOT_USERNAME:
+        return site_url(f"/app?code={token}")
+    return f"https://t.me/{BOT_USERNAME}?start={token}"

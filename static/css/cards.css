@@ -1,0 +1,115 @@
+/* Печатные карточки класса с QR-кодами. */
+
+body { background: var(--bg-soft); padding: 0 0 40px; }
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.toolbar-actions { display: flex; gap: 10px; }
+
+.warn {
+  max-width: 900px;
+  margin: 18px auto 0;
+  background: var(--gold-soft);
+  color: var(--warning);
+  border-radius: var(--r);
+  padding: 13px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+
+.sheet {
+  max-width: 900px;
+  margin: 22px auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.card {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--r);
+  background: #fff;
+  color: #111a2e;
+  padding: 14px 16px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  break-inside: avoid;
+}
+
+.card-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.school { font-size: 11px; font-weight: 700; color: #6b7a93; text-transform: uppercase; letter-spacing: .04em; }
+
+.class-badge {
+  background: #4f46e5;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.name { font-size: 16px; font-weight: 800; line-height: 1.2; }
+
+.qr { width: 142px; height: 142px; image-rendering: pixelated; }
+
+.code {
+  font-size: 13px;
+  letter-spacing: .06em;
+  background: #f4f7fc;
+  border-radius: 8px;
+  padding: 4px 12px;
+}
+
+.code b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; }
+
+.hint { font-size: 10.5px; color: #6b7a93; line-height: 1.4; }
+
+.status { font-size: 10.5px; color: #8795ae; }
+
+@media print {
+  @page { size: A4; margin: 10mm; }
+
+  body { background: #fff; padding: 0; }
+
+  .sheet {
+    margin: 0;
+    padding: 0;
+    gap: 6mm;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .card {
+    border-color: #c7d2e4;
+    box-shadow: none;
+    padding: 6mm 4mm;
+  }
+
+  .qr { width: 38mm; height: 38mm; }
+  .status { display: none; }
+}

@@ -1,0 +1,23 @@
+# Без этого файла в образ уедут виртуальное окружение, 55-мегабайтный
+# cloudflared и — что хуже — .env с паролями и боевая база.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+.env
+.jwt_secret
+data/
+stars_db.json
+static/uploads/
+
+.git/
+.gitignore
+.dockerignore
+
+tools/
+backups/
+.playwright-mcp/
+*.log
+README.md

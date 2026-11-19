@@ -1,0 +1,27 @@
+# Секреты и боевые данные — в репозиторий не попадают никогда
+.env
+data/
+backups/
+
+# Старая раскладка (на случай, если репозиторий заводят до первого запуска)
+.jwt_secret
+stars_db.json
+stars_db.json.bak
+static/uploads/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Инструменты и мусор
+tools/
+.playwright-mcp/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

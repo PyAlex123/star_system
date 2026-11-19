@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Вход в панель учителя</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%E2%AD%90%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
+<style>
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+      radial-gradient(900px 500px at 15% -10%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+      radial-gradient(800px 500px at 110% 110%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 60%),
+      var(--bg);
+  }
+  .box {
+    width: 100%;
+    max-width: 380px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 30px 26px;
+    box-shadow: var(--shadow-lg);
+  }
+  .logo { font-size: 40px; text-align: center; line-height: 1; margin-bottom: 12px; }
+  h1 { font-size: 21px; text-align: center; margin-bottom: 6px; }
+  .sub { text-align: center; color: var(--muted); font-size: 13.5px; margin: 0 0 22px; }
+  label { display: block; font-size: 13px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+  input { width: 100%; }
+  .error {
+    display: none;
+    margin-top: 12px;
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-radius: var(--r-sm);
+    padding: 10px 13px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .error.show { display: block; }
+  .hint { margin-top: 18px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
+  .btn { margin-top: 16px; }
+</style>
+</head>
+<body>
+  <form class="box" onsubmit="submitLogin(event)">
+    <div class="logo">⭐</div>
+    <h1>Панель учителя</h1>
+    <p class="sub">Журнал звёзд и карточки классов</p>
+
+    <label for="password">Пароль</label>
+    <input type="password" id="password" autocomplete="current-password" autofocus required>
+
+    <button class="btn btn-block" type="submit" id="submitBtn">Войти</button>
+    <div class="error" id="error"></div>
+
+    <p class="hint">
+      Пароль задаётся в файле <code>.env</code> (параметр&nbsp;<code>TEACHER_PASSWORD</code>).<br>
+      Если он не задан, временный пароль печатается в окне сервера при запуске.
+    </p>
+  </form>
+
+<script>
+const BASE = "{{BASE}}";
+async function submitLogin(event) {
+  event.preventDefault();
+  const button = document.getElementById("submitBtn");
+  const errorBox = document.getElementById("error");
+  button.disabled = true;
+  errorBox.classList.remove("show");
+
+  try {
+    const response = await fetch(BASE + "/api/auth/teacher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: document.getElementById("password").value }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Не удалось войти");
+    }
+    // next приходит из нашего же редиректа и уже содержит подпуть.
+    // Внешние адреса не пускаем — только пути своего сайта.
+    const next = new URLSearchParams(location.search).get("next") || "";
+    const safe = next.startsWith("/") && !next.startsWith("//") ? next : BASE + "/";
+    location.href = safe;
+  } catch (error) {
+    errorBox.textContent = error.message;
+    errorBox.classList.add("show");
+    button.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

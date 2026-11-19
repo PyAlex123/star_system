@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Журнал звёзд — панель учителя</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%E2%AD%90%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
+</head>
+<body class="teacher">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">⭐</span>
+    <span>Журнал звёзд<small id="brandSub">панель учителя</small></span>
+  </div>
+
+  <nav class="nav">
+    <button class="active" data-page="journal" onclick="switchPage('journal')">Журнал</button>
+    <button data-page="prizes" onclick="switchPage('prizes')">Призы</button>
+    <button data-page="lessons" onclick="switchPage('lessons')">Уроки</button>
+  </nav>
+
+  <div class="row">
+    <button class="btn btn-ghost btn-sm" onclick="logout()">Выйти</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Журнал ──────────────────────────────────────────── -->
+  <section class="page active" id="page-journal">
+
+    <div class="toolbar">
+      <div class="row">
+        <label for="lessonDate"><strong>Дата урока:</strong></label>
+        <input type="date" id="lessonDate">
+        <div class="bank" id="bank">
+          <span id="bankText">Банк урока: 10 ⭐</span>
+          <span class="bank-dots" id="bankDots"></span>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost btn-sm" onclick="openPaste()">📋 Вставить из Excel</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+          📂 Загрузить CSV
+          <input type="file" accept=".csv,.txt" hidden onchange="importCsv(event)">
+        </label>
+        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">💾 Выгрузить CSV</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="between" style="margin-bottom:16px;">
+        <div class="class-tabs" id="classTabs"></div>
+        <div class="row">
+          <button class="btn btn-ghost btn-sm" onclick="openCards()">🖨 Карточки класса</button>
+          <input type="text" id="newClassName" placeholder="Новый класс (7-А)" style="width:170px;">
+          <button class="btn btn-sm" onclick="createClass()">➕ Класс</button>
+          <button class="btn btn-ghost btn-sm" onclick="removeClass()">🗑</button>
+        </div>
+      </div>
+
+      <div id="tableHost"></div>
+
+      <div class="between" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border);">
+        <div class="row">
+          <input type="text" id="newStudentName" placeholder="Фамилия и Имя ученика" style="width:240px;">
+          <input type="number" id="newStudentStars" value="0" min="0" style="width:88px;" title="Стартовые звёзды">
+          <button class="btn btn-sm" onclick="addStudent()">➕ Добавить ученика</button>
+        </div>
+        <button class="btn btn-success" onclick="submitLesson()">✅ Завершить урок и начислить</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Призы ───────────────────────────────────────────── -->
+  <section class="page" id="page-prizes">
+    <div class="card">
+      <div class="between" style="margin-bottom:16px;">
+        <div>
+          <h2 style="font-size:18px;">🎁 Витрина призов</h2>
+          <p class="hint-text" style="margin:4px 0 0;">
+            Наведите на карточку, чтобы заменить фотографию на снимок реального приза.
+          </p>
+        </div>
+        <button class="btn btn-sm" onclick="openPrize()">➕ Добавить приз</button>
+      </div>
+      <div class="prize-admin-grid" id="prizeGrid"></div>
+    </div>
+  </section>
+
+  <!-- ── Уроки ───────────────────────────────────────────── -->
+  <section class="page" id="page-lessons">
+    <div class="card">
+      <h2 style="font-size:18px; margin-bottom:14px;">📅 История проведённых уроков</h2>
+      <div id="lessonList"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── Модальные окна ───────────────────────────────────── -->
+
+<div class="backdrop" id="modalPaste" onclick="if(event.target===this) closeModal('modalPaste')">
+  <div class="modal">
+    <h3>📋 Вставка списка из Excel</h3>
+    <p class="modal-sub">
+      Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой из форматов:<br>
+      <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.
+    </p>
+    <textarea id="pasteArea" rows="9" style="width:100%;"
+              placeholder="5-А&#9;Иванов Иван&#9;12&#10;5-А&#9;Петрова Анна&#9;15"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalPaste')">Отмена</button>
+      <button class="btn" onclick="processPaste()">Добавить в журнал</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalDeduct" onclick="if(event.target===this) closeModal('modalDeduct')">
+  <div class="modal">
+    <h3>🎁 Выдача приза / списание</h3>
+    <p class="modal-sub"><span id="deductName"></span> · на балансе <b id="deductMax">0</b> ⭐</p>
+    <div class="field">
+      <label>Приз с витрины</label>
+      <select id="deductPreset" onchange="applyPreset()"></select>
+    </div>
+    <div class="field">
+      <label>Сколько звёзд списать</label>
+      <input type="number" id="deductAmount" min="1" value="10">
+    </div>
+    <div class="field">
+      <label>Причина</label>
+      <input type="text" id="deductReason" placeholder="Выдача приза">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalDeduct')">Отмена</button>
+      <button class="btn btn-warm" onclick="confirmDeduct()">Списать звёзды</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalPrize" onclick="if(event.target===this) closeModal('modalPrize')">
+  <div class="modal">
+    <h3 id="prizeModalTitle">Новый приз</h3>
+    <p class="modal-sub">Эти призы видят дети в своём кабинете.</p>
+    <div class="field">
+      <label>Название</label>
+      <input type="text" id="prizeName" placeholder="Набор «Знаток»">
+    </div>
+    <div class="field">
+      <label>Цена в звёздах</label>
+      <input type="number" id="prizeCost" min="1" value="30">
+    </div>
+    <div class="field">
+      <label>Короткое описание</label>
+      <input type="text" id="prizeDesc" placeholder="320 электронных схем">
+    </div>
+    <div class="field">
+      <label>Категория</label>
+      <select id="prizeCategory">
+        <option value="electronics">Электроника</option>
+        <option value="gadgets">Гаджеты</option>
+        <option value="small">Небольшой приз</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Фотография</label>
+      <div class="photo-field">
+        <div class="photo-preview" id="prizePhotoPreview"></div>
+        <div class="photo-field-side">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+            📷 Выбрать файл
+            <input type="file" id="prizePhotoPick" accept="image/jpeg,image/png,image/webp"
+                   hidden onchange="stagePrizePhoto(event)">
+          </label>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="clearPrizePhoto()">✖ Убрать</button>
+          <p class="hint-text" style="margin:0;">JPG, PNG или WEBP, до 5 МБ.<br>
+            Лучше всего — снимок реального приза.</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalPrize')">Отмена</button>
+      <button class="btn" onclick="savePrize()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalConfirm" onclick="if(event.target===this) closeModal('modalConfirm')">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="confirmTitle">Подтвердите действие</h3>
+    <p class="modal-sub" id="confirmText"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">Отмена</button>
+      <button class="btn btn-danger" id="confirmBtn">Да, продолжить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalQr" onclick="if(event.target===this) closeModal('modalQr')">
+  <div class="modal" style="max-width:380px; text-align:center;">
+    <h3 id="qrName">QR-код ученика</h3>
+    <p class="modal-sub" id="qrSub"></p>
+    <img id="qrImage" alt="QR-код" style="width:230px; height:230px; image-rendering:pixelated;">
+    <div class="modal-actions" style="justify-content:center;">
+      <button class="btn btn-ghost" onclick="closeModal('modalQr')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="prizePhotoInput" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPrizePhoto(event)">
+
+<div class="toast-host" id="toastHost"></div>
+
+<script>window.APP_BASE = "{{BASE}}";</script>
+<script src="{{BASE}}/static/js/teacher.js"></script>
+</body>
+</html>

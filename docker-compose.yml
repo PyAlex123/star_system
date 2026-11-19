@@ -1,0 +1,35 @@
+services:
+  stars:
+    build: .
+    image: school-stars:latest
+    container_name: school-stars
+    restart: unless-stopped
+    env_file: .env
+
+    # Наружу порт не выставляем: снаружи сайт доступен только через nginx.
+    # Если nginx живёт в Docker — закомментируйте ports и раскомментируйте networks.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    volumes:
+      # Единственный том: база, секрет сессий и загруженные фотографии.
+      # Бэкап = копия этой папки.
+      - ./data:/app/data
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Вариант для nginx в контейнере ───────────────────────────────────────────
+# Уберите блок ports выше и верните эти строки, подставив имя вашей сети:
+#
+#    networks:
+#      - web
+#
+# networks:
+#   web:
+#     external: true
+#
+# Тогда в конфиге nginx адрес будет http://school-stars:8000 вместо 127.0.0.1:8000.
