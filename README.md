@@ -206,6 +206,9 @@ docker compose up -d
 
 ## Как устроен проект
 
+Краткая карта — ниже. Подробное описание архитектуры, схемы данных, всех эндпоинтов
+и принятых решений — в [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```
 app.py                  точка входа (python app.py / uvicorn backend.main:app)
 backend/
