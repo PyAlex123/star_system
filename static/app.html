@@ -28,6 +28,14 @@
   <button class="btn" onclick="location.reload()">Попробовать снова</button>
 </div>
 
+<!-- Выход из аккаунта -->
+<div class="screen" id="screenBye" hidden>
+  <svg class="ic ic-xl"><use href="#i-logout"></use></svg>
+  <h2>Ты вышел из кабинета</h2>
+  <p>Чтобы вернуться — отсканируй QR-код со своей карточки<br>или пришли боту код с неё.</p>
+  <button class="btn" onclick="closeCabinet()">Закрыть</button>
+</div>
+
 <!-- Кабинет -->
 <div id="app" hidden>
 
@@ -130,6 +138,19 @@
           <div class="info-item"><span>Класс</span><span id="infoClass">—</span></div>
           <div class="info-item"><span>Место в классе</span><span id="infoRank">—</span></div>
           <div class="info-item"><span>Всего звёзд</span><span id="infoStars">—</span></div>
+        </div>
+      </div>
+
+      <div id="logoutBlock" style="margin-top:22px;">
+        <div class="eyebrow">Аккаунт</div>
+        <div class="panel">
+          <p class="muted" style="margin:0;font-size:13.5px;">
+            Выход открепит твой Telegram от карточки. Звёзды и аватар останутся —
+            чтобы вернуться, отсканируй QR со своей карточки или пришли код боту.
+          </p>
+          <button class="btn btn-danger" style="margin-top:14px;" onclick="logoutAccount()">
+            <svg class="ic"><use href="#i-logout"></use></svg> Выйти из аккаунта
+          </button>
         </div>
       </div>
     </section>

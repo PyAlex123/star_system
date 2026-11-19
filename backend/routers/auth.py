@@ -74,7 +74,7 @@ def login_preview(student_id: int):
     student = db.find_student(db.load_db(), student_id)
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-    return {"token": security.issue_student_token(student_id), "preview": True}
+    return {"token": security.issue_student_token(student_id, preview=True), "preview": True}
 
 
 @router.post("/teacher")

@@ -25,6 +25,7 @@ let telegramPhotoUrl = null;
 let filter = "all";
 let affordableBefore = new Set();
 let isPreview = false;   // кабинет открыт учителем «глазами ученика»
+let refreshTimer = null; // опрос свежих звёзд; останавливается при выходе
 
 /* ── Мелкие помощники ─────────────────────────────────────── */
 
@@ -328,6 +329,10 @@ function renderAvatars() {
     ? `${data.leaderboard.my_place} из ${data.leaderboard.class_size}`
     : "—";
   $("infoStars").textContent = data.student.total_stars;
+
+  // Учителю, который смотрит кабинет глазами ребёнка, выход не нужен:
+  // он бы отвязал Telegram настоящего ученика. Сервер такой запрос тоже отклонит.
+  $("logoutBlock").hidden = isPreview;
 }
 
 function celebrateNewPrizes() {
@@ -395,6 +400,7 @@ function closeAvatarSheet() {
 }
 
 async function refresh() {
+  if (!token) return;   // после выхода обновлять нечего
   data = await api("/api/me");
   renderAll();
 }
@@ -452,6 +458,58 @@ async function uploadPhoto(event) {
   }
 }
 
+/* ── Выход из аккаунта ────────────────────────────────────── */
+
+function confirmLogout() {
+  const text = "Выйти из аккаунта?\n\nТвой Telegram открепится от карточки. " +
+    "Звёзды и аватар останутся — вернуться можно по своему QR-коду.";
+
+  return new Promise((resolve) => {
+    // Внутри Telegram показываем родное окно: привычнее и не блокируется WebView
+    if (insideTelegram && typeof tg.showConfirm === "function") {
+      tg.showConfirm(text, (ok) => resolve(Boolean(ok)));
+      return;
+    }
+    resolve(window.confirm(text));
+  });
+}
+
+async function logoutAccount() {
+  if (!(await confirmLogout())) return;
+
+  try {
+    await api("/api/me/unbind", { method: "POST" });
+  } catch (error) {
+    haptic("error");
+    toast(error.message, "error");
+    return;
+  }
+
+  haptic("success");
+
+  // Опрос звёзд больше не нужен: токен недействителен, запросы вернут 401
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  sessionStorage.removeItem("stars_token");
+  token = null;
+  data = null;
+
+  closeAvatarSheet();
+  $("app").hidden = true;
+  $("screenBye").hidden = false;
+}
+
+function closeCabinet() {
+  if (insideTelegram) {
+    tg.close?.();
+    return;
+  }
+  location.reload();
+}
+
 /* ── Старт ────────────────────────────────────────────────── */
 
 (async function start() {
@@ -491,7 +549,7 @@ async function uploadPhoto(event) {
   }
 
   // Пока кабинет открыт — подтягиваем свежие звёзды (учитель мог начислить прямо сейчас)
-  setInterval(() => { refresh().catch(() => {}); }, 45000);
+  refreshTimer = setInterval(() => { refresh().catch(() => {}); }, 45000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refresh().catch(() => {});
   });

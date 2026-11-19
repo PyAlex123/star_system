@@ -68,7 +68,13 @@ def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> Dict[str
 
 # ── Сессии ────────────────────────────────────────────────────────────────────
 
-def issue_student_token(student_id: int) -> str:
+def issue_student_token(student_id: int, preview: bool = False) -> str:
+    """Сессия ученика.
+
+    preview=True — токен выдан учителю, который смотрит кабинет глазами ребёнка.
+    Такой токен помечаем claim'ом "prv": иначе он неотличим от настоящего, и
+    учитель, нажав в кабинете «Выйти», отвязал бы Telegram реального ученика.
+    """
     now = int(time.time())
     payload = {
         "sub": str(student_id),
@@ -76,6 +82,8 @@ def issue_student_token(student_id: int) -> str:
         "iat": now,
         "exp": now + config.STUDENT_SESSION_DAYS * 86400,
     }
+    if preview:
+        payload["prv"] = True
     return jwt.encode(payload, config.JWT_SECRET, algorithm=ALGORITHM)
 
 
@@ -121,6 +129,10 @@ def require_student(request: Request) -> Dict[str, Any]:
 
     if payload.get("role") != "student":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Недостаточно прав")
+
+    # Запоминаем, что это предпросмотр из панели учителя. Нужно тем действиям,
+    # которые ребёнок вправе делать только со своим аккаунтом (см. /api/me/unbind).
+    request.state.student_preview = bool(payload.get("prv"))
 
     student = db.find_student(db.load_db(), int(payload["sub"]))
     if not student:

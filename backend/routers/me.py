@@ -2,7 +2,7 @@
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from .. import config, db, images, schemas
 from ..security import require_student
@@ -159,3 +159,32 @@ async def upload_photo(file: UploadFile = File(...),
 
     db.transaction(_apply)
     return {"ok": True, "avatar_url": url}
+
+
+@router.post("/unbind")
+def unbind_self(request: Request, student: Dict[str, Any] = Depends(require_student)):
+    """Выход из аккаунта: открепляем Telegram от карточки.
+
+    Звёзды, историю и аватар не трогаем — ребёнок вернётся по тому же коду,
+    и всё окажется на месте. Нужно, когда карточки перепутали или ребёнок
+    хочет зайти с другого аккаунта Telegram.
+    """
+    if getattr(request.state, "student_preview", False):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Это предпросмотр кабинета. Отвязать аккаунт ученика можно в панели учителя.",
+        )
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_student(database, student["id"])
+        if not fresh:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        if not fresh.get("tg_id"):
+            return db.NO_SAVE          # и так не привязан — файл не перезаписываем
+        fresh["tg_id"] = None
+        fresh["tg_username"] = None
+        fresh["bound_at"] = None
+        return None
+
+    db.transaction(_apply)
+    return {"ok": True}
