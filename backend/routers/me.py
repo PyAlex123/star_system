@@ -34,14 +34,14 @@ def public_card(student: Dict[str, Any], place: int, me_id: int) -> Dict[str, An
     }
 
 
-def class_ranking(database: Dict[str, Any], class_name: str) -> List[Dict[str, Any]]:
+def class_ranking(database: Dict[str, Any], class_id: int) -> List[Dict[str, Any]]:
     """Звёзды по убыванию, при равенстве — по алфавиту."""
-    classmates = [s for s in database["students"] if s["class_name"] == class_name]
+    classmates = db.class_students(database, class_id)
     return sorted(classmates, key=lambda s: (-s["total_stars"], s["name"].lower()))
 
 
 def build_leaderboard(database: Dict[str, Any], student: Dict[str, Any]) -> Dict[str, Any]:
-    ranking = class_ranking(database, student["class_name"])
+    ranking = class_ranking(database, student.get("class_id"))
     my_index = next((i for i, s in enumerate(ranking) if s["id"] == student["id"]), None)
 
     top = [public_card(s, i + 1, student["id"]) for i, s in enumerate(ranking[:TOP_SIZE])]
@@ -100,7 +100,8 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
         "student": {
             "id": fresh["id"],
             "name": fresh["name"],
-            "class_name": fresh["class_name"],
+            "class_name": db.class_name(database, fresh.get("class_id")),
+            "school_name": db.school_name_of_class(database, fresh.get("class_id")),
             "total_stars": fresh["total_stars"],
             "avatar": fresh.get("avatar"),
             "avatar_url": avatar_url(fresh),
@@ -110,7 +111,6 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
         "next_prize": next_prize,
         "history": fresh.get("history", []),
         "avatar_presets": db.AVATAR_PRESETS,
-        "school_name": config.SCHOOL_NAME,
     }
 
 

@@ -1,151 +1,165 @@
 /* ──────────────────────────────────────────────────────────────
    Дизайн-система школьной системы наград.
-   Один источник правды для цветов, радиусов, теней и типографики.
-   Тёмная тема включается автоматически; внутри Telegram цвета
-   подменяются на тему пользователя (см. app.js → applyTelegramTheme).
+
+   Правила, которые держим сознательно — они и отличают интерфейс
+   от «сгенерированного»:
+
+   1. Никаких сине-фиолетовых градиентов. Цвет — плоская заливка,
+      палитра тёплая: бумага, чернила, густой зелёный, янтарь.
+   2. Разделение — границами, а не размытыми тенями-свечениями.
+      Тень есть только у всплывающих окон, и она короткая.
+   3. Скругления разные по назначению: поле ввода 6, кнопка 8,
+      панель 14. Не «всё подряд по 16».
+   4. Заголовки разделов — мелкая прописная надпись с разрядкой
+      и тонкая линейка под ней, по левому краю.
+   5. Цифры — шрифтом с засечками, моноширинные по ширине знака.
+   6. Иконки — SVG линией, не эмодзи.
    ────────────────────────────────────────────────────────────── */
 
-/* Шрифт лежит в проекте, а не на CDN: школьная сеть может резать внешние запросы. */
+/* Шрифты лежат в проекте, а не на CDN: школьная сеть может резать внешние запросы.
+   Golos Text — интерфейсный, рисовался под кириллицу.
+   Literata — с засечками, для заголовков и крупных чисел. */
 @font-face {
-  font-family: 'Manrope';
-  src: url('../fonts/manrope-cyrillic.woff2') format('woff2');
-  font-weight: 200 800;
+  font-family: 'Golos';
+  src: url('../fonts/golos-cyrillic.woff2') format('woff2');
+  font-weight: 400 700;
   font-display: swap;
-  font-style: normal;
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
-
 @font-face {
-  font-family: 'Manrope';
-  src: url('../fonts/manrope-latin.woff2') format('woff2');
-  font-weight: 200 800;
+  font-family: 'Golos';
+  src: url('../fonts/golos-latin.woff2') format('woff2');
+  font-weight: 400 700;
   font-display: swap;
-  font-style: normal;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+                 U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Literata';
+  src: url('../fonts/literata-cyrillic.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: 'Literata';
+  src: url('../fonts/literata-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
                  U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 :root {
-  /* Поверхности */
-  --bg: #eef2f9;
-  --bg-soft: #f7f9fd;
-  --surface: #ffffff;
-  --surface-2: #f4f7fc;
-  --surface-3: #e9eef7;
-  --border: #dfe6f1;
-  --border-strong: #c7d2e4;
+  /* Поверхности: тёплая бумага вместо холодного сине-серого */
+  --paper: #f2eee5;
+  --surface: #fffdf8;
+  --surface-2: #eae4d7;
+  --surface-3: #ded6c5;
+  --line: #ddd5c4;
+  --line-strong: #bfb49c;
 
   /* Текст */
-  --text: #111a2e;
-  --text-2: #3d4a63;
-  --muted: #6b7a93;
+  --ink: #1b241f;
+  --ink-2: #3d4a45;
+  --muted: #6d7872;
 
-  /* Акценты */
-  --accent: #4f46e5;
-  --accent-600: #4338ca;
-  --accent-soft: #eceafe;
-  --accent-2: #9333ea;
-  --gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #a855f7 100%);
-  --gradient-warm: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+  /* Основной цвет — густой зелёный. Действие, согласие, «зачтено». */
+  --accent: #14604a;
+  --accent-hover: #0e4a39;
+  --accent-soft: #dfeee7;
+  --accent-line: #a9cfc0;
 
-  /* Статусы */
-  --gold: #f5a623;
-  --gold-soft: #fff4dc;
-  --success: #12a150;
-  --success-soft: #e4f8ed;
-  --danger: #e5484d;
-  --danger-soft: #fdecec;
-  --warning: #d97706;
-  --info: #0ea5e9;
+  /* Звёзды — янтарь, а не неоновый жёлтый */
+  --gold: #b07d12;
+  --gold-bright: #d9a227;
+  --gold-soft: #f6ecd6;
+  --gold-line: #e0cb9c;
 
-  /* Медали */
-  --medal-1: linear-gradient(135deg, #ffd977, #f0a500);
-  --medal-2: linear-gradient(135deg, #e3e9f2, #aeb9cc);
-  --medal-3: linear-gradient(135deg, #f0bb8e, #c97b3e);
+  /* Ошибка и предупреждение — кирпич и охра */
+  --danger: #9e3621;
+  --danger-soft: #f6e4df;
+  --danger-line: #e0bdb3;
+  --warn: #8a5a10;
+  --warn-soft: #f7ecd9;
 
-  /* Геометрия */
-  --r-xs: 8px;
-  --r-sm: 12px;
-  --r: 16px;
-  --r-lg: 22px;
-  --r-xl: 28px;
-  --r-full: 999px;
+  /* Геометрия: радиусы разные по назначению */
+  --r-field: 6px;
+  --r-btn: 8px;
+  --r-card: 14px;
+  --r-pill: 999px;
 
-  /* Тени */
-  --shadow-sm: 0 1px 2px rgba(17, 26, 46, .06), 0 1px 3px rgba(17, 26, 46, .04);
-  --shadow: 0 4px 16px rgba(17, 26, 46, .08);
-  --shadow-lg: 0 12px 32px rgba(17, 26, 46, .12);
-  --shadow-accent: 0 8px 24px rgba(79, 70, 229, .28);
+  /* Тень одна и короткая — только для всплывающих окон */
+  --shadow-pop: 0 12px 28px rgba(27, 36, 31, .18);
 
-  /* Типографика */
-  --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font: 'Golos', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Literata', Georgia, 'Times New Roman', serif;
 
-  --ease: cubic-bezier(.22, .61, .36, 1);
-  --header-h: 64px;
+  --ease: cubic-bezier(.3, .7, .4, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c1120;
-    --bg-soft: #111829;
-    --surface: #161d31;
-    --surface-2: #1d2639;
-    --surface-3: #263048;
-    --border: #28324a;
-    --border-strong: #3a4761;
+    --paper: #15181a;
+    --surface: #1d2124;
+    --surface-2: #262b2e;
+    --surface-3: #313739;
+    --line: #333b3e;
+    --line-strong: #4a5457;
 
-    --text: #eef2fb;
-    --text-2: #c2cbdd;
-    --muted: #8795ae;
+    --ink: #e9e5db;
+    --ink-2: #c3c9c3;
+    --muted: #8e9a94;
 
-    --accent: #7c6cf6;
-    --accent-600: #6d5ded;
-    --accent-soft: #241f45;
-    --accent-2: #a855f7;
+    --accent: #45a384;
+    --accent-hover: #55b494;
+    --accent-soft: #15302a;
+    --accent-line: #2d5c4d;
 
-    --gold: #fbbf24;
-    --gold-soft: #3a2d12;
-    --success: #34d399;
-    --success-soft: #11291f;
-    --danger: #f87171;
-    --danger-soft: #30191b;
+    --gold: #d9a441;
+    --gold-bright: #e8b858;
+    --gold-soft: #332813;
+    --gold-line: #5a471f;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-    --shadow: 0 6px 20px rgba(0, 0, 0, .45);
-    --shadow-lg: 0 16px 40px rgba(0, 0, 0, .55);
-    --shadow-accent: 0 8px 24px rgba(124, 108, 246, .35);
+    --danger: #d9705a;
+    --danger-soft: #341d18;
+    --danger-line: #5c3328;
+    --warn: #cf9a3d;
+    --warn-soft: #2f2514;
+
+    --shadow-pop: 0 12px 28px rgba(0, 0, 0, .55);
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0c1120;
-  --bg-soft: #111829;
-  --surface: #161d31;
-  --surface-2: #1d2639;
-  --surface-3: #263048;
-  --border: #28324a;
-  --border-strong: #3a4761;
+  --paper: #15181a;
+  --surface: #1d2124;
+  --surface-2: #262b2e;
+  --surface-3: #313739;
+  --line: #333b3e;
+  --line-strong: #4a5457;
 
-  --text: #eef2fb;
-  --text-2: #c2cbdd;
-  --muted: #8795ae;
+  --ink: #e9e5db;
+  --ink-2: #c3c9c3;
+  --muted: #8e9a94;
 
-  --accent: #7c6cf6;
-  --accent-600: #6d5ded;
-  --accent-soft: #241f45;
-  --accent-2: #a855f7;
+  --accent: #45a384;
+  --accent-hover: #55b494;
+  --accent-soft: #15302a;
+  --accent-line: #2d5c4d;
 
-  --gold: #fbbf24;
-  --gold-soft: #3a2d12;
-  --success: #34d399;
-  --success-soft: #11291f;
-  --danger: #f87171;
-  --danger-soft: #30191b;
+  --gold: #d9a441;
+  --gold-bright: #e8b858;
+  --gold-soft: #332813;
+  --gold-line: #5a471f;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-  --shadow: 0 6px 20px rgba(0, 0, 0, .45);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, .55);
-  --shadow-accent: 0 8px 24px rgba(124, 108, 246, .35);
+  --danger: #d9705a;
+  --danger-soft: #341d18;
+  --danger-line: #5c3328;
+  --warn: #cf9a3d;
+  --warn-soft: #2f2514;
+
+  --shadow-pop: 0 12px 28px rgba(0, 0, 0, .55);
 }
 
 * { box-sizing: border-box; }
@@ -158,85 +172,126 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
   font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
+  font-size: 15px;
+  background: var(--paper);
+  color: var(--ink);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -.015em; line-height: 1.2; }
+h1, h2, h3, h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -.01em;
+  line-height: 1.22;
+}
 
-a { color: var(--accent); }
+a { color: var(--accent); text-underline-offset: 2px; }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: var(--r-xs);
+  border-radius: var(--r-field);
 }
 
-/* ── Кнопки ────────────────────────────────────────────────── */
+/* ── Иконки ────────────────────────────────────────────────── */
+
+.ic {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: inline-block;
+  vertical-align: -3px;
+  color: inherit;
+}
+
+.ic-sm { width: 15px; height: 15px; vertical-align: -2px; }
+.ic-lg { width: 22px; height: 22px; vertical-align: -4px; }
+.ic-xl { width: 28px; height: 28px; }
+.ic-gold { color: var(--gold-bright); }
+
+/* ── Заголовок раздела: прописные + линейка ────────────────── */
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.eyebrow::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* ── Кнопки: плоские, с границей, без свечения ─────────────── */
 
 .btn {
   appearance: none;
-  border: 1px solid transparent;
+  border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: var(--r-sm);
+  color: #fffdf8;
+  padding: 9px 15px;
+  border-radius: var(--r-btn);
   font-family: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   text-decoration: none;
   white-space: nowrap;
-  transition: transform .12s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease);
+  transition: background .14s var(--ease), border-color .14s var(--ease), color .14s var(--ease);
 }
 
-.btn:hover { background: var(--accent-600); box-shadow: var(--shadow-accent); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn:active { transform: translateY(.5px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
 
 .btn-ghost {
   background: var(--surface);
-  color: var(--text-2);
-  border-color: var(--border);
+  color: var(--ink-2);
+  border-color: var(--line-strong);
 }
-.btn-ghost:hover { background: var(--surface-2); color: var(--text); box-shadow: var(--shadow-sm); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); border-color: var(--ink-2); }
 
-.btn-success { background: var(--success); }
-.btn-success:hover { background: var(--success); filter: brightness(.93); box-shadow: 0 8px 24px rgba(18, 161, 80, .28); }
-.btn-danger { background: var(--danger); }
-.btn-danger:hover { background: var(--danger); filter: brightness(.93); box-shadow: 0 8px 24px rgba(229, 72, 77, .28); }
-.btn-warm { background: var(--warning); }
-.btn-warm:hover { filter: brightness(.93); box-shadow: 0 8px 24px rgba(217, 119, 6, .28); }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fffdf8; }
+.btn-danger:hover { filter: brightness(.92); }
 
-.btn-sm { padding: 7px 11px; font-size: 13px; border-radius: var(--r-xs); }
-.btn-icon { padding: 8px; width: 34px; height: 34px; }
+.btn-gold { background: var(--gold); border-color: var(--gold); color: #fffdf8; }
+.btn-gold:hover { filter: brightness(.93); }
+
+.btn-sm { padding: 6px 11px; font-size: 13px; gap: 6px; }
 .btn-block { width: 100%; }
 
 /* ── Поля ──────────────────────────────────────────────────── */
 
 input[type="text"], input[type="number"], input[type="date"],
 input[type="password"], select, textarea {
-  padding: 10px 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-field);
   font-size: 14px;
   font-family: inherit;
   background: var(--surface);
-  color: var(--text);
-  transition: border-color .15s, box-shadow .15s;
+  color: var(--ink);
+  transition: border-color .14s, box-shadow .14s;
 }
 
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 input::placeholder, textarea::placeholder { color: var(--muted); }
@@ -246,33 +301,39 @@ label { font-size: 14px; }
 /* ── Мелочи ────────────────────────────────────────────────── */
 
 .muted { color: var(--muted); }
-.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.stack { display: flex; flex-direction: column; gap: 12px; }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
-  border-radius: var(--r-full);
-  font-size: 13px;
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text-2);
-  border: 1px solid var(--border);
+/* Цифры: засечки, одинаковая ширина знака — столбцы не прыгают */
+.num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
-.pill-gold { background: var(--gold-soft); color: var(--warning); border-color: transparent; }
-.pill-success { background: var(--success-soft); color: var(--success); border-color: transparent; }
-.pill-danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+/* Метка-тег: прямоугольная с границей, а не мягкая пастельная капля */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-field);
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
 
-.card {
+.tag-gold { background: var(--gold-soft); color: var(--gold); border-color: var(--gold-line); }
+.tag-accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.tag-danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
+
+.panel {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: 20px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: 18px;
 }
 
 @media print {

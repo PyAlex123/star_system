@@ -6,6 +6,12 @@ const tg = window.Telegram?.WebApp;
 // Значение подставляет сервер при отдаче страницы.
 const BASE = window.APP_BASE || "";
 
+/** SVG-иконка из набора, вшитого в страницу. Вместо эмодзи: они выглядят
+ *  по-разному на Android, iOS и в Windows, и ломают единый вид интерфейса. */
+function icon(name, cls = "ic") {
+  return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+}
+
 /** Путь к картинке с учётом подпути. Внешние ссылки (фото профиля Telegram)
  *  оставляем как есть. */
 function assetUrl(path) {
@@ -39,10 +45,11 @@ function plural(n, one, few, many) {
 
 const stars = (n) => `${n} ${plural(n, "звезда", "звезды", "звёзд")}`;
 
-function toast(message, kind = "") {
+function toast(message, kind = "", iconName = "") {
   const el = document.createElement("div");
   el.className = `toast ${kind}`.trim();
-  el.textContent = message;
+  if (iconName) el.innerHTML = icon(iconName);
+  el.appendChild(document.createTextNode(message));
   $("toastHost").appendChild(el);
   setTimeout(() => {
     el.style.transition = "opacity .3s, transform .3s";
@@ -154,18 +161,28 @@ function renderHero() {
   $("heroAvatarImg").src = assetUrl(student.avatar_url);
   $("heroAvatarImg").alt = student.name;
   $("heroName").textContent = student.name;
-  $("heroClass").textContent = `Класс ${student.class_name}`;
-  $("heroRank").textContent = board.my_place
-    ? `🏅 ${board.my_place}-е место из ${board.class_size}`
-    : "🏅 —";
+  $("heroClass").querySelector("span").textContent = student.class_name;
+  $("heroRank").querySelector("span").textContent = board.my_place
+    ? `${board.my_place}-е место из ${board.class_size}`
+    : "—";
+
+  const schoolChip = $("heroSchool");
+  if (student.school_name) {
+    schoolChip.hidden = false;
+    schoolChip.querySelector("span").textContent = student.school_name;
+  } else {
+    schoolChip.hidden = true;
+  }
+
   $("heroStars").textContent = student.total_stars;
+  $("heroStarsWord").textContent = plural(student.total_stars, "звезда", "звезды", "звёзд");
 
   const next = data.next_prize;
   const goal = $("nextGoal");
   if (next) {
     goal.hidden = false;
-    $("goalName").textContent = `До приза «${next.name}»`;
-    $("goalLeft").textContent = `осталось ${next.left} ⭐`;
+    $("goalName").textContent = `«${next.name}»`;
+    $("goalLeft").innerHTML = `осталось ${next.left}&nbsp;${icon("star")}`;
     requestAnimationFrame(() => { $("goalBar").style.width = `${next.progress}%`; });
   } else {
     goal.hidden = true;
@@ -173,20 +190,21 @@ function renderHero() {
 }
 
 function prizeCard(prize) {
+  const blank = `<div class="no-photo">${icon("gift", "ic ic-xl")}</div>`;
   const photo = prize.image
     ? `<img src="${escapeHtml(assetUrl(prize.image))}" alt="${escapeHtml(prize.name)}" loading="lazy"
-            onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'no-photo',textContent:'🎁'}))">`
-    : `<div class="no-photo">🎁</div>`;
+            onerror="this.outerHTML = this.dataset.blank">`
+    : blank;
 
   const status = prize.affordable
-    ? "✅ Можно забрать — подойди к учителю"
-    : `Осталось ${prize.left} ⭐`;
+    ? `${icon("check")} Можно забрать — подойди к учителю`
+    : `${icon("star")} Осталось ${prize.left}`;
 
   return `
     <article class="prize ${prize.affordable ? "ready" : ""}">
       <div class="prize-photo">
-        ${photo}
-        <span class="prize-cost">${prize.cost} ⭐</span>
+        ${photo.replace("<img ", `<img data-blank="${escapeHtml(blank)}" `)}
+        <span class="prize-cost">${icon("star")} ${prize.cost}</span>
         ${prize.affordable ? '<span class="prize-ready-flag">ХВАТАЕТ</span>' : ""}
       </div>
       <div class="prize-body">
@@ -204,7 +222,7 @@ function renderPrizes() {
 
   if (!list.length) {
     grid.innerHTML = `<div class="empty-note" style="grid-column:1/-1;">
-      Пока нет призов, на которые хватает звёзд.<br>Зарабатывай их на уроках — всё получится! 💪
+      Пока нет призов, на которые хватает звёзд.<br>Зарабатывай их на уроках — всё получится.
     </div>`;
     return;
   }
@@ -214,14 +232,13 @@ function renderPrizes() {
 function podiumBlock(entry, place) {
   if (!entry) return `<div class="podium-place"></div>`;
   const cls = ["first", "second", "third"][place - 1];
-  const medal = ["🥇", "🥈", "🥉"][place - 1];
   return `
     <div class="podium-place ${cls}">
       <div class="podium-avatar"><img src="${escapeHtml(assetUrl(entry.avatar_url))}" alt=""></div>
       <div class="podium-name">${escapeHtml(entry.is_me ? "Ты" : entry.name.split(" ")[0])}</div>
       <div class="podium-stand">
-        <div class="podium-stars">${entry.total_stars} ⭐</div>
-        <div class="podium-rank">${medal} ${place}-е</div>
+        <div class="podium-stars">${entry.total_stars}</div>
+        <div class="podium-rank">${place}-е место</div>
       </div>
     </div>`;
 }
@@ -232,7 +249,7 @@ function rankRow(entry) {
       <div class="rank-place">${entry.place}</div>
       <div class="rank-avatar"><img src="${escapeHtml(assetUrl(entry.avatar_url))}" alt=""></div>
       <div class="rank-name">${escapeHtml(entry.name)}${entry.is_me ? " — это ты" : ""}</div>
-      <div class="rank-stars">${entry.total_stars} ⭐</div>
+      <div class="rank-stars">${entry.total_stars} ${icon("star")}</div>
     </div>`;
 }
 
@@ -262,11 +279,11 @@ function renderRating() {
   if (board.gap_to_next && board.my_place) {
     // Говорим про место, а не про фамилию: «обгонишь Назаров» звучало бы безграмотно
     note.hidden = false;
-    note.innerHTML = `<span>🎯</span><span>Ещё <b>${stars(board.gap_to_next)}</b> —
+    note.innerHTML = `${icon("target")}<span>Ещё <b>${stars(board.gap_to_next)}</b> —
       и ты поднимешься на <b>${board.my_place - 1}-е место</b> в классе!</span>`;
   } else if (board.my_place === 1) {
     note.hidden = false;
-    note.innerHTML = `<span>👑</span><span>Ты на первом месте в классе. Держи планку!</span>`;
+    note.innerHTML = `${icon("crown")}<span>Ты на первом месте в классе. Держи планку!</span>`;
   } else {
     note.hidden = true;
   }
@@ -283,7 +300,7 @@ function renderHistory() {
     const plus = item.delta >= 0;
     return `
       <div class="event ${plus ? "plus" : "minus"}">
-        <div class="event-icon">${plus ? "⭐" : "🎁"}</div>
+        <div class="event-icon">${icon(plus ? "star" : "gift")}</div>
         <div class="event-body">
           <div class="event-reason">${escapeHtml(item.reason)}</div>
           <div class="event-date">${escapeHtml(item.date)}</div>
@@ -305,11 +322,12 @@ function renderAvatars() {
   $("avatarGridSheet").innerHTML = html;
   $("tgPhotoBtn").hidden = !telegramPhotoUrl;
 
+  $("infoSchool").textContent = data.student.school_name || "—";
   $("infoClass").textContent = data.student.class_name;
   $("infoRank").textContent = data.leaderboard.my_place
     ? `${data.leaderboard.my_place} из ${data.leaderboard.class_size}`
     : "—";
-  $("infoStars").textContent = `${data.student.total_stars} ⭐`;
+  $("infoStars").textContent = data.student.total_stars;
 }
 
 function celebrateNewPrizes() {
@@ -318,17 +336,17 @@ function celebrateNewPrizes() {
   if (affordableBefore.size && fresh.length) {
     haptic("success");
     sparkle();
-    toast("Открылся новый приз! Загляни в витрину 🎁", "success");
+    toast("Открылся новый приз — загляни в витрину", "success", "gift");
   }
   affordableBefore = now;
 }
 
 function sparkle() {
-  const symbols = ["⭐", "✨", "🌟"];
+  const symbols = ["star", "sparkle", "star"];
   for (let i = 0; i < 10; i++) {
     const node = document.createElement("div");
     node.className = "sparkle";
-    node.textContent = symbols[i % symbols.length];
+    node.innerHTML = icon(symbols[i % symbols.length]);
     node.style.left = `${10 + Math.random() * 80}%`;
     node.style.top = `${30 + Math.random() * 35}%`;
     node.style.animationDelay = `${Math.random() * 0.4}s`;
@@ -457,10 +475,17 @@ async function uploadPhoto(event) {
   $("app").hidden = false;
   renderAll();
 
+  // Вкладку можно открыть сразу по адресу: /app?view=rating
+  const wanted = new URLSearchParams(location.search).get("view");
+  if (["prizes", "rating", "history", "profile"].includes(wanted)) {
+    switchView(wanted);
+  }
+
   if (isPreview) {
     const ribbon = document.createElement("div");
     ribbon.className = "preview-ribbon";
-    ribbon.textContent = `👀 Предпросмотр: кабинет ученика «${data.student.name}»`;
+    ribbon.innerHTML = icon("eye") +
+      `<span>Предпросмотр: кабинет ученика «${escapeHtml(data.student.name)}»</span>`;
     document.body.appendChild(ribbon);
     document.body.classList.add("has-ribbon");
   }

@@ -11,7 +11,11 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 
-load_dotenv(BASE_DIR / ".env")
+# Кодировку указываем явно: без неё python-dotenv читает файл в кодировке системы
+# (на русской Windows это cp1251), и кириллица в названии школы или пароле ломается.
+# utf-8-sig вдобавок срезает BOM — его добавляют Блокнот и PowerShell,
+# иначе первая переменная в файле получает невидимый префикс и не находится.
+load_dotenv(BASE_DIR / ".env", encoding="utf-8-sig")
 
 
 def _bool(name: str, default: bool = False) -> bool:

@@ -1,4 +1,4 @@
-"""API панели учителя: классы, ученики, уроки, списание звёзд."""
+"""API панели учителя: школы, классы, ученики, уроки, списание звёзд."""
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,31 +15,118 @@ def get_state():
     return db.load_db()
 
 
+# ── Школы ─────────────────────────────────────────────────────────────────────
+
+@router.post("/schools")
+def add_school(item: schemas.SchoolCreate):
+    name = item.name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Введите название школы")
+
+    def _apply(database: Dict[str, Any]):
+        if any(s["name"].strip().lower() == name.lower() for s in database["schools"]):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Такая школа уже есть")
+        school = {"id": db.next_id(database["schools"]), "name": name}
+        database["schools"].append(school)
+        return school
+
+    return {"ok": True, "school": db.transaction(_apply)}
+
+
+@router.patch("/schools/{school_id}")
+def rename_school(school_id: int, item: schemas.SchoolUpdate):
+    name = item.name.strip()
+    if not name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Введите название школы")
+
+    def _apply(database: Dict[str, Any]):
+        school = db.find_school(database, school_id)
+        if not school:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
+        school["name"] = name
+        return school
+
+    return {"ok": True, "school": db.transaction(_apply)}
+
+
+@router.delete("/schools/{school_id}")
+def delete_school(school_id: int):
+    """Удаляет школу вместе со всеми её классами и учениками."""
+    def _apply(database: Dict[str, Any]):
+        if not db.find_school(database, school_id):
+            return db.NO_SAVE
+        if len(database["schools"]) == 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Нельзя удалить единственную школу")
+
+        class_ids = {c["id"] for c in db.school_classes(database, school_id)}
+        database["students"] = [s for s in database["students"]
+                                if s.get("class_id") not in class_ids]
+        database["classes"] = [c for c in database["classes"] if c["school_id"] != school_id]
+        database["lessons"] = [l for l in database["lessons"]
+                               if l.get("class_id") not in class_ids]
+        database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
+        return None
+
+    db.transaction(_apply)
+    return {"ok": True}
+
+
 # ── Классы ────────────────────────────────────────────────────────────────────
 
 @router.post("/classes")
 def add_class(item: schemas.ClassCreate):
     name = item.name.strip()
     if not name:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пустое название класса")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Введите название класса")
 
     def _apply(database: Dict[str, Any]):
-        if name in database["classes"]:
-            return db.NO_SAVE
-        database["classes"].append(name)
-        return None
+        if not db.find_school(database, item.school_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
+        if db.find_class_by_name(database, item.school_id, name):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "В этой школе такой класс уже есть")
+        cls = {"id": db.next_id(database["classes"]), "school_id": item.school_id, "name": name}
+        database["classes"].append(cls)
+        return cls
 
-    db.transaction(_apply)
-    return {"ok": True, "classes": db.load_db()["classes"]}
+    return {"ok": True, "class": db.transaction(_apply)}
 
 
-@router.delete("/classes/{class_name}")
-def delete_class(class_name: str):
+@router.patch("/classes/{class_id}")
+def update_class(class_id: int, item: schemas.ClassUpdate):
     def _apply(database: Dict[str, Any]):
-        if class_name not in database["classes"]:
+        cls = db.find_class(database, class_id)
+        if not cls:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Класс не найден")
+
+        if item.school_id is not None:
+            if not db.find_school(database, item.school_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
+            cls["school_id"] = item.school_id
+
+        if item.name is not None:
+            name = item.name.strip()
+            if not name:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "Введите название класса")
+            twin = db.find_class_by_name(database, cls["school_id"], name)
+            if twin and twin["id"] != class_id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "В этой школе такой класс уже есть")
+            cls["name"] = name
+        return cls
+
+    return {"ok": True, "class": db.transaction(_apply)}
+
+
+@router.delete("/classes/{class_id}")
+def delete_class(class_id: int):
+    def _apply(database: Dict[str, Any]):
+        if not db.find_class(database, class_id):
             return db.NO_SAVE
-        database["classes"].remove(class_name)
-        database["students"] = [s for s in database["students"] if s["class_name"] != class_name]
+        database["students"] = [s for s in database["students"]
+                                if s.get("class_id") != class_id]
+        database["classes"] = [c for c in database["classes"] if c["id"] != class_id]
         return None
 
     db.transaction(_apply)
@@ -48,12 +135,12 @@ def delete_class(class_name: str):
 
 # ── Ученики ───────────────────────────────────────────────────────────────────
 
-def _make_student(database: Dict[str, Any], class_name: str, name: str, stars: int) -> Dict[str, Any]:
+def _make_student(database: Dict[str, Any], class_id: int, name: str, stars: int) -> Dict[str, Any]:
     tokens = {s.get("token") for s in database["students"]}
     student_id = db.next_student_id(database)
     student = {
         "id": student_id,
-        "class_name": class_name,
+        "class_id": class_id,
         "name": name,
         "total_stars": max(0, stars),
         "history": [],
@@ -75,33 +162,32 @@ def _make_student(database: Dict[str, Any], class_name: str, name: str, stars: i
 @router.post("/students")
 def add_student(item: schemas.StudentCreate):
     name = item.name.strip()
-    class_name = item.class_name.strip()
     if not name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Укажите фамилию и имя ученика")
 
     def _apply(database: Dict[str, Any]):
-        if class_name not in database["classes"]:
-            database["classes"].append(class_name)
-        student = _make_student(database, class_name, name, item.total_stars)
+        if not db.find_class(database, item.class_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Класс не найден")
+        student = _make_student(database, item.class_id, name, item.total_stars)
         database["students"].append(student)
         return student
 
-    student = db.transaction(_apply)
-    return {"ok": True, "student": student}
+    return {"ok": True, "student": db.transaction(_apply)}
 
 
 @router.post("/students/bulk")
 def bulk_import(items: List[schemas.BulkImportItem]):
+    """Импорт из Excel/CSV. Классы, которых ещё нет, создаются в указанной школе."""
     def _apply(database: Dict[str, Any]):
         added = 0
         for item in items:
-            class_name = item.class_name.strip() or "Общий"
             name = item.name.strip()
             if not name:
                 continue
-            if class_name not in database["classes"]:
-                database["classes"].append(class_name)
-            student = _make_student(database, class_name, name, item.total_stars)
+            if not db.find_school(database, item.school_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
+            cls = db.ensure_class(database, item.school_id, item.class_name.strip() or "Общий")
+            student = _make_student(database, cls["id"], name, item.total_stars)
             if student["history"]:
                 student["history"][0]["reason"] = "Импорт из таблицы"
             database["students"].append(student)
@@ -121,6 +207,21 @@ def delete_student(student_id: int):
 
     db.transaction(_apply)
     return {"ok": True}
+
+
+@router.post("/students/{student_id}/move")
+def move_student(student_id: int, class_id: int):
+    """Перевести ученика в другой класс — звёзды и история остаются при нём."""
+    def _apply(database: Dict[str, Any]):
+        student = db.find_student(database, student_id)
+        if not student:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        if not db.find_class(database, class_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Класс не найден")
+        student["class_id"] = class_id
+        return student
+
+    return {"ok": True, "student": db.transaction(_apply)}
 
 
 @router.post("/students/{student_id}/reset-token")
@@ -187,6 +288,10 @@ def complete_lesson(payload: schemas.LessonComplete):
                                 f"Ученику можно поставить от 0 до {config.MAX_STUDENT_STARS} звёзд")
 
     def _apply(database: Dict[str, Any]):
+        cls = db.find_class(database, payload.class_id)
+        if not cls:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Класс не найден")
+
         awarded = 0
         for award in payload.awards:
             if award.stars <= 0:
@@ -203,7 +308,9 @@ def complete_lesson(payload: schemas.LessonComplete):
             awarded += 1
 
         database["lessons"].insert(0, {
-            "class_name": payload.class_name,
+            "class_id": cls["id"],
+            "class_name": cls["name"],       # для истории: класс могут переименовать
+            "school_name": db.school_name_of_class(database, cls["id"]),
             "date": payload.date,
             "total_stars": total_stars,
             "students_rewarded": awarded,

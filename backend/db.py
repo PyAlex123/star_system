@@ -17,7 +17,9 @@ from .config import DB_FILE
 
 _lock = threading.RLock()
 
-DB_VERSION = 2
+# 2 -> 3: появились школы. Классы стали объектами {id, school_id, name},
+# у ученика вместо названия класса хранится class_id.
+DB_VERSION = 3
 
 # Алфавит кодов без символов, которые дети путают при ручном вводе (O/0, I/1)
 _TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -60,16 +62,21 @@ DEFAULT_PRIZES = [
 
 DEFAULT_DB: Dict[str, Any] = {
     "version": DB_VERSION,
-    "classes": ["5-А", "5-Б", "6-А"],
+    "schools": [{"id": 1, "name": "Наша школа"}],
+    "classes": [
+        {"id": 1, "school_id": 1, "name": "5-А"},
+        {"id": 2, "school_id": 1, "name": "5-Б"},
+        {"id": 3, "school_id": 1, "name": "6-А"},
+    ],
     "prizes": DEFAULT_PRIZES,
     "students": [
-        {"id": 101, "class_name": "5-А", "name": "Иванов Артём", "total_stars": 34,
+        {"id": 101, "class_id": 1, "name": "Иванов Артём", "total_stars": 34,
          "history": [{"date": "2026-11-10", "delta": 4, "reason": "Активность на уроке"}]},
-        {"id": 102, "class_name": "5-А", "name": "Петрова София", "total_stars": 52,
+        {"id": 102, "class_id": 1, "name": "Петрова София", "total_stars": 52,
          "history": [{"date": "2026-11-10", "delta": 5, "reason": "Сборка схемы без ошибок"}]},
-        {"id": 103, "class_name": "5-Б", "name": "Каримов Тимур", "total_stars": 72,
+        {"id": 103, "class_id": 2, "name": "Каримов Тимур", "total_stars": 72,
          "history": [{"date": "2026-11-12", "delta": 5, "reason": "Победа в мини-олимпиаде"}]},
-        {"id": 104, "class_name": "6-А", "name": "Ахмедова Малика", "total_stars": 18,
+        {"id": 104, "class_id": 3, "name": "Ахмедова Малика", "total_stars": 18,
          "history": [{"date": "2026-11-14", "delta": 3, "reason": "Домашнее задание и ответы"}]},
     ],
     "lessons": [],
@@ -99,6 +106,75 @@ def default_avatar(student_id: int) -> Dict[str, str]:
     return {"type": "preset", "value": AVATAR_PRESETS[student_id % len(AVATAR_PRESETS)]}
 
 
+def next_id(items: Any) -> int:
+    return max((int(i.get("id", 0)) for i in items), default=0) + 1
+
+
+def _migrate_to_schools(db: Dict[str, Any]) -> bool:
+    """Переход со схемы 2 на 3: плоский список классов -> школы и классы с id.
+
+    Все существующие классы попадают в одну школу, название берётся из .env.
+    Запускается один раз; на уже новой базе ничего не делает.
+    """
+    changed = False
+
+    if "schools" not in db:
+        db["schools"] = []
+        changed = True
+
+    classes = db.get("classes") or []
+    old_style = any(isinstance(c, str) for c in classes)
+
+    if not old_style and db["schools"]:
+        return changed
+
+    # Школа по умолчанию — в неё переедет всё, что было
+    if not db["schools"]:
+        from .config import SCHOOL_NAME
+        db["schools"] = [{"id": 1, "name": SCHOOL_NAME or "Наша школа"}]
+        changed = True
+
+    school_id = db["schools"][0]["id"]
+
+    if old_style:
+        converted = []
+        by_name: Dict[str, int] = {}
+        for index, name in enumerate(classes, start=1):
+            if not isinstance(name, str):
+                converted.append(name)
+                by_name[name.get("name", "")] = name.get("id", index)
+                continue
+            converted.append({"id": index, "school_id": school_id, "name": name})
+            by_name[name] = index
+        db["classes"] = converted
+        changed = True
+
+        # Переносим учеников: class_name -> class_id
+        for student in db.get("students", []):
+            if "class_id" in student:
+                continue
+            name = student.pop("class_name", "")
+            if name not in by_name:
+                by_name[name] = next_id(db["classes"])
+                db["classes"].append({"id": by_name[name], "school_id": school_id, "name": name})
+            student["class_id"] = by_name[name]
+            changed = True
+
+        # В истории уроков тоже было название класса
+        for lesson in db.get("lessons", []):
+            if "class_id" not in lesson and "class_name" in lesson:
+                lesson["class_id"] = by_name.get(lesson["class_name"])
+                changed = True
+
+    # Классы без школы прибиваем к первой
+    for cls in db["classes"]:
+        if isinstance(cls, dict) and not cls.get("school_id"):
+            cls["school_id"] = school_id
+            changed = True
+
+    return changed
+
+
 def migrate(db: Dict[str, Any]) -> bool:
     """Дописывает недостающие поля. Идемпотентна.
 
@@ -108,6 +184,9 @@ def migrate(db: Dict[str, Any]) -> bool:
 
     if db.get("version") != DB_VERSION:
         db["version"] = DB_VERSION
+        changed = True
+
+    if _migrate_to_schools(db):
         changed = True
 
     for key, default in (("classes", []), ("students", []), ("lessons", []), ("settings", {})):
@@ -206,6 +285,55 @@ def transaction(func: Callable[[Dict[str, Any]], Any]) -> Any:
 
 def find_student(db: Dict[str, Any], student_id: int) -> Optional[Dict[str, Any]]:
     return next((s for s in db["students"] if s["id"] == student_id), None)
+
+
+# ── Школы и классы ───────────────────────────────────────────────────────────
+
+def find_school(db: Dict[str, Any], school_id: int) -> Optional[Dict[str, Any]]:
+    return next((s for s in db["schools"] if s["id"] == school_id), None)
+
+
+def find_class(db: Dict[str, Any], class_id: int) -> Optional[Dict[str, Any]]:
+    return next((c for c in db["classes"] if c["id"] == class_id), None)
+
+
+def school_classes(db: Dict[str, Any], school_id: int) -> list:
+    return [c for c in db["classes"] if c["school_id"] == school_id]
+
+
+def class_students(db: Dict[str, Any], class_id: int) -> list:
+    return [s for s in db["students"] if s.get("class_id") == class_id]
+
+
+def class_name(db: Dict[str, Any], class_id: Optional[int]) -> str:
+    cls = find_class(db, class_id) if class_id else None
+    return cls["name"] if cls else "—"
+
+
+def school_name_of_class(db: Dict[str, Any], class_id: Optional[int]) -> str:
+    cls = find_class(db, class_id) if class_id else None
+    if not cls:
+        return ""
+    school = find_school(db, cls["school_id"])
+    return school["name"] if school else ""
+
+
+def find_class_by_name(db: Dict[str, Any], school_id: int, name: str) -> Optional[Dict[str, Any]]:
+    """Класс по названию внутри школы. Названия уникальны только в пределах школы:
+    «5-А» может быть и в первой школе, и во второй."""
+    wanted = (name or "").strip().lower()
+    return next((c for c in db["classes"]
+                 if c["school_id"] == school_id and c["name"].strip().lower() == wanted), None)
+
+
+def ensure_class(db: Dict[str, Any], school_id: int, name: str) -> Dict[str, Any]:
+    """Находит класс по названию или создаёт новый — нужно при импорте из Excel."""
+    existing = find_class_by_name(db, school_id, name)
+    if existing:
+        return existing
+    cls = {"id": next_id(db["classes"]), "school_id": school_id, "name": name.strip()}
+    db["classes"].append(cls)
+    return cls
 
 
 def find_by_token(db: Dict[str, Any], token: str) -> Optional[Dict[str, Any]]:

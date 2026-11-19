@@ -40,17 +40,16 @@ def student_qr(student_id: int, size: int = 10):
                     headers={"Cache-Control": "no-store"})
 
 
-def _card_html(student: Dict[str, Any], school: str) -> str:
+def _card_html(student: Dict[str, Any], school: str, class_label: str) -> str:
     name = html.escape(student["name"])
-    class_name = html.escape(student["class_name"])
     token = html.escape(student["token"])
     base = config.URL_PREFIX
-    bound = "✅ вход выполнен" if student.get("tg_id") else "ждёт первого входа"
+    bound = "вход выполнен" if student.get("tg_id") else "ждёт первого входа"
     return f"""
     <div class="card">
       <div class="card-top">
         <div class="school">{html.escape(school)}</div>
-        <div class="class-badge">{class_name}</div>
+        <div class="class-badge">{html.escape(class_label)}</div>
       </div>
       <div class="name">{name}</div>
       <img class="qr" src="{base}/api/students/{student['id']}/qr.png?size=8" alt="QR-код для входа">
@@ -62,44 +61,50 @@ def _card_html(student: Dict[str, Any], school: str) -> str:
     """
 
 
-@router.get("/cards/{class_name}", response_class=HTMLResponse,
+@router.get("/cards/{class_id}", response_class=HTMLResponse,
             dependencies=[Depends(require_teacher_page)])
-def class_cards(class_name: str):
-    """Печатная страница A4: 8 карточек на лист."""
+def class_cards(class_id: int):
+    """Печатная страница A4 с карточками класса."""
     database = db.load_db()
-    students: List[Dict[str, Any]] = [s for s in database["students"] if s["class_name"] == class_name]
+    cls = db.find_class(database, class_id)
+    if not cls:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Класс не найден")
+
+    school = db.school_name_of_class(database, class_id) or config.SCHOOL_NAME
+    students: List[Dict[str, Any]] = db.class_students(database, class_id)
     students.sort(key=lambda s: s["name"].lower())
 
     if not students:
         body = '<p class="empty">В этом классе пока нет учеников.</p>'
     else:
         body = '<div class="sheet">' + "".join(
-            _card_html(s, config.SCHOOL_NAME) for s in students
+            _card_html(s, school, cls["name"]) for s in students
         ) + "</div>"
 
     warning = ""
     if not config.BOT_USERNAME:
-        warning = ('<div class="warn no-print">⚠ В файле .env не заполнено <b>BOT_USERNAME</b>. '
+        warning = ('<div class="warn no-print">В файле .env не заполнено <b>BOT_USERNAME</b>. '
                    'QR-коды пока ведут на сайт, а не в бота. Заполните имя бота и распечатайте заново.</div>')
 
     base = config.URL_PREFIX
+    title = f"{cls['name']} — {school}"
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Карточки класса {html.escape(class_name)}</title>
+<title>Карточки: {html.escape(title)}</title>
 <link rel="stylesheet" href="{base}/static/css/theme.css">
 <link rel="stylesheet" href="{base}/static/css/cards.css">
 </head>
 <body>
 <div class="toolbar no-print">
   <div>
-    <strong>Карточки класса {html.escape(class_name)}</strong>
-    <span class="muted">· учеников: {len(students)}</span>
+    <strong>Карточки класса {html.escape(cls['name'])}</strong>
+    <span class="muted">· {html.escape(school)} · учеников: {len(students)}</span>
   </div>
   <div class="toolbar-actions">
-    <a class="btn btn-ghost" href="{base}/">← В журнал</a>
-    <button class="btn" onclick="window.print()">🖨 Печать</button>
+    <a class="btn btn-ghost" href="{base}/">В журнал</a>
+    <button class="btn" onclick="window.print()">Печать</button>
   </div>
 </div>
 {warning}

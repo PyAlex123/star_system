@@ -1,31 +1,27 @@
-/* Панель учителя: журнал звёзд, карточки с QR, витрина призов. */
+/* Панель учителя: школы, классы, журнал звёзд, карточки с QR, витрина призов. */
 
 const MAX_LESSON_BANK = 10;
 const MAX_STUDENT_STARS = 5;
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
-let state = { classes: [], students: [], prizes: [], lessons: [] };
-let activeClass = "";
-let draft = {};          // { student_id: звёзды за текущий урок }
+let state = { schools: [], classes: [], students: [], prizes: [], lessons: [] };
+let activeSchool = null;   // id школы
+let activeClass = null;    // id класса
+let draft = {};            // { student_id: звёзды за текущий урок }
+
 let deductTarget = null;
-let prizeTarget = null;  // null = создаём новый
+let schoolTarget = null;   // null = создаём новую школу
+let prizeTarget = null;    // null = создаём новый приз
 let photoTarget = null;
 
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-let prizePhotoFile = null;        // выбран в форме, но ещё не отправлен
-let prizePhotoCleared = false;    // нажали «убрать фото»
-let prizePhotoPreviewUrl = null;  // временная ссылка на локальное превью
+let prizePhotoFile = null;
+let prizePhotoCleared = false;
+let prizePhotoPreviewUrl = null;
 
 const $ = (id) => document.getElementById(id);
 
 // Подпуть, на котором развёрнута система ("" в корне, "/stars" на подпути).
-// Значение подставляет сервер при отдаче страницы.
 const BASE = window.APP_BASE || "";
-
-/** Путь к картинке с учётом подпути; внешние ссылки не трогаем. */
-function assetUrl(path) {
-  if (!path) return "";
-  return /^https?:\/\//.test(path) ? path : BASE + path;
-}
 
 /* ── Помощники ────────────────────────────────────────────── */
 
@@ -35,15 +31,34 @@ function escapeHtml(value) {
   ));
 }
 
-function toast(message, kind = "") {
+/** SVG-иконка из набора, вшитого в страницу. */
+function icon(name, cls = "ic") {
+  return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
+}
+
+/** Путь к картинке с учётом подпути; внешние ссылки не трогаем. */
+function assetUrl(path) {
+  if (!path) return "";
+  return /^https?:\/\//.test(path) ? path : BASE + path;
+}
+
+function plural(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
+function toast(message, kind = "", iconName = "") {
   const el = document.createElement("div");
   el.className = `toast ${kind}`.trim();
-  el.textContent = message;
+  if (iconName) el.innerHTML = icon(iconName);
+  el.appendChild(document.createTextNode(message));
   $("toastHost").appendChild(el);
   setTimeout(() => {
     el.style.transition = "opacity .3s, transform .3s";
     el.style.opacity = "0";
-    el.style.transform = "translateX(16px)";
+    el.style.transform = "translateX(12px)";
     setTimeout(() => el.remove(), 300);
   }, 3000);
 }
@@ -74,7 +89,11 @@ function confirmAction(title, text, onConfirm) {
   button.replaceWith(fresh);
   fresh.onclick = async () => {
     closeModal("modalConfirm");
-    await onConfirm();
+    try {
+      await onConfirm();
+    } catch (error) {
+      toast(error.message, "error");
+    }
   };
   openModal("modalConfirm");
 }
@@ -86,41 +105,177 @@ function avatarUrl(student) {
   return `${BASE}/static/img/avatars/fox.svg`;
 }
 
-/* ── Загрузка состояния ───────────────────────────────────── */
+/* ── Школы и классы ───────────────────────────────────────── */
+
+function schoolById(id) { return state.schools.find((s) => s.id === id) || null; }
+function classById(id) { return state.classes.find((c) => c.id === id) || null; }
+function schoolClasses(schoolId) { return state.classes.filter((c) => c.school_id === schoolId); }
+function classStudents() { return state.students.filter((s) => s.class_id === activeClass); }
 
 async function loadState() {
   state = await api("/api/state");
-  if (!activeClass || !state.classes.includes(activeClass)) {
-    activeClass = state.classes[0] || "";
+
+  if (!schoolById(activeSchool)) {
+    activeSchool = state.schools[0]?.id ?? null;
+  }
+  const classes = schoolClasses(activeSchool);
+  if (!classes.some((c) => c.id === activeClass)) {
+    activeClass = classes[0]?.id ?? null;
+    draft = {};
   }
   renderAll();
 }
 
 function renderAll() {
+  renderSchoolSelect();
   renderClassTabs();
   renderTable();
   renderPrizes();
   renderLessons();
 }
 
-function classStudents() {
-  return state.students.filter((s) => s.class_name === activeClass);
+function renderSchoolSelect() {
+  $("schoolSelect").innerHTML = state.schools.map((s) => {
+    const count = schoolClasses(s.id).length;
+    return `<option value="${s.id}" ${s.id === activeSchool ? "selected" : ""}>` +
+           `${escapeHtml(s.name)} — ${count} ${plural(count, "класс", "класса", "классов")}</option>`;
+  }).join("");
+  $("pasteSchoolName").textContent = schoolById(activeSchool)?.name || "—";
 }
 
-/* ── Классы и таблица ─────────────────────────────────────── */
-
-function renderClassTabs() {
-  $("classTabs").innerHTML = state.classes.map((name) => `
-    <button class="class-tab ${name === activeClass ? "active" : ""}"
-            onclick="selectClass('${escapeHtml(name).replace(/'/g, "\\'")}')">${escapeHtml(name)}</button>
-  `).join("");
-}
-
-function selectClass(name) {
-  activeClass = name;
+function selectSchool(id) {
+  activeSchool = id;
+  activeClass = schoolClasses(id)[0]?.id ?? null;
   draft = {};
   renderAll();
 }
+
+function renderClassTabs() {
+  const classes = schoolClasses(activeSchool);
+  if (!classes.length) {
+    $("classTabs").innerHTML = `<span class="hint-text">в этой школе пока нет классов</span>`;
+    return;
+  }
+  $("classTabs").innerHTML = classes.map((c) => `
+    <button class="class-tab ${c.id === activeClass ? "active" : ""}"
+            onclick="selectClass(${c.id})">${escapeHtml(c.name)}</button>
+  `).join("");
+}
+
+function selectClass(id) {
+  activeClass = id;
+  draft = {};
+  renderAll();
+}
+
+function openSchool(id = null) {
+  schoolTarget = id;
+  const school = id ? schoolById(id) : null;
+  $("schoolModalTitle").textContent = school ? "Переименовать школу" : "Новая школа";
+  $("schoolName").value = school?.name || "";
+  openModal("modalSchool");
+  setTimeout(() => $("schoolName").focus(), 50);
+}
+
+async function saveSchool() {
+  const name = $("schoolName").value.trim();
+  if (!name) return toast("Введите название школы", "error");
+
+  try {
+    if (schoolTarget) {
+      await api(`/api/schools/${schoolTarget}`, { method: "PATCH", json: { name } });
+    } else {
+      const created = await api("/api/schools", { method: "POST", json: { name } });
+      activeSchool = created.school.id;
+      activeClass = null;
+    }
+    closeModal("modalSchool");
+    await loadState();
+    toast(schoolTarget ? "Название школы изменено" : "Школа добавлена", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function removeSchool() {
+  const school = schoolById(activeSchool);
+  if (!school) return;
+  if (state.schools.length === 1) {
+    return toast("Нельзя удалить единственную школу", "error");
+  }
+  const classes = schoolClasses(activeSchool).length;
+  const kids = state.students.filter(
+    (s) => schoolClasses(activeSchool).some((c) => c.id === s.class_id)).length;
+
+  confirmAction("Удалить школу?",
+    `«${school.name}» будет удалена вместе с классами (${classes}) и учениками (${kids}). ` +
+    "Звёзды и история тоже пропадут.",
+    async () => {
+      await api(`/api/schools/${activeSchool}`, { method: "DELETE" });
+      activeSchool = null;
+      activeClass = null;
+      await loadState();
+      toast("Школа удалена", "success");
+    });
+}
+
+async function createClass() {
+  if (!activeSchool) return toast("Сначала добавьте школу", "error");
+  const input = $("newClassName");
+  const name = input.value.trim();
+  if (!name) return toast("Введите название класса", "error");
+
+  try {
+    const created = await api("/api/classes", {
+      method: "POST",
+      json: { school_id: activeSchool, name },
+    });
+    input.value = "";
+    activeClass = created.class.id;
+    draft = {};
+    await loadState();
+    toast(`Класс «${name}» создан`, "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function renameClass() {
+  const cls = classById(activeClass);
+  if (!cls) return toast("Сначала выберите класс", "error");
+  $("classNameInput").value = cls.name;
+  openModal("modalClass");
+  setTimeout(() => $("classNameInput").focus(), 50);
+}
+
+async function saveClassName() {
+  const name = $("classNameInput").value.trim();
+  if (!name) return toast("Введите название класса", "error");
+  try {
+    await api(`/api/classes/${activeClass}`, { method: "PATCH", json: { name } });
+    closeModal("modalClass");
+    await loadState();
+    toast("Класс переименован", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function removeClass() {
+  const cls = classById(activeClass);
+  if (!cls) return;
+  const kids = classStudents().length;
+  confirmAction("Удалить класс?",
+    `Класс «${cls.name}» и его ученики (${kids}) будут удалены без возможности восстановления.`,
+    async () => {
+      await api(`/api/classes/${activeClass}`, { method: "DELETE" });
+      activeClass = null;
+      await loadState();
+      toast("Класс удалён", "success");
+    });
+}
+
+/* ── Банк урока и таблица ─────────────────────────────────── */
 
 function usedBank() {
   return classStudents().reduce((sum, s) => sum + (draft[s.id] || 0), 0);
@@ -128,7 +283,7 @@ function usedBank() {
 
 function renderBank() {
   const left = MAX_LESSON_BANK - usedBank();
-  $("bankText").textContent = `Банк урока: ${left} ⭐`;
+  $("bankText").textContent = `Банк урока: ${left}`;
   $("bank").className = "bank" + (left === 0 ? " empty" : "");
   $("bankDots").innerHTML = Array.from({ length: MAX_LESSON_BANK },
     (_, i) => `<span class="bank-dot ${i < left ? "on" : ""}"></span>`).join("");
@@ -138,15 +293,22 @@ function renderTable() {
   renderBank();
   const host = $("tableHost");
 
+  if (!activeSchool) {
+    host.innerHTML = `<div class="empty-note">Добавьте первую школу — кнопка с плюсом вверху.</div>`;
+    return;
+  }
   if (!activeClass) {
-    host.innerHTML = `<div class="empty-note">Создайте первый класс — поле и кнопка «➕ Класс» справа вверху.</div>`;
+    host.innerHTML = `<div class="empty-note">
+      В школе «${escapeHtml(schoolById(activeSchool)?.name || "")}» пока нет классов.<br>
+      Введите название класса и нажмите «Класс».
+    </div>`;
     return;
   }
 
   const list = classStudents();
   if (!list.length) {
     host.innerHTML = `<div class="empty-note">
-      В классе <b>${escapeHtml(activeClass)}</b> пока нет учеников.<br>
+      В классе <b>${escapeHtml(classById(activeClass)?.name || "")}</b> пока нет учеников.<br>
       Добавьте их ниже или вставьте список из Excel.
     </div>`;
     return;
@@ -158,22 +320,22 @@ function renderTable() {
       const value = i + 1;
       return `<button class="star-btn ${value <= current ? "on" : ""}"
                       onclick="setDraft(${student.id}, ${value === current ? value - 1 : value})"
-                      aria-label="${value} звёзд">★</button>`;
+                      aria-label="${value} звёзд">${icon("star")}</button>`;
     }).join("");
 
     const linked = student.tg_id
-      ? `<span class="dot-linked"></span> в Telegram`
-      : `<span class="dot-waiting"></span> ждёт входа`;
+      ? `<span class="student-meta linked">${icon("check")} в Telegram</span>`
+      : `<span class="student-meta">${icon("minus-circle")} ждёт входа</span>`;
 
     return `
       <tr>
-        <td class="muted">${index + 1}</td>
+        <td class="col-num">${index + 1}</td>
         <td>
           <div class="student-cell">
             <div class="avatar-sm"><img src="${escapeHtml(avatarUrl(student))}" alt=""></div>
             <div>
               <div class="student-name">${escapeHtml(student.name)}</div>
-              <div class="student-meta">${linked}</div>
+              ${linked}
             </div>
           </div>
         </td>
@@ -184,18 +346,21 @@ function renderTable() {
                    onchange="setDraft(${student.id}, parseInt(this.value) || 0)">
           </div>
         </td>
-        <td><span class="balance-badge">${student.total_stars + current} ⭐</span></td>
+        <td><span class="balance-badge">${icon("star")} ${student.total_stars + current}</span></td>
         <td><span class="code-chip">${escapeHtml(student.token || "—")}</span></td>
         <td>
           <div class="actions">
-            <button class="icon-btn" title="Показать QR-код" onclick="showQr(${student.id})">🔳</button>
+            <button class="icon-btn" title="Показать QR-код" onclick="showQr(${student.id})">${icon("qr")}</button>
             <button class="icon-btn" title="Посмотреть кабинет глазами ученика"
-                    onclick="previewCabinet(${student.id})">👀</button>
-            <button class="icon-btn" title="Выдать приз / списать звёзды" onclick="openDeduct(${student.id})">🎁</button>
-            <button class="icon-btn" title="Новый код (старая карточка перестанет работать)"
-                    onclick="resetToken(${student.id})">♻️</button>
-            <button class="icon-btn" title="Сбросить аватар" onclick="resetAvatar(${student.id})">🙈</button>
-            <button class="icon-btn danger" title="Удалить ученика" onclick="removeStudent(${student.id})">✖</button>
+                    onclick="previewCabinet(${student.id})">${icon("eye")}</button>
+            <button class="icon-btn" title="Выдать приз или списать звёзды"
+                    onclick="openDeduct(${student.id})">${icon("gift")}</button>
+            <button class="icon-btn" title="Новый код: старая карточка перестанет работать"
+                    onclick="resetToken(${student.id})">${icon("refresh")}</button>
+            <button class="icon-btn" title="Сбросить аватар"
+                    onclick="resetAvatar(${student.id})">${icon("eye-off")}</button>
+            <button class="icon-btn danger" title="Удалить ученика"
+                    onclick="removeStudent(${student.id})">${icon("trash")}</button>
           </div>
         </td>
       </tr>`;
@@ -206,12 +371,12 @@ function renderTable() {
       <table>
         <thead>
           <tr>
-            <th style="width:44px;">№</th>
+            <th class="col-num">№</th>
             <th>Ученик</th>
-            <th style="width:230px;">Звёзды за урок (0–${MAX_STUDENT_STARS})</th>
+            <th style="width:220px;">Звёзды за урок (0–${MAX_STUDENT_STARS})</th>
             <th style="width:110px;">Баланс</th>
             <th style="width:110px;">Код</th>
-            <th style="width:250px;">Действия</th>
+            <th style="width:230px;">Действия</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -226,7 +391,7 @@ function setDraft(studentId, value) {
   const available = MAX_LESSON_BANK - others;
 
   if (value > available) {
-    toast(`В банке урока осталось только ${available} ⭐`, "error");
+    toast(`В банке урока осталось только ${available}`, "error");
     value = available;
   }
   draft[studentId] = value;
@@ -235,45 +400,25 @@ function setDraft(studentId, value) {
 
 /* ── Действия с учениками ─────────────────────────────────── */
 
-async function createClass() {
-  const input = $("newClassName");
-  const name = input.value.trim();
-  if (!name) return toast("Введите название класса", "error");
-
-  await api("/api/classes", { method: "POST", json: { name } });
-  input.value = "";
-  activeClass = name;
-  await loadState();
-  toast(`Класс «${name}» создан`, "success");
-}
-
-function removeClass() {
-  if (!activeClass) return;
-  confirmAction("Удалить класс?",
-    `Класс «${activeClass}» и все его ученики будут удалены без возможности восстановления.`,
-    async () => {
-      await api(`/api/classes/${encodeURIComponent(activeClass)}`, { method: "DELETE" });
-      activeClass = "";
-      await loadState();
-      toast("Класс удалён", "success");
-    });
-}
-
 async function addStudent() {
-  if (!activeClass) return toast("Сначала создайте класс", "error");
+  if (!activeClass) return toast("Сначала выберите класс", "error");
   const nameInput = $("newStudentName");
   const starsInput = $("newStudentStars");
   const name = nameInput.value.trim();
   if (!name) return toast("Введите фамилию и имя", "error");
 
-  await api("/api/students", {
-    method: "POST",
-    json: { class_name: activeClass, name, total_stars: parseInt(starsInput.value) || 0 },
-  });
-  nameInput.value = "";
-  starsInput.value = "0";
-  await loadState();
-  toast(`${name} добавлен в журнал`, "success");
+  try {
+    await api("/api/students", {
+      method: "POST",
+      json: { class_id: activeClass, name, total_stars: parseInt(starsInput.value) || 0 },
+    });
+    nameInput.value = "";
+    starsInput.value = "0";
+    await loadState();
+    toast(`${name} добавлен в журнал`, "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function removeStudent(id) {
@@ -301,33 +446,38 @@ function resetToken(id) {
 }
 
 async function resetAvatar(id) {
-  await api(`/api/students/${id}/reset-avatar`, { method: "POST" });
-  await loadState();
-  toast("Аватар сброшен", "success");
+  try {
+    await api(`/api/students/${id}/reset-avatar`, { method: "POST" });
+    await loadState();
+    toast("Аватар сброшен", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function showQr(id) {
   const student = state.students.find((s) => s.id === id);
   if (!student) return;
   $("qrName").textContent = student.name;
-  $("qrSub").textContent = `Класс ${student.class_name} · код ${student.token}`;
+  $("qrSub").textContent =
+    `${classById(student.class_id)?.name || "—"} · код ${student.token}`;
   $("qrImage").src = `${BASE}/api/students/${id}/qr.png?size=10&t=${Date.now()}`;
   openModal("modalQr");
 }
 
 function previewCabinet(id) {
-  // Открывает настоящий кабинет ученика в новой вкладке — ровно то, что видит ребёнок
   window.open(`${BASE}/app?preview=${id}`, "_blank");
 }
 
 function openCards() {
   if (!activeClass) return toast("Сначала выберите класс", "error");
-  window.open(`${BASE}/cards/${encodeURIComponent(activeClass)}`, "_blank");
+  window.open(`${BASE}/cards/${activeClass}`, "_blank");
 }
 
 /* ── Урок ─────────────────────────────────────────────────── */
 
 async function submitLesson() {
+  if (!activeClass) return toast("Сначала выберите класс", "error");
   const list = classStudents();
   if (!list.length) return toast("В классе нет учеников", "error");
 
@@ -338,19 +488,24 @@ async function submitLesson() {
     const date = $("lessonDate").value || new Date().toISOString().split("T")[0];
     await api("/api/lessons/complete", {
       method: "POST",
-      json: { class_name: activeClass, date, awards },
+      json: { class_id: activeClass, date, awards },
     });
     draft = {};
     await loadState();
     document.querySelectorAll(".balance-badge").forEach((el) => el.classList.add("bumped"));
-    toast(`Урок завершён, начислено ${total} ⭐`, "success");
+    toast(`Урок завершён, начислено ${total} ${plural(total, "звезда", "звезды", "звёзд")}`,
+          "success", "check");
   };
 
   if (total === 0) {
     confirmAction("Ни одной звезды?", "Вы не поставили звёзды никому. Всё равно завершить урок?", send);
     return;
   }
-  await send();
+  try {
+    await send();
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function renderLessons() {
@@ -359,12 +514,17 @@ function renderLessons() {
     host.innerHTML = `<div class="empty-note">Пока нет завершённых уроков.</div>`;
     return;
   }
-  host.innerHTML = state.lessons.slice(0, 30).map((lesson) => `
-    <div class="lesson-row">
-      <span><b>${escapeHtml(lesson.date)}</b> — класс <b>${escapeHtml(lesson.class_name)}</b>
-        <span class="muted">· награждено: ${lesson.students_rewarded}</span></span>
-      <span class="lesson-plus">+${lesson.total_stars} ⭐</span>
-    </div>`).join("");
+  host.innerHTML = state.lessons.slice(0, 40).map((lesson) => {
+    const where = lesson.school_name
+      ? `${escapeHtml(lesson.school_name)}, ${escapeHtml(lesson.class_name || "")}`
+      : escapeHtml(lesson.class_name || "");
+    return `
+      <div class="lesson-row">
+        <span><b>${escapeHtml(lesson.date)}</b> · ${where}
+          <span class="muted">· награждено: ${lesson.students_rewarded}</span></span>
+        <span class="lesson-plus">+${lesson.total_stars} ${icon("star")}</span>
+      </div>`;
+  }).join("");
 }
 
 /* ── Списание звёзд ───────────────────────────────────────── */
@@ -378,8 +538,8 @@ function openDeduct(id) {
   $("deductMax").textContent = student.total_stars;
   $("deductAmount").value = Math.min(10, student.total_stars) || 1;
   $("deductReason").value = "";
-  $("deductPreset").innerHTML = `<option value="">— вручную / штраф —</option>` +
-    state.prizes.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} (${p.cost} ⭐)</option>`).join("");
+  $("deductPreset").innerHTML = `<option value="">— вручную или штраф —</option>` +
+    state.prizes.map((p) => `<option value="${p.id}">${escapeHtml(p.name)} — ${p.cost}</option>`).join("");
 
   openModal("modalDeduct");
 }
@@ -404,7 +564,7 @@ async function confirmDeduct() {
     });
     closeModal("modalDeduct");
     await loadState();
-    toast(`Списано ${amount} ⭐`, "success");
+    toast(`Списано ${amount} ${plural(amount, "звезда", "звезды", "звёзд")}`, "success");
   } catch (error) {
     toast(error.message, "error");
   }
@@ -419,30 +579,35 @@ function renderPrizes() {
     return;
   }
 
+  const blank = `<div class="no-photo">${icon("gift", "ic ic-xl")}</div>`;
+
   grid.innerHTML = state.prizes.map((prize) => {
     const photo = prize.image
       ? `<img src="${escapeHtml(assetUrl(prize.image))}" alt=""
-              onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'no-photo',textContent:'🎁 нет фото'}))">`
-      : `<div class="no-photo">🎁 нет фото</div>`;
+              data-blank="${escapeHtml(blank)}" onerror="this.outerHTML = this.dataset.blank">`
+      : blank;
 
+    const hidden = prize.active === false;
     return `
-      <article class="prize-admin ${prize.active === false ? "hidden-prize" : ""}">
+      <article class="prize-admin ${hidden ? "hidden-prize" : ""}">
         <div class="prize-admin-photo">
           ${photo}
           <div class="photo-overlay">
-            <button class="btn btn-sm" onclick="pickPhoto(${prize.id})">📷 Фото</button>
+            <button class="btn btn-sm" onclick="pickPhoto(${prize.id})">
+              ${icon("camera", "ic ic-sm")} Фото
+            </button>
           </div>
         </div>
         <div class="prize-admin-body">
           <div class="prize-admin-name">${escapeHtml(prize.name)}</div>
           <div class="prize-admin-desc">${escapeHtml(prize.desc || "")}</div>
           <div class="prize-admin-foot">
-            <span class="pill pill-gold">${prize.cost} ⭐</span>
+            <span class="tag tag-gold">${icon("star", "ic ic-sm")} ${prize.cost}</span>
             <div class="actions">
-              <button class="icon-btn" title="Изменить" onclick="openPrize(${prize.id})">✏️</button>
-              <button class="icon-btn" title="${prize.active === false ? "Показать детям" : "Скрыть от детей"}"
-                      onclick="togglePrize(${prize.id})">${prize.active === false ? "🙈" : "👁"}</button>
-              <button class="icon-btn danger" title="Удалить" onclick="removePrize(${prize.id})">✖</button>
+              <button class="icon-btn" title="Изменить" onclick="openPrize(${prize.id})">${icon("pencil")}</button>
+              <button class="icon-btn" title="${hidden ? "Показать детям" : "Скрыть от детей"}"
+                      onclick="togglePrize(${prize.id})">${icon(hidden ? "eye-off" : "eye")}</button>
+              <button class="icon-btn danger" title="Удалить" onclick="removePrize(${prize.id})">${icon("trash")}</button>
             </div>
           </div>
         </div>
@@ -460,7 +625,7 @@ function renderPrizePhotoPreview(src) {
     box.innerHTML = `<img src="${escapeHtml(src)}" alt="">`;
   } else {
     box.className = "photo-preview";
-    box.innerHTML = "🎁<br>нет фото";
+    box.innerHTML = `${icon("camera", "ic ic-lg")}<br>нет фото`;
   }
 }
 
@@ -556,8 +721,12 @@ async function savePrize() {
 
 async function togglePrize(id) {
   const prize = state.prizes.find((p) => p.id === id);
-  await api(`/api/prizes/${id}`, { method: "PATCH", json: { active: prize.active === false } });
-  await loadState();
+  try {
+    await api(`/api/prizes/${id}`, { method: "PATCH", json: { active: prize.active === false } });
+    await loadState();
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function removePrize(id) {
@@ -596,12 +765,15 @@ async function uploadPrizePhoto(event) {
 /* ── Импорт и экспорт ─────────────────────────────────────── */
 
 function openPaste() {
+  if (!activeSchool) return toast("Сначала добавьте школу", "error");
   $("pasteArea").value = "";
+  $("pasteSchoolName").textContent = schoolById(activeSchool)?.name || "—";
   openModal("modalPaste");
 }
 
 function parseLines(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const fallbackClass = classById(activeClass)?.name || "5-А";
   const items = [];
 
   lines.forEach((line, index) => {
@@ -614,7 +786,7 @@ function parseLines(text) {
       return;   // строка заголовков
     }
 
-    let className = activeClass || "5-А";
+    let className = fallbackClass;
     let name = "";
     let stars = 0;
 
@@ -634,7 +806,9 @@ function parseLines(text) {
       name = cols[0];
     }
 
-    if (name) items.push({ class_name: className, name, total_stars: stars });
+    if (name) {
+      items.push({ school_id: activeSchool, class_name: className, name, total_stars: stars });
+    }
   });
 
   return items;
@@ -651,13 +825,18 @@ async function processPaste() {
   const items = parseLines($("pasteArea").value);
   if (!items.length) return toast("Не удалось распознать строки", "error");
   closeModal("modalPaste");
-  await sendBulk(items, "Добавлено учеников");
+  try {
+    await sendBulk(items, "Добавлено учеников");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function importCsv(event) {
   const file = event.target.files?.[0];
   event.target.value = "";
   if (!file) return;
+  if (!activeSchool) return toast("Сначала добавьте школу", "error");
 
   if (/\.(xlsx?|ods)$/i.test(file.name)) {
     toast("Сохраните таблицу как CSV или используйте «Вставить из Excel»", "error");
@@ -676,9 +855,12 @@ function importCsv(event) {
 }
 
 function exportCsv() {
-  let csv = "\uFEFFКласс;ФИО;Всего звёзд;Код карточки;Telegram\n";
+  let csv = "﻿Школа;Класс;ФИО;Всего звёзд;Код карточки;Telegram\n";
   state.students.forEach((s) => {
-    csv += `${s.class_name};${s.name};${s.total_stars};${s.token || ""};${s.tg_id ? "привязан" : ""}\n`;
+    const cls = classById(s.class_id);
+    const school = cls ? schoolById(cls.school_id) : null;
+    csv += `${school?.name || ""};${cls?.name || ""};${s.name};${s.total_stars};` +
+           `${s.token || ""};${s.tg_id ? "привязан" : ""}\n`;
   });
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -710,12 +892,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("lessonDate").value = new Date().toISOString().split("T")[0];
   $("newStudentName").addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
   $("newClassName").addEventListener("keydown", (e) => { if (e.key === "Enter") createClass(); });
+  $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
+  $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
 
   try {
     await loadState();
     const health = await fetch(BASE + "/healthz").then((r) => r.json());
     $("brandSub").textContent = health.bot_enabled
-      ? `бот @${health.bot_username || "…"} · ${health.base_url}`
+      ? `бот @${health.bot_username || "…"}`
       : "бот не настроен — заполните BOT_TOKEN в .env";
   } catch (error) {
     toast(error.message, "error");

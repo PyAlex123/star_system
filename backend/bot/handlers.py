@@ -105,7 +105,7 @@ async def handle_code(message: Message, code: str) -> None:
     if status == "ok":
         text = (
             f"🎉 Отлично, {name}! Карточка привязана.\n\n"
-            f"Класс: <b>{student['class_name']}</b>\n"
+            f"Класс: <b>{db.class_name(db.load_db(), student.get('class_id'))}</b>\n"
             f"Сейчас у тебя: <b>{student['total_stars']} ⭐</b>\n\n"
             "Нажми кнопку ниже — откроется твой кабинет со звёздами, рейтингом класса и витриной призов."
         )

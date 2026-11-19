@@ -5,26 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light dark">
 <title>Журнал звёзд — панель учителя</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%E2%AD%90%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
 </head>
 <body class="teacher">
 
+{{ICONS}}
+
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">⭐</span>
-    <span>Журнал звёзд<small id="brandSub">панель учителя</small></span>
+    <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
+    <span class="brand-text">Журнал звёзд<small id="brandSub">панель учителя</small></span>
   </div>
 
   <nav class="nav">
-    <button class="active" data-page="journal" onclick="switchPage('journal')">Журнал</button>
-    <button data-page="prizes" onclick="switchPage('prizes')">Призы</button>
-    <button data-page="lessons" onclick="switchPage('lessons')">Уроки</button>
+    <button class="active" data-page="journal" onclick="switchPage('journal')">
+      <svg class="ic ic-sm"><use href="#i-users"></use></svg> Журнал
+    </button>
+    <button data-page="prizes" onclick="switchPage('prizes')">
+      <svg class="ic ic-sm"><use href="#i-gift"></use></svg> Призы
+    </button>
+    <button data-page="lessons" onclick="switchPage('lessons')">
+      <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Уроки
+    </button>
   </nav>
 
   <div class="row">
-    <button class="btn btn-ghost btn-sm" onclick="logout()">Выйти</button>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">
+      <svg class="ic ic-sm"><use href="#i-logout"></use></svg> Выйти
+    </button>
   </div>
 </header>
 
@@ -35,58 +45,102 @@
 
     <div class="toolbar">
       <div class="row">
-        <label for="lessonDate"><strong>Дата урока:</strong></label>
+        <label for="lessonDate" class="scope-label">
+          <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Дата урока
+        </label>
         <input type="date" id="lessonDate">
         <div class="bank" id="bank">
-          <span id="bankText">Банк урока: 10 ⭐</span>
+          <svg class="ic ic-sm"><use href="#i-star"></use></svg>
+          <span id="bankText">Банк урока: 10</span>
           <span class="bank-dots" id="bankDots"></span>
         </div>
       </div>
       <div class="row">
-        <button class="btn btn-ghost btn-sm" onclick="openPaste()">📋 Вставить из Excel</button>
+        <button class="btn btn-ghost btn-sm" onclick="openPaste()">
+          <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg> Вставить из Excel
+        </button>
         <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
-          📂 Загрузить CSV
+          <svg class="ic ic-sm"><use href="#i-import"></use></svg> Загрузить CSV
           <input type="file" accept=".csv,.txt" hidden onchange="importCsv(event)">
         </label>
-        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">💾 Выгрузить CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">
+          <svg class="ic ic-sm"><use href="#i-export"></use></svg> Выгрузить CSV
+        </button>
       </div>
     </div>
 
-    <div class="card">
-      <div class="between" style="margin-bottom:16px;">
+    <div class="panel">
+      <!-- Школа и класс -->
+      <div class="scope-bar">
+        <span class="scope-label">
+          <svg class="ic ic-sm"><use href="#i-school"></use></svg> Школа
+        </span>
+        <select id="schoolSelect" onchange="selectSchool(parseInt(this.value))"></select>
+        <button class="icon-btn" title="Добавить школу" onclick="openSchool()">
+          <svg class="ic"><use href="#i-plus"></use></svg>
+        </button>
+        <button class="icon-btn" title="Переименовать школу" onclick="openSchool(activeSchool)">
+          <svg class="ic"><use href="#i-pencil"></use></svg>
+        </button>
+        <button class="icon-btn danger" title="Удалить школу" onclick="removeSchool()">
+          <svg class="ic"><use href="#i-trash"></use></svg>
+        </button>
+
+        <span class="scope-divider"></span>
+
+        <span class="scope-label">
+          <svg class="ic ic-sm"><use href="#i-users"></use></svg> Класс
+        </span>
         <div class="class-tabs" id="classTabs"></div>
-        <div class="row">
-          <button class="btn btn-ghost btn-sm" onclick="openCards()">🖨 Карточки класса</button>
-          <input type="text" id="newClassName" placeholder="Новый класс (7-А)" style="width:170px;">
-          <button class="btn btn-sm" onclick="createClass()">➕ Класс</button>
-          <button class="btn btn-ghost btn-sm" onclick="removeClass()">🗑</button>
-        </div>
+        <input type="text" id="newClassName" placeholder="Новый класс" style="width:124px;">
+        <button class="btn btn-sm" onclick="createClass()">
+          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Класс
+        </button>
+        <button class="icon-btn" title="Переименовать класс" onclick="renameClass()">
+          <svg class="ic"><use href="#i-pencil"></use></svg>
+        </button>
+        <button class="icon-btn danger" title="Удалить класс" onclick="removeClass()">
+          <svg class="ic"><use href="#i-trash"></use></svg>
+        </button>
+      </div>
+
+      <div class="between" style="margin-bottom:12px;">
+        <div class="eyebrow" style="margin:0; flex:1;">Ученики</div>
+        <button class="btn btn-ghost btn-sm" onclick="openCards()">
+          <svg class="ic ic-sm"><use href="#i-printer"></use></svg> Карточки класса
+        </button>
       </div>
 
       <div id="tableHost"></div>
 
-      <div class="between" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--border);">
+      <div class="between" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--line);">
         <div class="row">
-          <input type="text" id="newStudentName" placeholder="Фамилия и Имя ученика" style="width:240px;">
-          <input type="number" id="newStudentStars" value="0" min="0" style="width:88px;" title="Стартовые звёзды">
-          <button class="btn btn-sm" onclick="addStudent()">➕ Добавить ученика</button>
+          <input type="text" id="newStudentName" placeholder="Фамилия и Имя ученика" style="width:230px;">
+          <input type="number" id="newStudentStars" value="0" min="0" style="width:84px;" title="Стартовые звёзды">
+          <button class="btn btn-sm" onclick="addStudent()">
+            <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить ученика
+          </button>
         </div>
-        <button class="btn btn-success" onclick="submitLesson()">✅ Завершить урок и начислить</button>
+        <button class="btn" onclick="submitLesson()">
+          <svg class="ic ic-sm"><use href="#i-check"></use></svg> Завершить урок и начислить
+        </button>
       </div>
     </div>
   </section>
 
   <!-- ── Призы ───────────────────────────────────────────── -->
   <section class="page" id="page-prizes">
-    <div class="card">
-      <div class="between" style="margin-bottom:16px;">
+    <div class="panel">
+      <div class="between" style="margin-bottom:14px;">
         <div>
-          <h2 style="font-size:18px;">🎁 Витрина призов</h2>
-          <p class="hint-text" style="margin:4px 0 0;">
-            Наведите на карточку, чтобы заменить фотографию на снимок реального приза.
+          <div class="eyebrow" style="margin-bottom:4px;">Витрина призов</div>
+          <p class="hint-text" style="margin:0;">
+            Эти призы видят дети. Наведите на карточку, чтобы заменить фотографию.
           </p>
         </div>
-        <button class="btn btn-sm" onclick="openPrize()">➕ Добавить приз</button>
+        <button class="btn btn-sm" onclick="openPrize()">
+          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить приз
+        </button>
       </div>
       <div class="prize-admin-grid" id="prizeGrid"></div>
     </div>
@@ -94,8 +148,8 @@
 
   <!-- ── Уроки ───────────────────────────────────────────── -->
   <section class="page" id="page-lessons">
-    <div class="card">
-      <h2 style="font-size:18px; margin-bottom:14px;">📅 История проведённых уроков</h2>
+    <div class="panel">
+      <div class="eyebrow">История проведённых уроков</div>
       <div id="lessonList"></div>
     </div>
   </section>
@@ -104,12 +158,43 @@
 
 <!-- ── Модальные окна ───────────────────────────────────── -->
 
+<div class="backdrop" id="modalSchool" onclick="if(event.target===this) closeModal('modalSchool')">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="schoolModalTitle">Новая школа</h3>
+    <p class="modal-sub">Название печатается на карточках с QR-кодами и видно детям в кабинете.</p>
+    <div class="field">
+      <label>Название школы</label>
+      <input type="text" id="schoolName" placeholder="Школа № 1, г. Москва">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalSchool')">Отмена</button>
+      <button class="btn" onclick="saveSchool()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalClass" onclick="if(event.target===this) closeModal('modalClass')">
+  <div class="modal" style="max-width:420px;">
+    <h3>Переименовать класс</h3>
+    <p class="modal-sub">Звёзды и ученики останутся на месте.</p>
+    <div class="field">
+      <label>Название класса</label>
+      <input type="text" id="classNameInput" placeholder="5-А">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalClass')">Отмена</button>
+      <button class="btn" onclick="saveClassName()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalPaste" onclick="if(event.target===this) closeModal('modalPaste')">
   <div class="modal">
-    <h3>📋 Вставка списка из Excel</h3>
+    <h3>Вставка списка из Excel</h3>
     <p class="modal-sub">
-      Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой из форматов:<br>
-      <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.
+      Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой формат:<br>
+      <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.<br>
+      Ученики добавятся в школу <b id="pasteSchoolName">—</b>.
     </p>
     <textarea id="pasteArea" rows="9" style="width:100%;"
               placeholder="5-А&#9;Иванов Иван&#9;12&#10;5-А&#9;Петрова Анна&#9;15"></textarea>
@@ -122,8 +207,8 @@
 
 <div class="backdrop" id="modalDeduct" onclick="if(event.target===this) closeModal('modalDeduct')">
   <div class="modal">
-    <h3>🎁 Выдача приза / списание</h3>
-    <p class="modal-sub"><span id="deductName"></span> · на балансе <b id="deductMax">0</b> ⭐</p>
+    <h3>Выдача приза или списание</h3>
+    <p class="modal-sub"><span id="deductName"></span> · на балансе <b id="deductMax">0</b> звёзд</p>
     <div class="field">
       <label>Приз с витрины</label>
       <select id="deductPreset" onchange="applyPreset()"></select>
@@ -138,7 +223,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalDeduct')">Отмена</button>
-      <button class="btn btn-warm" onclick="confirmDeduct()">Списать звёзды</button>
+      <button class="btn btn-gold" onclick="confirmDeduct()">Списать звёзды</button>
     </div>
   </div>
 </div>
@@ -173,11 +258,13 @@
         <div class="photo-preview" id="prizePhotoPreview"></div>
         <div class="photo-field-side">
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
-            📷 Выбрать файл
+            <svg class="ic ic-sm"><use href="#i-camera"></use></svg> Выбрать файл
             <input type="file" id="prizePhotoPick" accept="image/jpeg,image/png,image/webp"
                    hidden onchange="stagePrizePhoto(event)">
           </label>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="clearPrizePhoto()">✖ Убрать</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="clearPrizePhoto()">
+            <svg class="ic ic-sm"><use href="#i-close"></use></svg> Убрать
+          </button>
           <p class="hint-text" style="margin:0;">JPG, PNG или WEBP, до 5 МБ.<br>
             Лучше всего — снимок реального приза.</p>
         </div>
@@ -191,7 +278,7 @@
 </div>
 
 <div class="backdrop" id="modalConfirm" onclick="if(event.target===this) closeModal('modalConfirm')">
-  <div class="modal" style="max-width:420px;">
+  <div class="modal" style="max-width:410px;">
     <h3 id="confirmTitle">Подтвердите действие</h3>
     <p class="modal-sub" id="confirmText"></p>
     <div class="modal-actions">
@@ -202,10 +289,10 @@
 </div>
 
 <div class="backdrop" id="modalQr" onclick="if(event.target===this) closeModal('modalQr')">
-  <div class="modal" style="max-width:380px; text-align:center;">
+  <div class="modal" style="max-width:360px; text-align:center;">
     <h3 id="qrName">QR-код ученика</h3>
     <p class="modal-sub" id="qrSub"></p>
-    <img id="qrImage" alt="QR-код" style="width:230px; height:230px; image-rendering:pixelated;">
+    <img id="qrImage" alt="QR-код" style="width:220px; height:220px; image-rendering:pixelated;">
     <div class="modal-actions" style="justify-content:center;">
       <button class="btn btn-ghost" onclick="closeModal('modalQr')">Закрыть</button>
     </div>

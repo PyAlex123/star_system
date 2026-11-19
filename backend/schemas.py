@@ -4,17 +4,33 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class ClassCreate(BaseModel):
+class SchoolCreate(BaseModel):
     name: str
 
 
+class SchoolUpdate(BaseModel):
+    name: str
+
+
+class ClassCreate(BaseModel):
+    school_id: int
+    name: str
+
+
+class ClassUpdate(BaseModel):
+    name: Optional[str] = None
+    school_id: Optional[int] = None
+
+
 class StudentCreate(BaseModel):
-    class_name: str
+    class_id: int
     name: str
     total_stars: int = 0
 
 
 class BulkImportItem(BaseModel):
+    """Строка из Excel. Класс приходит названием — его создаём в указанной школе."""
+    school_id: int
     class_name: str
     name: str
     total_stars: int = 0
@@ -26,7 +42,7 @@ class LessonAward(BaseModel):
 
 
 class LessonComplete(BaseModel):
-    class_name: str
+    class_id: int
     date: str
     awards: List[LessonAward]
 

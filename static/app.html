@@ -5,12 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Мой кабинет — звёзды и призы</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%E2%AD%90%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/app.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body class="app">
+
+{{ICONS}}
 
 <!-- Загрузка -->
 <div class="screen" id="screenLoading">
@@ -20,7 +22,7 @@
 
 <!-- Ошибка входа -->
 <div class="screen" id="screenError" hidden>
-  <div class="screen-emoji">🔑</div>
+  <svg class="ic ic-xl"><use href="#i-key"></use></svg>
   <h2 id="errorTitle">Не удалось войти</h2>
   <p id="errorText"></p>
   <button class="btn" onclick="location.reload()">Попробовать снова</button>
@@ -34,27 +36,36 @@
       <div class="hero-top">
         <button class="avatar-btn" id="heroAvatar" onclick="openAvatarSheet()" aria-label="Сменить аватар">
           <img id="heroAvatarImg" alt="">
-          <span class="edit-dot">✏️</span>
+          <span class="edit-dot"><svg class="ic"><use href="#i-pencil"></use></svg></span>
         </button>
         <div>
           <div class="hero-name" id="heroName">—</div>
           <div class="hero-sub">
-            <span class="chip" id="heroClass">—</span>
-            <span class="chip" id="heroRank">—</span>
+            <span class="chip" id="heroSchool" hidden>
+              <svg class="ic"><use href="#i-school"></use></svg><span></span>
+            </span>
+            <span class="chip" id="heroClass">
+              <svg class="ic"><use href="#i-users"></use></svg><span>—</span>
+            </span>
+            <span class="chip" id="heroRank">
+              <svg class="ic"><use href="#i-medal"></use></svg><span>—</span>
+            </span>
           </div>
         </div>
       </div>
 
       <div class="balance">
-        <div>
-          <div class="balance-label">Накоплено звёзд</div>
-          <div class="balance-num"><span id="heroStars">0</span><span class="star">⭐</span></div>
+        <div class="balance-label">Накоплено</div>
+        <div class="balance-num">
+          <svg class="ic"><use href="#i-star"></use></svg>
+          <span id="heroStars">0</span>
+          <span class="unit" id="heroStarsWord">звёзд</span>
         </div>
       </div>
 
       <div class="next-goal" id="nextGoal" hidden>
         <div class="next-goal-head">
-          <span id="goalName">—</span>
+          <span>До приза <b id="goalName">—</b></span>
           <span id="goalLeft">—</span>
         </div>
         <div class="bar"><i id="goalBar" style="width:0%"></i></div>
@@ -64,56 +75,58 @@
 
   <nav class="tabbar">
     <button class="tab active" data-view="prizes" onclick="switchView('prizes')">
-      <span class="ico">🎁</span><span class="lbl">Призы</span>
+      <svg class="ic ic-lg"><use href="#i-gift"></use></svg><span class="lbl">Призы</span>
     </button>
     <button class="tab" data-view="rating" onclick="switchView('rating')">
-      <span class="ico">🏆</span><span class="lbl">Рейтинг</span>
+      <svg class="ic ic-lg"><use href="#i-trophy"></use></svg><span class="lbl">Рейтинг</span>
     </button>
     <button class="tab" data-view="history" onclick="switchView('history')">
-      <span class="ico">📜</span><span class="lbl">История</span>
+      <svg class="ic ic-lg"><use href="#i-history"></use></svg><span class="lbl">История</span>
     </button>
     <button class="tab" data-view="profile" onclick="switchView('profile')">
-      <span class="ico">😎</span><span class="lbl">Профиль</span>
+      <svg class="ic ic-lg"><use href="#i-user"></use></svg><span class="lbl">Профиль</span>
     </button>
   </nav>
 
   <main class="content shell">
 
     <section class="view active" id="view-prizes">
+      <div class="eyebrow">Витрина призов</div>
       <div class="filter-row">
-        <button class="filter-btn active" id="filterAll" onclick="setFilter('all')">Все призы</button>
+        <button class="filter-btn active" id="filterAll" onclick="setFilter('all')">Все</button>
         <button class="filter-btn" id="filterReady" onclick="setFilter('ready')">Уже доступны</button>
       </div>
       <div class="prizes" id="prizesGrid"></div>
     </section>
 
     <section class="view" id="view-rating">
-      <h2 class="section-title">🏆 Топ-5 класса <span class="count" id="ratingCount"></span></h2>
+      <div class="eyebrow">Топ-5 класса <span id="ratingCount"></span></div>
       <div class="podium" id="podium"></div>
       <div class="rank-list" id="rankList"></div>
       <div class="goal-note" id="goalNote" hidden></div>
     </section>
 
     <section class="view" id="view-history">
-      <h2 class="section-title">📜 История звёзд</h2>
+      <div class="eyebrow">История звёзд</div>
       <div class="timeline" id="timeline"></div>
     </section>
 
     <section class="view" id="view-profile">
-      <h2 class="section-title">😎 Мой аватар</h2>
-      <div class="profile-card">
+      <div class="eyebrow">Мой аватар</div>
+      <div class="panel">
         <p class="muted" style="margin:0;font-size:13.5px;">Выбери героя или поставь своё фото.</p>
         <div class="avatar-grid" id="avatarGrid"></div>
         <div class="upload-row">
           <label class="btn btn-ghost" style="cursor:pointer;">
-            📷 Загрузить своё фото
+            <svg class="ic"><use href="#i-camera"></use></svg> Загрузить фото
             <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
           </label>
           <button class="btn btn-ghost" id="tgPhotoBtn" onclick="useTelegramPhoto()" hidden>
-            🙂 Фото из Telegram
+            <svg class="ic"><use href="#i-user"></use></svg> Фото из Telegram
           </button>
         </div>
         <div class="info-list">
+          <div class="info-item"><span>Школа</span><span id="infoSchool">—</span></div>
           <div class="info-item"><span>Класс</span><span id="infoClass">—</span></div>
           <div class="info-item"><span>Место в классе</span><span id="infoRank">—</span></div>
           <div class="info-item"><span>Всего звёзд</span><span id="infoStars">—</span></div>
@@ -128,11 +141,11 @@
 <div class="sheet-backdrop" id="avatarSheet" onclick="if(event.target===this) closeAvatarSheet()">
   <div class="sheet">
     <div class="sheet-grip"></div>
-    <h2 class="section-title">Выбери аватар</h2>
+    <div class="eyebrow">Выбери аватар</div>
     <div class="avatar-grid" id="avatarGridSheet"></div>
     <div class="upload-row">
       <label class="btn btn-ghost" style="cursor:pointer;">
-        📷 Своё фото
+        <svg class="ic"><use href="#i-camera"></use></svg> Своё фото
         <input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
       </label>
       <button class="btn" onclick="closeAvatarSheet()">Готово</button>

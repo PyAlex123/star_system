@@ -102,20 +102,28 @@ app.include_router(telegram.router)
 _page_cache: Dict[str, Tuple[float, str]] = {}
 
 
-def render_page(name: str) -> str:
-    """Подставляет в HTML подпуть вместо {{BASE}}.
+ICONS_FILE = config.STATIC_DIR / "img" / "icons.svg"
 
-    Без этого при развёртывании на подпути ссылки вида /static/... ушли бы
-    в корень чужого сайта. Результат кешируем по времени изменения файла,
-    чтобы правки подхватывались без перезапуска.
+
+def render_page(name: str) -> str:
+    """Готовит HTML к отдаче.
+
+    {{BASE}}  — подпуть, иначе ссылки /static/... ушли бы в корень чужого сайта.
+    {{ICONS}} — набор иконок вставляется прямо в страницу: внешний спрайт через
+                <use href="файл.svg#id"> не всегда грузится в WebView Telegram.
+
+    Результат кешируем по времени изменения файлов, чтобы правки подхватывались
+    без перезапуска сервера.
     """
     path = config.STATIC_DIR / name
-    stamp = path.stat().st_mtime
+    stamp = path.stat().st_mtime + ICONS_FILE.stat().st_mtime
     cached = _page_cache.get(name)
     if cached and cached[0] == stamp:
         return cached[1]
 
     html = path.read_text(encoding="utf-8").replace("{{BASE}}", config.URL_PREFIX)
+    if "{{ICONS}}" in html:
+        html = html.replace("{{ICONS}}", ICONS_FILE.read_text(encoding="utf-8"))
     _page_cache[name] = (stamp, html)
     return html
 
