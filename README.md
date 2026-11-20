@@ -221,14 +221,19 @@ docker compose up -d
 ```
 app.py                  точка входа (python app.py / uvicorn backend.main:app)
 backend/
-  main.py               сборка FastAPI, запуск бота, заголовки кеша, подстановка подпути
+  main.py               сборка FastAPI, запуск бота, заголовки кеша и безопасности, подпуть
   config.py             чтение .env, каталог данных, переезд со старой раскладки
   db.py                 JSON-база: миграции, блокировка, атомарная запись
-  security.py           проверка подписи Telegram initData, сессии, доступ учителя
-  images.py             обработка загруженных картинок (Pillow)
+  security.py           проверка подписи Telegram initData, отзываемые сессии, доступ учителя
+  passwords.py          логины и пароли учеников (pbkdf2)
+  ratelimit.py          защита от перебора паролей
+  images.py             обработка загруженных картинок (Pillow), случайные имена фото
   routers/
     auth.py             вход: Telegram, учитель, предпросмотр, отладочный
-    teacher.py          классы, ученики, уроки, списание
+    schools.py          панель: снимок журнала, школы, классы
+    students.py         панель: ученики, импорт, коды, логины, пароли
+    lessons.py          панель: звёзды за урок, списание
+    common.py           общие помощники панели
     prizes.py           витрина призов, загрузка и удаление фото
     me.py               кабинет ученика: рейтинг, призы, аватар
     cards.py            QR-коды и печать карточек
@@ -237,16 +242,19 @@ backend/
     bot.py              запуск/остановка бота, polling и webhook
     handlers.py         /start с кодом, привязка, кнопка кабинета
 static/
-  teacher.html app.html login.html
-  css/ theme.css app.css teacher.css cards.css
-  js/  teacher.js app.js
+  teacher.html app.html login.html enter.html
+  css/ theme.css app.css teacher.css cards.css auth.css
+  js/  common.js teacher.js app.js
   img/prizes/  img/avatars/  fonts/
 deploy/
-  nginx-host.conf nginx-docker.conf   конфиги прокси
+  nginx-root.conf                     то, что стоит на finlo.uz
+  nginx-host.conf nginx-docker.conf   варианты для подпути
   check-server.sh backup.sh           разведка сервера и резервные копии
+  seed_db.json                        демо-классы для первого запуска
 scripts/
   make_avatars.py        генератор 24 SVG-аватаров
   fetch_prize_photos.py  загрузка фотографий призов
+tests/                   pytest: python -m pytest (зависимости — requirements-dev.txt)
 data/                    ← НЕ в репозитории: база, секрет сессий, загруженные фото
 ```
 
@@ -258,6 +266,13 @@ data/                    ← НЕ в репозитории: база, секр�
 ## Безопасность
 
 - Панель учителя закрыта паролем (сессия в httpOnly-cookie на 12 часов).
+- **Сессии ученика отзываются**: сброс пароля, новый код карточки, отвязка Telegram
+  и выход завершают все выданные раньше сессии.
+- Пароли хранятся хешем pbkdf2; хеши не уходят даже в панель учителя.
+- **Перебор паролей ограничен**: 8 неудач на логин и 60 на адрес за 15 минут
+  (вся школа обычно за одним IP — опечатки на уроке не блокируют класс).
+- Фото детей хранятся под случайными именами и удаляются вместе с учеником.
+- Страницы нельзя встроить в чужой сайт; кабинет — только в Telegram.
 - Ученик получает **только свои данные** и топ-5 своего класса; полный список школы
   (`/api/state`) доступен лишь учителю.
 - `initData` из Telegram проверяется по подписи HMAC-SHA256 и не принимается старше 24 часов.
