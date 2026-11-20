@@ -96,11 +96,12 @@ def test_self_unbind(client, student_headers):
     assert s["total_stars"] == stars
 
 
-def test_self_unbind_twice_does_not_rewrite(client, student_headers):
+def test_logout_without_telegram_still_ends_session(client, student_headers):
+    """Ребёнок вошёл через сайт: «Выйти» обязано завершить сессию, хотя отвязывать нечего."""
     h = student_headers(101)
-    mtime = config.DB_FILE.stat().st_mtime_ns
+    assert student_record(101)["tg_id"] is None
     assert client.post("/api/me/unbind", headers=h).status_code == 200
-    assert config.DB_FILE.stat().st_mtime_ns == mtime
+    assert client.get("/api/me", headers=h).status_code == 401
 
 
 # ── Предпросмотр учителя ─────────────────────────────────────────────────────

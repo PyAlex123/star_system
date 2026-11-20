@@ -33,6 +33,15 @@ function escapeHtml(value) {
 }
 
 /** SVG-иконка из набора, вшитого в страницу. */
+/* Ячейка CSV для Excel.
+   Кавычки — чтобы точка с запятой в названии не сдвигала колонки.
+   Апостроф перед = + - @ — иначе Excel выполнит имя ученика как формулу. */
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 function icon(name, cls = "ic") {
   return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 }
@@ -914,13 +923,14 @@ function importCsv(event) {
 }
 
 function exportCsv() {
-  let csv = "﻿Школа;Класс;ФИО;Всего звёзд;Код карточки;Telegram\n";
-  state.students.forEach((s) => {
+  const header = ["Школа", "Класс", "ФИО", "Всего звёзд", "Код карточки", "Telegram"];
+  const rows = state.students.map((s) => {
     const cls = classById(s.class_id);
     const school = cls ? schoolById(cls.school_id) : null;
-    csv += `${school?.name || ""};${cls?.name || ""};${s.name};${s.total_stars};` +
-           `${s.token || ""};${s.tg_id ? "привязан" : ""}\n`;
+    return [school?.name || "", cls?.name || "", s.name, s.total_stars,
+            s.token || "", s.tg_id ? "привязан" : ""];
   });
+  const csv = "﻿" + [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n") + "\n";
 
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");

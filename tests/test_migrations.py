@@ -1,6 +1,8 @@
 """Старые базы доезжают до текущей схемы без потерь."""
 import json
 
+import pytest
+
 from backend import config, db
 
 
@@ -57,6 +59,50 @@ def test_v2_students_get_missing_fields():
     assert sofia["password_shown"]
     assert sofia["avatar"]["type"] == "preset"
     assert sofia["history"] == []
+    assert len(sofia["session_key"]) >= 16
+
+
+def test_v4_gets_session_keys_and_id_counter():
+    """Схема 4 → 5: ключи сессий и счётчик номеров, остальное не трогается."""
+    data = db.load_db()
+    for s in data["students"]:
+        s.pop("session_key")
+    data["version"] = 4
+    data["settings"].pop("last_student_id", None)
+    write_raw(data)
+
+    migrated = db.load_db()
+    assert migrated["version"] == 5
+    assert all(s["session_key"] for s in migrated["students"])
+    assert len({s["session_key"] for s in migrated["students"]}) == 4
+    assert migrated["settings"]["last_student_id"] == 104
+    assert [s["login"] for s in migrated["students"]] == [s["login"] for s in data["students"]]
+
+
+REQUIRED_STUDENT_FIELDS = {
+    "id", "class_id", "name", "total_stars", "history", "token", "tg_id", "tg_username",
+    "bound_at", "avatar", "login", "password_hash", "password_shown", "session_key",
+}
+
+
+@pytest.mark.parametrize("source", ["v2", "fresh", "seed"])
+def test_every_student_gets_every_field(source):
+    """Каждый ученик, а не только последний в списке.
+
+    Однажды правка разорвала цикл миграции, и поля доставались одному ученику —
+    проверка на одном ученике этого не видела.
+    """
+    if source == "v2":
+        write_raw(OLD_V2)
+    elif source == "seed":
+        config.DB_FILE.write_text(
+            (config.BASE_DIR / "deploy" / "seed_db.json").read_text(encoding="utf-8"),
+            encoding="utf-8")
+    students = db.load_db()["students"]
+    assert len(students) >= 2
+    for s in students:
+        missing = REQUIRED_STUDENT_FIELDS - set(s)
+        assert not missing, f"{s['name']}: нет полей {missing}"
 
 
 def test_v2_lessons_get_class_id():

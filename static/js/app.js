@@ -479,7 +479,12 @@ async function savePassword() {
   }
 
   try {
-    await api("/api/me/password", { method: "POST", json: { current, new: next } });
+    // Смена пароля завершает все сессии, а этому устройству сервер выдаёт новую
+    const result = await api("/api/me/password", { method: "POST", json: { current, new: next } });
+    if (result.token) {
+      token = result.token;
+      try { sessionStorage.setItem("stars_token", token); } catch (e) { /* приватный режим */ }
+    }
   } catch (error) {
     haptic("error");
     toast(error.message, "error");

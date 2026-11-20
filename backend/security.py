@@ -68,8 +68,12 @@ def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> Dict[str
 
 # ── Сессии ────────────────────────────────────────────────────────────────────
 
-def issue_student_token(student_id: int, preview: bool = False) -> str:
+def issue_student_token(student: Dict[str, Any], preview: bool = False) -> str:
     """Сессия ученика.
+
+    В токен зашит ключ сессии ученика ("sk"). Сменили ключ — все выданные раньше
+    токены перестали подходить: так работают сброс пароля, выход и новый код.
+    Заодно токен удалённого ученика не откроет кабинет того, кто получит его номер.
 
     preview=True — токен выдан учителю, который смотрит кабинет глазами ребёнка.
     Такой токен помечаем claim'ом "prv": иначе он неотличим от настоящего, и
@@ -77,7 +81,8 @@ def issue_student_token(student_id: int, preview: bool = False) -> str:
     """
     now = int(time.time())
     payload = {
-        "sub": str(student_id),
+        "sub": str(student["id"]),
+        "sk": student.get("session_key") or "",
         "role": "student",
         "iat": now,
         "exp": now + config.STUDENT_SESSION_DAYS * 86400,
@@ -136,7 +141,12 @@ def require_student(request: Request) -> Dict[str, Any]:
 
     student = db.find_student(db.load_db(), int(payload["sub"]))
     if not student:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден — обратись к учителю")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия завершена, войди заново")
+
+    # Ключ сессии сменился (сброс пароля, выход, новый код карточки) — токен отозван
+    expected = student.get("session_key") or ""
+    if not expected or not hmac.compare_digest(str(payload.get("sk", "")), expected):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Сессия завершена, войди заново")
     return student
 
 

@@ -39,6 +39,11 @@ def login_via_telegram(payload: schemas.TwaAuth):
         if username and fresh.get("tg_username") != username:
             fresh["tg_username"] = username
             changed = True
+        # Адрес фото храним у себя: он пришёл в подписанных данных, значит настоящий.
+        # Аватар «из Telegram» потом берётся только отсюда, а не из запроса клиента.
+        if photo_url and fresh.get("tg_photo_url") != photo_url:
+            fresh["tg_photo_url"] = photo_url
+            changed = True
         if fresh.get("avatar", {}).get("type") == "telegram" and photo_url:
             if fresh["avatar"].get("value") != photo_url:
                 fresh["avatar"]["value"] = photo_url
@@ -48,7 +53,7 @@ def login_via_telegram(payload: schemas.TwaAuth):
     db.transaction(_touch)
 
     return {
-        "token": security.issue_student_token(student["id"]),
+        "token": security.issue_student_token(student),
         "telegram_photo_url": photo_url,
     }
 
@@ -62,7 +67,7 @@ def login_dev(student_id: int):
     student = db.find_student(db.load_db(), student_id)
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-    return {"token": security.issue_student_token(student_id), "dev": True}
+    return {"token": security.issue_student_token(student), "dev": True}
 
 
 @router.post("/preview", dependencies=[Depends(security.require_teacher)])
@@ -74,7 +79,7 @@ def login_preview(student_id: int):
     student = db.find_student(db.load_db(), student_id)
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-    return {"token": security.issue_student_token(student_id, preview=True), "preview": True}
+    return {"token": security.issue_student_token(student, preview=True), "preview": True}
 
 
 def _guard(scope: str, key: str) -> None:
@@ -94,20 +99,25 @@ def login_student(payload: schemas.StudentLogin, request: Request):
     """Вход через сайт по логину и паролю — для детей без Telegram."""
     ip = ratelimit.client_key(request)
     login = passwords.normalize_login(payload.login)
-    _guard("student", ip)
+    _guard("student-ip", ip)
     _guard("student-login", login)
 
     student = db.find_by_login(db.load_db(), login)
-    if not student or not passwords.verify_password(payload.password,
-                                                    student.get("password_hash", "")):
-        ratelimit.register_failure("student", ip)
+    # Хеш считаем всегда, даже для несуществующего логина: иначе ответ «нет такого»
+    # приходит заметно быстрее, и по времени можно собрать список логинов класса.
+    stored = student.get("password_hash", "") if student else passwords.DUMMY_HASH
+    password_ok = passwords.verify_password(payload.password, stored)
+
+    if not student or not password_ok:
+        ratelimit.register_failure("student-ip", ip)
         ratelimit.register_failure("student-login", login)
         # Не уточняем, что именно неверно: иначе логины можно перебрать по ответу
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
 
-    ratelimit.reset("student", ip)
+    # Обнуляем только счётчик этого логина. Счётчик адреса не трогаем: иначе,
+    # имея свой аккаунт, можно чередовать «свой вход — попытки по чужим».
     ratelimit.reset("student-login", login)
-    return {"token": security.issue_student_token(student["id"])}
+    return {"token": security.issue_student_token(student)}
 
 
 @router.post("/teacher")

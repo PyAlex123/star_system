@@ -8,7 +8,8 @@ def test_student_bruteforce_blocked(teacher, client):
     codes = [client.post("/api/auth/student",
                          json={"login": "ivanov.artem", "password": f"podbor{i}"}).status_code
              for i in range(10)]
-    assert codes[:ratelimit.MAX_FAILURES] == [401] * ratelimit.MAX_FAILURES
+    limit = ratelimit.LIMITS["student-login"]
+    assert codes[:limit] == [401] * limit
     assert codes[-1] == 429
 
 

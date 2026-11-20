@@ -1,4 +1,5 @@
 """Логика бота: привязка по QR-коду и единственная кнопка «Зайти в свой кабинет»."""
+import html
 import logging
 import re
 from typing import Any, Dict, Optional, Tuple
@@ -49,6 +50,7 @@ def bind_by_code(code: str, tg_id: int, tg_username: Optional[str]) -> Tuple[str
       ok          — привязали впервые
       already_me  — этот же аккаунт уже привязан, просто пускаем
       taken       — код уже занят другим аккаунтом
+      other_card  — этот аккаунт уже привязан к другой карточке (ученик — та карточка)
       not_found   — такого кода нет
     """
     result: Dict[str, Any] = {}
@@ -61,6 +63,16 @@ def bind_by_code(code: str, tg_id: int, tg_username: Optional[str]) -> Tuple[str
 
         result["student"] = student
         bound_to = student.get("tg_id")
+
+        # Один аккаунт — одна карточка. Иначе ребёнок, отсканировавший карточку
+        # друга «посмотреть», забирает её себе, а при входе попадает в один
+        # из двух кабинетов наугад.
+        if bound_to is None:
+            mine = db.find_by_tg_id(database, tg_id)
+            if mine and mine["id"] != student["id"]:
+                result["status"] = "other_card"
+                result["student"] = mine
+                return db.NO_SAVE
 
         if bound_to is None:
             student["tg_id"] = tg_id
@@ -94,6 +106,14 @@ async def handle_code(message: Message, code: str) -> None:
         )
         return
 
+    if status == "other_card":
+        await message.answer(
+            f"🔗 Твой Telegram уже привязан к карточке <b>{html.escape(student['name'])}</b>.\n\n"
+            "Одним аккаунтом можно войти только в один кабинет. Если это не твоя карточка — "
+            "открой кабинет, вкладка «Профиль» → «Выйти из аккаунта», и отсканируй свою."
+        )
+        return
+
     if status == "taken":
         await message.answer(
             "🔒 Этот код уже привязан к другому аккаунту Telegram.\n\n"
@@ -101,11 +121,12 @@ async def handle_code(message: Message, code: str) -> None:
         )
         return
 
-    name = student["name"].split()[-1] if student["name"] else "друг"
+    # Сообщения уходят в режиме HTML: угловая скобка в имени сломала бы отправку
+    name = html.escape(student["name"].split()[-1]) if student["name"] else "друг"
     if status == "ok":
         text = (
             f"🎉 Отлично, {name}! Карточка привязана.\n\n"
-            f"Класс: <b>{db.class_name(db.load_db(), student.get('class_id'))}</b>\n"
+            f"Класс: <b>{html.escape(db.class_name(db.load_db(), student.get('class_id')))}</b>\n"
             f"Сейчас у тебя: <b>{student['total_stars']} ⭐</b>\n\n"
             "Нажми кнопку ниже — откроется твой кабинет со звёздами, рейтингом класса и витриной призов."
         )
@@ -126,7 +147,7 @@ async def on_start(message: Message, command: CommandObject) -> None:
 
     student = db.find_by_tg_id(db.load_db(), message.from_user.id)
     if student:
-        name = student["name"].split()[-1] if student["name"] else "друг"
+        name = html.escape(student["name"].split()[-1]) if student["name"] else "друг"
         await send_cabinet(
             message,
             f"Привет, {name}! 👋\nУ тебя <b>{student['total_stars']} ⭐</b>. Открывай кабинет."

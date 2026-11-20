@@ -33,15 +33,32 @@ def new_password() -> str:
     return f"{word}{secrets.randbelow(9000) + 1000}"
 
 
+MIN_LENGTH = 5
+MAX_LENGTH = 64
+
+
+def validate_new(password: str) -> str:
+    """Проверяет новый пароль и возвращает его без пробелов по краям.
+
+    Одна функция на всех: и учитель, и ребёнок получают одинаковые правила.
+    """
+    value = (password or "").strip()
+    if len(value) < MIN_LENGTH:
+        raise ValueError(f"Пароль слишком короткий — нужно хотя бы {MIN_LENGTH} символов")
+    if len(value) > MAX_LENGTH:
+        raise ValueError(f"Пароль слишком длинный — не больше {MAX_LENGTH} символов")
+    if any(ch.isspace() for ch in value):
+        raise ValueError("В пароле не должно быть пробелов")
+    return value
+
+
 def hash_password(password: str) -> str:
     """Хранимое представление: алгоритм$итерации$соль$хеш."""
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, ITERATIONS)
-    return "${}${}${}${}".format(
-        ALGORITHM, ITERATIONS,
-        urlsafe_b64encode(salt).decode(),
-        urlsafe_b64encode(digest).decode(),
-    ).lstrip("$")
+    parts = (ALGORITHM, str(ITERATIONS),
+             urlsafe_b64encode(salt).decode(), urlsafe_b64encode(digest).decode())
+    return "$".join(parts)
 
 
 def verify_password(password: str, stored: str) -> bool:
@@ -59,6 +76,11 @@ def verify_password(password: str, stored: str) -> bool:
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(digest, urlsafe_b64decode(digest_b64))
+
+
+# Хеш, с которым сверяется пароль при несуществующем логине. Ни с чем не совпадёт,
+# но тратит столько же времени, сколько настоящая проверка.
+DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
 
 
 # ── Логины ───────────────────────────────────────────────────────────────────

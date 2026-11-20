@@ -1,10 +1,9 @@
 """Кабинет ученика. Отдаёт только его собственные данные и топ-5 его класса."""
-import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from .. import config, db, images, passwords, schemas
+from .. import config, db, images, passwords, schemas, security
 from ..security import require_student
 
 router = APIRouter(prefix="/api/me", tags=["student"])
@@ -115,12 +114,41 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
     }
 
 
+def _forbid_preview(request: Request, message: str) -> None:
+    """Учитель в режиме предпросмотра смотрит, но не меняет кабинет ребёнка."""
+    if getattr(request.state, "student_preview", False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, message)
+
+
+def _set_avatar(student_id: int, avatar: Dict[str, str]) -> Dict[str, Any]:
+    """Сохраняет аватар и удаляет прежнее загруженное фото, если оно было."""
+    previous: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_student(database, student_id)
+        if not fresh:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        previous["url"] = images.avatar_upload_url(fresh)
+        fresh["avatar"] = avatar
+        return fresh
+
+    saved = db.transaction(_apply)
+    if previous.get("url") and previous["url"] != avatar.get("value"):
+        images.drop_upload(previous["url"])
+    return saved
+
+
 @router.post("/avatar")
-def choose_avatar(payload: schemas.AvatarChoice,
+def choose_avatar(payload: schemas.AvatarChoice, request: Request,
                   student: Dict[str, Any] = Depends(require_student)):
     """Выбрать готовый аватар или поставить фото профиля Telegram."""
+    _forbid_preview(request, "Это предпросмотр кабинета, аватар здесь не меняется.")
+
     if payload.use_telegram_photo:
-        photo = (payload.telegram_photo_url or "").strip()
+        # Адрес берём только из данных, подписанных Telegram при входе.
+        # То, что прислал клиент, игнорируем: иначе аватаром стала бы любая
+        # картинка из интернета, и её увидел бы весь класс в рейтинге.
+        photo = (student.get("tg_photo_url") or "").strip()
         if not photo.startswith("https://"):
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
                                 "В твоём профиле Telegram нет открытого фото")
@@ -131,60 +159,48 @@ def choose_avatar(payload: schemas.AvatarChoice,
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Такого аватара нет в наборе")
         avatar = {"type": "preset", "value": preset}
 
-    def _apply(database: Dict[str, Any]):
-        fresh = db.find_student(database, student["id"])
-        if not fresh:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-        fresh["avatar"] = avatar
-        return fresh
-
-    saved = db.transaction(_apply)
+    saved = _set_avatar(student["id"], avatar)
     return {"ok": True, "avatar": avatar, "avatar_url": avatar_url(saved)}
 
 
 @router.post("/photo")
-async def upload_photo(file: UploadFile = File(...),
+async def upload_photo(request: Request, file: UploadFile = File(...),
                        student: Dict[str, Any] = Depends(require_student)):
     """Поставить своё фото: обрезаем в квадрат и ужимаем до 320 px."""
+    _forbid_preview(request, "Это предпросмотр кабинета, фото здесь не меняется.")
+
     data = await images.read_upload(file)
-    filename = f"student-{student['id']}.webp"
+    filename = images.new_avatar_name()
     images.save_square(data, config.AVATARS_UPLOAD_DIR / filename)
-    url = f"/static/uploads/avatars/{filename}?v={int(time.time())}"
+    url = f"{images.UPLOADS_URL}avatars/{filename}"
 
-    def _apply(database: Dict[str, Any]):
-        fresh = db.find_student(database, student["id"])
-        if not fresh:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-        fresh["avatar"] = {"type": "photo", "value": url}
-        return None
-
-    db.transaction(_apply)
+    try:
+        _set_avatar(student["id"], {"type": "photo", "value": url})
+    except Exception:
+        images.drop_upload(url)
+        raise
     return {"ok": True, "avatar_url": url}
 
 
 @router.post("/unbind")
 def unbind_self(request: Request, student: Dict[str, Any] = Depends(require_student)):
-    """Выход из аккаунта: открепляем Telegram от карточки.
+    """Выход из аккаунта: открепляем Telegram от карточки и завершаем сессии.
 
-    Звёзды, историю и аватар не трогаем — ребёнок вернётся по тому же коду,
-    и всё окажется на месте. Нужно, когда карточки перепутали или ребёнок
-    хочет зайти с другого аккаунта Telegram.
+    Звёзды, историю и аватар не трогаем — ребёнок вернётся по тому же коду
+    или логину, и всё окажется на месте. Нужно, когда карточки перепутали,
+    ребёнок хочет зайти с другого аккаунта или вошёл с чужого телефона.
     """
-    if getattr(request.state, "student_preview", False):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Это предпросмотр кабинета. Отвязать аккаунт ученика можно в панели учителя.",
-        )
+    _forbid_preview(request,
+                    "Это предпросмотр кабинета. Отвязать аккаунт ученика можно в панели учителя.")
 
     def _apply(database: Dict[str, Any]):
         fresh = db.find_student(database, student["id"])
         if not fresh:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-        if not fresh.get("tg_id"):
-            return db.NO_SAVE          # и так не привязан — файл не перезаписываем
         fresh["tg_id"] = None
         fresh["tg_username"] = None
         fresh["bound_at"] = None
+        db.rotate_session(fresh)
         return None
 
     db.transaction(_apply)
@@ -194,17 +210,18 @@ def unbind_self(request: Request, student: Dict[str, Any] = Depends(require_stud
 @router.post("/password")
 def change_password(payload: schemas.PasswordChange, request: Request,
                     student: Dict[str, Any] = Depends(require_student)):
-    """Ребёнок меняет себе пароль для входа через сайт."""
-    if getattr(request.state, "student_preview", False):
-        raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "Это предпросмотр кабинета, пароль здесь не меняется.")
+    """Ребёнок меняет себе пароль для входа через сайт.
 
-    new = (payload.new or "").strip()
-    if len(new) < 5:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Новый пароль слишком короткий — нужно хотя бы 5 символов")
-    if " " in new:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "В пароле не должно быть пробелов")
+    Все прочие сессии завершаются — если кто-то подсмотрел старый пароль и вошёл,
+    его выкинет. Текущему устройству возвращаем свежую сессию, чтобы ребёнку
+    не пришлось входить заново.
+    """
+    _forbid_preview(request, "Это предпросмотр кабинета, пароль здесь не меняется.")
+
+    try:
+        new = passwords.validate_new(payload.new)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
     if not passwords.verify_password(payload.current, student.get("password_hash", "")):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Текущий пароль указан неверно")
@@ -217,7 +234,8 @@ def change_password(payload: schemas.PasswordChange, request: Request,
         # Пароль придуман ребёнком — учителю его больше не показываем,
         # у него остаётся только возможность выдать новый.
         fresh["password_shown"] = None
-        return None
+        db.rotate_session(fresh)
+        return fresh
 
-    db.transaction(_apply)
-    return {"ok": True}
+    saved = db.transaction(_apply)
+    return {"ok": True, "token": security.issue_student_token(saved)}

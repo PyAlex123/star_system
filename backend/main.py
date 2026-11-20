@@ -84,6 +84,25 @@ async def cache_headers(request, call_next):
     return response
 
 
+# Кабинет ученика веб-версия Telegram открывает во фрейме — ей встраивание
+# разрешаем. Всё остальное (панель учителя, вход, карточки) встраивать нельзя:
+# иначе чужой сайт может наложить на нашу страницу невидимые кнопки (кликджекинг).
+TELEGRAM_FRAME_ANCESTORS = "https://web.telegram.org https://*.telegram.org"
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    if request.url.path == "/app":
+        response.headers["Content-Security-Policy"] = f"frame-ancestors {TELEGRAM_FRAME_ANCESTORS}"
+    else:
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+        response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 # Загруженные картинки лежат в каталоге данных, а не внутри static/.
 # Монтируем их раньше общего /static — совпадение ищется по порядку.
 app.mount("/static/uploads", StaticFiles(directory=str(config.UPLOADS_DIR)), name="uploads")

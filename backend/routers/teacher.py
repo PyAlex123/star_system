@@ -1,18 +1,24 @@
 """API панели учителя: школы, классы, ученики, уроки, списание звёзд."""
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 
-from .. import config, db, passwords, schemas
+from .. import config, db, images, passwords, schemas
 from ..security import require_teacher
 
 router = APIRouter(prefix="/api", tags=["teacher"], dependencies=[Depends(require_teacher)])
 
 
+def _drop_photos(urls) -> None:
+    """Удаляет загруженные фото учеников, которых больше нет."""
+    for url in urls or []:
+        images.drop_upload(url)
+
+
 @router.get("/state")
 def get_state():
-    """Полный снимок базы — только для учителя."""
-    return db.load_db()
+    """Снимок базы для панели. Хеши паролей и ключи сессий не покидают сервер."""
+    return db.public_state(db.load_db())
 
 
 # ── Школы ─────────────────────────────────────────────────────────────────────
@@ -60,6 +66,8 @@ def delete_school(school_id: int):
                                 "Нельзя удалить единственную школу")
 
         class_ids = {c["id"] for c in db.school_classes(database, school_id)}
+        removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
+                             if s.get("class_id") in class_ids]
         database["students"] = [s for s in database["students"]
                                 if s.get("class_id") not in class_ids]
         database["classes"] = [c for c in database["classes"] if c["school_id"] != school_id]
@@ -68,7 +76,9 @@ def delete_school(school_id: int):
         database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
         return None
 
+    removed: Dict[str, list] = {}
     db.transaction(_apply)
+    _drop_photos(removed.get("photos"))
     return {"ok": True}
 
 
@@ -124,12 +134,16 @@ def delete_class(class_id: int):
     def _apply(database: Dict[str, Any]):
         if not db.find_class(database, class_id):
             return db.NO_SAVE
+        removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
+                             if s.get("class_id") == class_id]
         database["students"] = [s for s in database["students"]
                                 if s.get("class_id") != class_id]
         database["classes"] = [c for c in database["classes"] if c["id"] != class_id]
         return None
 
+    removed: Dict[str, list] = {}
     db.transaction(_apply)
+    _drop_photos(removed.get("photos"))
     return {"ok": True}
 
 
@@ -150,6 +164,7 @@ def _make_student(database: Dict[str, Any], class_id: int, name: str, stars: int
         "bound_at": None,
         "avatar": db.default_avatar(student_id),
         "login": passwords.suggest_login(name, db.logins_taken(database)),
+        "session_key": db.new_session_key(),
     }
     passwords.set_credentials(student)   # заполняет password_hash и password_shown
     if student["total_stars"] > 0:
@@ -178,7 +193,8 @@ def add_student(item: schemas.StudentCreate):
 
 
 @router.post("/students/bulk")
-def bulk_import(items: List[schemas.BulkImportItem]):
+def bulk_import(items: Annotated[List[schemas.BulkImportItem],
+                                 Body(max_length=schemas.MAX_IMPORT_ROWS)]):
     """Импорт из Excel/CSV. Классы, которых ещё нет, создаются в указанной школе."""
     def _apply(database: Dict[str, Any]):
         added = 0
@@ -239,20 +255,22 @@ def reset_password(student_id: int, item: schemas.PasswordReset):
     """Выдать ученику новый пароль. Пустое поле — система придумает сама.
 
     Пароль возвращается в открытом виде: учитель должен продиктовать его
-    ребёнку и перепечатать карточку.
+    ребёнку и перепечатать карточку. Все сессии ученика завершаются — если
+    пароль меняют из-за того, что его кто-то узнал, посторонний вылетит.
     """
-    custom = (item.password or "").strip()
-    if custom and len(custom) < 5:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Пароль слишком короткий — хотя бы 5 символов")
-    if " " in custom:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "В пароле не должно быть пробелов")
+    custom = None
+    if (item.password or "").strip():
+        try:
+            custom = passwords.validate_new(item.password)
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 
     def _apply(database: Dict[str, Any]):
         student = db.find_student(database, student_id)
         if not student:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-        return passwords.set_credentials(student, custom or None)
+        db.rotate_session(student)
+        return passwords.set_credentials(student, custom)
 
     return {"ok": True, "password": db.transaction(_apply)}
 
@@ -260,11 +278,16 @@ def reset_password(student_id: int, item: schemas.PasswordReset):
 @router.delete("/students/{student_id}")
 def delete_student(student_id: int):
     def _apply(database: Dict[str, Any]):
-        before = len(database["students"])
+        student = db.find_student(database, student_id)
+        if not student:
+            return db.NO_SAVE
+        removed["photos"] = [images.avatar_upload_url(student)]
         database["students"] = [s for s in database["students"] if s["id"] != student_id]
-        return db.NO_SAVE if len(database["students"]) == before else None
+        return None
 
+    removed: Dict[str, list] = {}
     db.transaction(_apply)
+    _drop_photos(removed.get("photos"))
     return {"ok": True}
 
 
@@ -295,6 +318,7 @@ def reset_token(student_id: int):
         student["tg_id"] = None
         student["tg_username"] = None
         student["bound_at"] = None
+        db.rotate_session(student)
         return student["token"]
 
     token = db.transaction(_apply)
@@ -313,6 +337,7 @@ def unbind_telegram(student_id: int):
         student["tg_id"] = None
         student["tg_username"] = None
         student["bound_at"] = None
+        db.rotate_session(student)
         return None
 
     db.transaction(_apply)
@@ -326,10 +351,15 @@ def reset_avatar(student_id: int):
         student = db.find_student(database, student_id)
         if not student:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        removed["photos"] = [images.avatar_upload_url(student)]
         student["avatar"] = db.default_avatar(student_id)
         return student["avatar"]
 
+    removed: Dict[str, list] = {}
     avatar = db.transaction(_apply)
+    # Сброс нужен, когда ребёнок поставил неуместное фото: убираем и сам файл,
+    # иначе он остаётся доступен по прежнему адресу.
+    _drop_photos(removed.get("photos"))
     return {"ok": True, "avatar": avatar}
 
 

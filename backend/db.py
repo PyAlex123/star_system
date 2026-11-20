@@ -22,7 +22,13 @@ _lock = threading.RLock()
 #         у ученика вместо названия класса хранится class_id.
 # 3 -> 4: вход через сайт. У ученика появились login, password_hash
 #         и password_shown (открытый пароль до первой самостоятельной смены).
-DB_VERSION = 4
+# 4 -> 5: отзываемые сессии. У ученика появился session_key — он зашит в токен,
+#         и смена ключа завершает все выданные ранее сессии. Номера учеников
+#         больше не выдаются повторно (settings.last_student_id).
+DB_VERSION = 5
+
+# Поля ученика, которые не покидают сервер даже в панели учителя
+SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
 
 # Алфавит кодов без символов, которые дети путают при ручном вводе (O/0, I/1)
 _TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -102,6 +108,27 @@ def new_token(existing: Optional[set] = None) -> str:
         token = "".join(secrets.choice(_TOKEN_ALPHABET) for _ in range(8))
         if token not in existing:
             return token
+
+
+def new_session_key() -> str:
+    return secrets.token_urlsafe(12)
+
+
+def rotate_session(student: Dict[str, Any]) -> None:
+    """Завершает все сессии ученика: старые токены перестают совпадать с ключом.
+
+    Вызывается при сбросе пароля, новом коде карточки, отвязке Telegram и выходе.
+    """
+    student["session_key"] = new_session_key()
+
+
+def public_state(db: Dict[str, Any]) -> Dict[str, Any]:
+    """База для панели учителя — без хешей паролей и ключей сессий."""
+    copy = json.loads(json.dumps(db))
+    for student in copy.get("students", []):
+        for field in SECRET_STUDENT_FIELDS:
+            student.pop(field, None)
+    return copy
 
 
 def default_avatar(student_id: int) -> Dict[str, str]:
@@ -235,6 +262,9 @@ def migrate(db: Dict[str, Any]) -> bool:
         if "password_shown" not in student:
             student["password_shown"] = None
             changed = True
+        if not student.get("session_key"):
+            student["session_key"] = new_session_key()
+            changed = True
         for field, default in (("tg_id", None), ("tg_username", None), ("bound_at", None)):
             if field not in student:
                 student[field] = default
@@ -245,6 +275,12 @@ def migrate(db: Dict[str, Any]) -> bool:
         if "history" not in student:
             student["history"] = []
             changed = True
+
+    # Счётчик номеров: удалённый ученик не освобождает свой номер
+    highest = max((s["id"] for s in db["students"]), default=100)
+    if db["settings"].get("last_student_id", 0) < highest:
+        db["settings"]["last_student_id"] = highest
+        changed = True
 
     return changed
 
@@ -380,7 +416,16 @@ def find_by_tg_id(db: Dict[str, Any], tg_id: int) -> Optional[Dict[str, Any]]:
 
 
 def next_student_id(db: Dict[str, Any]) -> int:
-    return max((s["id"] for s in db["students"]), default=100) + 1
+    """Номер для нового ученика. Никогда не повторяется, даже после удаления.
+
+    Раньше брали «максимум + 1»: удалили последнего — новый получал его номер,
+    и всё, что было привязано к номеру, доставалось чужому ребёнку.
+    """
+    settings = db.setdefault("settings", {})
+    highest = max((s["id"] for s in db["students"]), default=100)
+    new_id = max(highest, settings.get("last_student_id", 0)) + 1
+    settings["last_student_id"] = new_id
+    return new_id
 
 
 def today() -> str:

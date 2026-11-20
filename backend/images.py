@@ -1,7 +1,8 @@
 """Обработка загружаемых картинок: аватары детей и фотографии призов."""
 import io
+import secrets
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 from fastapi import HTTPException, UploadFile, status
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -63,3 +64,42 @@ def save_wide(data: bytes, destination: Path,
     canvas.paste(image, ((box[0] - image.width) // 2, (box[1] - image.height) // 2))
     destination.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(destination, "WEBP", quality=86, method=5)
+
+
+# ── Где лежат загрузки ───────────────────────────────────────────────────────
+
+UPLOADS_URL = "/static/uploads/"
+
+
+def new_avatar_name() -> str:
+    """Случайное имя для фото ребёнка.
+
+    Раньше файл назывался по номеру ученика (student-101.webp): адрес угадывался
+    перебором, и фотографии детей мог собрать кто угодно без входа.
+    """
+    return f"avatar-{secrets.token_hex(12)}.webp"
+
+
+def upload_path(url: Optional[str]) -> Optional[Path]:
+    """Файл на диске по адресу из базы. Только внутри каталога загрузок."""
+    if not url or not url.startswith(UPLOADS_URL):
+        return None
+    relative = url.split("?", 1)[0][len(UPLOADS_URL):]
+    root = config.UPLOADS_DIR.resolve()
+    path = (root / relative).resolve()
+    if root not in path.parents:
+        return None
+    return path
+
+
+def drop_upload(url: Optional[str]) -> None:
+    """Удаляет загруженный файл. Ссылки на встроенные картинки не трогает."""
+    path = upload_path(url)
+    if path:
+        path.unlink(missing_ok=True)
+
+
+def avatar_upload_url(student) -> Optional[str]:
+    """Адрес загруженного фото ученика, если аватар — его собственное фото."""
+    avatar = (student or {}).get("avatar") or {}
+    return avatar.get("value") if avatar.get("type") == "photo" else None
