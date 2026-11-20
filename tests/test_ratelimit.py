@@ -1,0 +1,37 @@
+"""Защита от перебора паролей."""
+from backend import ratelimit
+from conftest import STUDENT_PASSWORD, TEACHER_PASSWORD
+
+
+def test_student_bruteforce_blocked(teacher, client):
+    teacher.post("/api/students/101/password", json={"password": STUDENT_PASSWORD})
+    codes = [client.post("/api/auth/student",
+                         json={"login": "ivanov.artem", "password": f"podbor{i}"}).status_code
+             for i in range(10)]
+    assert codes[:ratelimit.MAX_FAILURES] == [401] * ratelimit.MAX_FAILURES
+    assert codes[-1] == 429
+
+
+def test_block_applies_to_correct_password_too(teacher, client):
+    teacher.post("/api/students/101/password", json={"password": STUDENT_PASSWORD})
+    for i in range(ratelimit.MAX_FAILURES):
+        client.post("/api/auth/student", json={"login": "ivanov.artem", "password": f"x{i}"})
+    r = client.post("/api/auth/student", json={"login": "ivanov.artem", "password": STUDENT_PASSWORD})
+    assert r.status_code == 429
+    assert "Retry-After" in r.headers
+
+
+def test_teacher_bruteforce_blocked(client):
+    for i in range(ratelimit.MAX_FAILURES):
+        assert client.post("/api/auth/teacher", json={"password": f"x{i}"}).status_code == 401
+    r = client.post("/api/auth/teacher", json={"password": TEACHER_PASSWORD})
+    assert r.status_code == 429
+
+
+def test_success_resets_login_counter(teacher, client):
+    teacher.post("/api/students/101/password", json={"password": STUDENT_PASSWORD})
+    for i in range(ratelimit.MAX_FAILURES - 1):
+        client.post("/api/auth/student", json={"login": "ivanov.artem", "password": f"x{i}"})
+    assert client.post("/api/auth/student",
+                       json={"login": "ivanov.artem", "password": STUDENT_PASSWORD}).status_code == 200
+    assert ratelimit.retry_after("student-login", "ivanov.artem") == 0
