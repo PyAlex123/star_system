@@ -28,6 +28,7 @@ Thumbs.db
 
 # Снимки экранов для работы над дизайном — в репозиторий не нужны
 screenshots/
+screenshots-*/
 
 # Личные настройки Claude Code — у каждого свои
 .claude/settings.local.json
