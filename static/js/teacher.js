@@ -19,73 +19,22 @@ let prizePhotoFile = null;
 let prizePhotoCleared = false;
 let prizePhotoPreviewUrl = null;
 
-const $ = (id) => document.getElementById(id);
-
-// Подпуть, на котором развёрнута система ("" в корне, "/stars" на подпути).
-const BASE = window.APP_BASE || "";
-
 /* ── Помощники ────────────────────────────────────────────── */
 
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (ch) => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
-  ));
-}
+// В панели уведомление уезжает вправо, к краю экрана
+const toast = makeToast({ exit: "translateX(12px)", duration: 3000 });
 
-/** SVG-иконка из набора, вшитого в страницу. */
-/* Ячейка CSV для Excel.
-   Кавычки — чтобы точка с запятой в названии не сдвигала колонки.
-   Апостроф перед = + - @ — иначе Excel выполнит имя ученика как формулу. */
-function csvCell(value) {
-  let text = String(value ?? "");
-  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function icon(name, cls = "ic") {
-  return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
-}
-
-/** Путь к картинке с учётом подпути; внешние ссылки не трогаем. */
-function assetUrl(path) {
-  if (!path) return "";
-  return /^https?:\/\//.test(path) ? path : BASE + path;
-}
-
-function plural(n, one, few, many) {
-  const mod10 = n % 10, mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
-}
-
-function toast(message, kind = "", iconName = "") {
-  const el = document.createElement("div");
-  el.className = `toast ${kind}`.trim();
-  if (iconName) el.innerHTML = icon(iconName);
-  el.appendChild(document.createTextNode(message));
-  $("toastHost").appendChild(el);
-  setTimeout(() => {
-    el.style.transition = "opacity .3s, transform .3s";
-    el.style.opacity = "0";
-    el.style.transform = "translateX(12px)";
-    setTimeout(() => el.remove(), 300);
-  }, 3000);
-}
-
+/** Запрос от имени учителя: сессия в cookie. Истекла — на страницу входа. */
 async function api(path, options = {}) {
-  if (options.json !== undefined) {
-    options.headers = { ...(options.headers || {}), "Content-Type": "application/json" };
-    options.body = JSON.stringify(options.json);
+  try {
+    return await requestJson(path, options, "Не удалось выполнить действие");
+  } catch (error) {
+    if (error.status === 401) {
+      location.href = BASE + "/login";
+      throw new Error("Сессия истекла");
+    }
+    throw error;
   }
-  const response = await fetch(BASE + path, options);
-  if (response.status === 401) {
-    location.href = BASE + "/login";
-    throw new Error("Сессия истекла");
-  }
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.detail || "Не удалось выполнить действие");
-  return payload;
 }
 
 function openModal(id) { $(id).classList.add("open"); }

@@ -1,0 +1,72 @@
+/* Страницы входа: учителя (/login) и ученика (/enter).
+   Раньше обе несли одинаковые 50 строк стилей внутри себя.
+   Отличаются только цветом: учитель — зелёный, ученик — янтарь, как звёзды. */
+
+body {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--paper);
+}
+
+.box {
+  --auth-color: var(--accent);
+  --auth-mark: var(--gold-bright);
+  width: 100%;
+  max-width: 370px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--auth-color);
+  border-radius: var(--r-card);
+  padding: 28px 26px;
+}
+
+.box.for-student {
+  --auth-color: var(--gold);
+  --auth-mark: #fffdf8;
+}
+
+.mark {
+  width: 40px; height: 40px;
+  border-radius: var(--r-field);
+  background: var(--auth-color);
+  color: var(--auth-mark);
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+}
+.mark .ic { width: 22px; height: 22px; vertical-align: 0; }
+
+h1 { font-size: 22px; margin-bottom: 4px; }
+.sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; }
+
+label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+input { width: 100%; }
+.field { margin-bottom: 14px; }
+.box .btn { margin-top: 16px; }
+.box .field + .btn { margin-top: 4px; }
+
+.error {
+  display: none;
+  margin-top: 12px;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
+  color: var(--danger);
+  border-radius: var(--r-field);
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.error.show { display: flex; align-items: center; gap: 8px; }
+
+.hint {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }

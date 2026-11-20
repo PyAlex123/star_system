@@ -197,9 +197,7 @@ def unbind_self(request: Request, student: Dict[str, Any] = Depends(require_stud
         fresh = db.find_student(database, student["id"])
         if not fresh:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
-        fresh["tg_id"] = None
-        fresh["tg_username"] = None
-        fresh["bound_at"] = None
+        db.clear_telegram(fresh)
         db.rotate_session(fresh)
         return None
 

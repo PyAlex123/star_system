@@ -36,6 +36,23 @@ def test_lesson_record_keeps_names(teacher):
     assert record["total_stars"] == 2
 
 
+def test_same_student_twice_cannot_bypass_limit(teacher):
+    """5 + 5 одному ученику — обход лимита «не больше 5 за урок»."""
+    before = student_record(101)["total_stars"]
+    r = lesson(teacher, [{"student_id": 101, "stars": 5}, {"student_id": 101, "stars": 5}])
+    assert r.status_code == 400
+    assert student_record(101)["total_stars"] == before
+
+
+def test_student_from_other_class_rejected(teacher):
+    """Каримов учится в 5-Б: звёзды за урок 5-А ему не положены."""
+    before = student_record(103)["total_stars"]
+    r = lesson(teacher, [{"student_id": 103, "stars": 3}], class_id=1)
+    assert r.status_code == 400
+    assert student_record(103)["total_stars"] == before
+    assert load_db()["lessons"] == []
+
+
 def test_lesson_in_missing_class(teacher):
     assert lesson(teacher, [{"student_id": 101, "stars": 1}], class_id=999).status_code == 404
 

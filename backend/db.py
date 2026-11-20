@@ -122,12 +122,22 @@ def rotate_session(student: Dict[str, Any]) -> None:
     student["session_key"] = new_session_key()
 
 
+def clear_telegram(student: Dict[str, Any]) -> None:
+    """Открепляет Telegram-аккаунт от ученика."""
+    student["tg_id"] = None
+    student["tg_username"] = None
+    student["bound_at"] = None
+
+
+def public_student(student: Dict[str, Any]) -> Dict[str, Any]:
+    """Запись ученика для ответа API — без хеша пароля и ключа сессии."""
+    return {k: v for k, v in student.items() if k not in SECRET_STUDENT_FIELDS}
+
+
 def public_state(db: Dict[str, Any]) -> Dict[str, Any]:
     """База для панели учителя — без хешей паролей и ключей сессий."""
     copy = json.loads(json.dumps(db))
-    for student in copy.get("students", []):
-        for field in SECRET_STUDENT_FIELDS:
-            student.pop(field, None)
+    copy["students"] = [public_student(s) for s in copy.get("students", [])]
     return copy
 
 

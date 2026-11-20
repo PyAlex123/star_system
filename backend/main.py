@@ -4,12 +4,13 @@ from contextlib import asynccontextmanager
 from typing import Dict, Tuple
 
 from fastapi import Depends, FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .bot.bot import start_bot, stop_bot
-from .routers import auth, cards, me, prizes, teacher, telegram
+from .routers import auth, cards, lessons, me, prizes, schools, students, telegram
 from .security import require_teacher_page
 
 logging.basicConfig(
@@ -67,6 +68,39 @@ app = FastAPI(
 )
 
 
+def _validation_message(error: dict) -> str:
+    """Одна ошибка проверки данных — по-русски, без технических подробностей."""
+    kind = error.get("type", "")
+    ctx = error.get("ctx") or {}
+    if kind == "string_too_long":
+        return f"Слишком длинное значение — не больше {ctx.get('max_length')} символов"
+    if kind == "too_long":
+        return f"Слишком много строк за раз — не больше {ctx.get('max_length')}"
+    if kind in ("greater_than_equal", "greater_than"):
+        return f"Значение должно быть не меньше {ctx.get('ge', ctx.get('gt'))}"
+    if kind in ("less_than_equal", "less_than"):
+        return f"Значение должно быть не больше {ctx.get('le', ctx.get('lt'))}"
+    if kind == "value_error":
+        return str(ctx.get("error") or error.get("msg", ""))
+    if kind == "missing":
+        return "Не заполнено обязательное поле"
+    if kind.startswith(("int_", "float_")):
+        return "Ожидалось число"
+    return "Неверные данные в запросе"
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc: RequestValidationError):
+    """FastAPI по умолчанию отдаёт список объектов на английском — интерфейс показал
+    бы «[object Object]». Собираем одну понятную строку."""
+    messages = []
+    for error in exc.errors():
+        text = _validation_message(error)
+        if text not in messages:
+            messages.append(text)
+    return JSONResponse(status_code=422, content={"detail": "; ".join(messages)})
+
+
 @app.middleware("http")
 async def cache_headers(request, call_next):
     """CSS и JS браузер обязан перепроверять, иначе после обновления системы
@@ -109,7 +143,9 @@ app.mount("/static/uploads", StaticFiles(directory=str(config.UPLOADS_DIR)), nam
 app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
 
 app.include_router(auth.router)
-app.include_router(teacher.router)
+app.include_router(schools.router)
+app.include_router(students.router)
+app.include_router(lessons.router)
 app.include_router(prizes.router)
 app.include_router(me.router)
 app.include_router(cards.router)

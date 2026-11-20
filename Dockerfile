@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY static/ ./static/
-COPY scripts/ ./scripts/
 COPY app.py ./
+# scripts/ (генераторы аватаров и фото призов) серверу не нужны — в образ не копируем
 
 # Приложение пишет только в /app/data — его монтируют томом с хоста.
 # Работаем не от root: если контейнер взломают, прав будет минимум.

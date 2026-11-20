@@ -78,9 +78,18 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(digest, urlsafe_b64decode(digest_b64))
 
 
-# Хеш, с которым сверяется пароль при несуществующем логине. Ни с чем не совпадёт,
-# но тратит столько же времени, сколько настоящая проверка.
-DUMMY_HASH = hash_password(secrets.token_urlsafe(16))
+_dummy_hashes = {}
+
+
+def dummy_hash() -> str:
+    """Хеш, с которым сверяется пароль при несуществующем логине.
+
+    Ни с чем не совпадёт, но считается с тем же числом итераций, что и настоящие,
+    поэтому ответ «нет такого логина» приходит за то же время, что «неверный пароль».
+    """
+    if ITERATIONS not in _dummy_hashes:
+        _dummy_hashes[ITERATIONS] = hash_password(secrets.token_urlsafe(16))
+    return _dummy_hashes[ITERATIONS]
 
 
 # ── Логины ───────────────────────────────────────────────────────────────────

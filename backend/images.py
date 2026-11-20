@@ -17,7 +17,7 @@ async def read_upload(file: UploadFile) -> bytes:
     data = await file.read(config.MAX_UPLOAD_BYTES + 1)
     if len(data) > config.MAX_UPLOAD_BYTES:
         mb = config.MAX_UPLOAD_BYTES // (1024 * 1024)
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE,
                             f"Файл слишком большой, максимум {mb} МБ")
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Пустой файл")

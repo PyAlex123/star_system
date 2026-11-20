@@ -173,6 +173,19 @@ def test_unknown_login_still_hashes(client, monkeypatch):
 
 # ── 6. Выдача базы учителю ───────────────────────────────────────────────────
 
+def test_student_responses_have_no_secrets(teacher):
+    """Ответы на создание, правку и перевод ученика — тоже без хеша и ключа сессии."""
+    responses = [
+        teacher.post("/api/students", json={"class_id": 1, "name": "Новый Ученик"}),
+        teacher.patch("/api/students/101", json={"name": "Иванов Артемий"}),
+        teacher.post("/api/students/101/move?class_id=2"),
+    ]
+    for r in responses:
+        assert r.status_code == 200
+        raw = json.dumps(r.json(), ensure_ascii=False)
+        assert "password_hash" not in raw and "session_key" not in raw, r.request.url
+
+
 def test_state_has_no_secrets(teacher):
     raw = json.dumps(teacher.get("/api/state").json(), ensure_ascii=False)
     assert "password_hash" not in raw
@@ -237,6 +250,19 @@ def test_long_names_rejected(teacher):
     assert teacher.post("/api/students", json={"class_id": 1, "name": long_name}).status_code == 422
     assert teacher.post("/api/schools", json={"name": long_name}).status_code == 422
     assert teacher.post("/api/prizes", json={"name": long_name, "cost": 5}).status_code == 422
+
+
+def test_validation_errors_are_readable(teacher):
+    """Ошибка проверки — одна строка по-русски, а не список объектов на английском."""
+    r = teacher.post("/api/students", json={"class_id": 1, "name": "Я" * 121})
+    assert r.json()["detail"] == "Слишком длинное значение — не больше 120 символов"
+
+    r = teacher.post("/api/lessons/complete",
+                     json={"class_id": 1, "date": "вчера", "awards": []})
+    assert r.json()["detail"] == "Дата урока должна быть в формате ГГГГ-ММ-ДД"
+
+    r = teacher.post("/api/prizes", json={"name": "Приз", "cost": 0})
+    assert r.json()["detail"] == "Значение должно быть не меньше 1"
 
 
 def test_import_size_limited(teacher):

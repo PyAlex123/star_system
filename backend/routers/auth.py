@@ -105,7 +105,7 @@ def login_student(payload: schemas.StudentLogin, request: Request):
     student = db.find_by_login(db.load_db(), login)
     # Хеш считаем всегда, даже для несуществующего логина: иначе ответ «нет такого»
     # приходит заметно быстрее, и по времени можно собрать список логинов класса.
-    stored = student.get("password_hash", "") if student else passwords.DUMMY_HASH
+    stored = student.get("password_hash", "") if student else passwords.dummy_hash()
     password_ok = passwords.verify_password(payload.password, stored)
 
     if not student or not password_ok:

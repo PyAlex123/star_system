@@ -2,23 +2,6 @@
 
 const tg = window.Telegram?.WebApp;
 
-// Подпуть, на котором развёрнута система ("" в корне, "/stars" на подпути).
-// Значение подставляет сервер при отдаче страницы.
-const BASE = window.APP_BASE || "";
-
-/** SVG-иконка из набора, вшитого в страницу. Вместо эмодзи: они выглядят
- *  по-разному на Android, iOS и в Windows, и ломают единый вид интерфейса. */
-function icon(name, cls = "ic") {
-  return `<svg class="${cls}" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
-}
-
-/** Путь к картинке с учётом подпути. Внешние ссылки (фото профиля Telegram)
- *  оставляем как есть. */
-function assetUrl(path) {
-  if (!path) return "";
-  return /^https?:\/\//.test(path) ? path : BASE + path;
-}
-
 let token = null;
 let data = null;
 let telegramPhotoUrl = null;
@@ -29,35 +12,16 @@ let refreshTimer = null; // опрос свежих звёзд; останавл
 
 /* ── Мелкие помощники ─────────────────────────────────────── */
 
-const $ = (id) => document.getElementById(id);
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (ch) => (
-    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
-  ));
-}
-
-function plural(n, one, few, many) {
-  const mod10 = n % 10, mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
-}
-
 const stars = (n) => `${n} ${plural(n, "звезда", "звезды", "звёзд")}`;
 
-function toast(message, kind = "", iconName = "") {
-  const el = document.createElement("div");
-  el.className = `toast ${kind}`.trim();
-  if (iconName) el.innerHTML = icon(iconName);
-  el.appendChild(document.createTextNode(message));
-  $("toastHost").appendChild(el);
-  setTimeout(() => {
-    el.style.transition = "opacity .3s, transform .3s";
-    el.style.opacity = "0";
-    el.style.transform = "translateY(8px)";
-    setTimeout(() => el.remove(), 300);
-  }, 2600);
+// На телефоне уведомление уезжает вниз, к панели вкладок
+const toast = makeToast({ exit: "translateY(8px)", duration: 2600 });
+
+/** Запрос от имени ученика: сессия передаётся токеном в заголовке. */
+function api(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return requestJson(path, { ...options, headers });
 }
 
 function haptic(type = "impact") {
@@ -67,19 +31,6 @@ function haptic(type = "impact") {
     else if (type === "error") tg.HapticFeedback.notificationOccurred("error");
     else tg.HapticFeedback.impactOccurred("light");
   } catch (_) { /* старые версии Telegram — не страшно */ }
-}
-
-async function api(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (options.json !== undefined) {
-    headers["Content-Type"] = "application/json";
-    options.body = JSON.stringify(options.json);
-  }
-  const response = await fetch(BASE + path, { ...options, headers });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.detail || "Что-то пошло не так");
-  return payload;
 }
 
 /* ── Тема Telegram ────────────────────────────────────────── */
