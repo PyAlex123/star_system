@@ -11,6 +11,7 @@ let draft = {};            // { student_id: звёзды за текущий у�
 
 let deductTarget = null;
 let accessTarget = null;   // ученик, открытый в окне «Данные для входа»
+let showPasswords = false; // пароли в журнале скрыты: экран учителя часто выводят на доску
 let schoolTarget = null;   // null = создаём новую школу
 let prizeTarget = null;    // null = создаём новый приз
 let photoTarget = null;
@@ -248,6 +249,22 @@ function renderBank() {
     (_, i) => `<span class="bank-dot ${i < left ? "on" : ""}"></span>`).join("");
 }
 
+/** Пароль в строке журнала: скрыт точками, пока учитель не нажмёт «Показать пароли».
+ *  Если ребёнок сменил пароль сам, его не знает никто, кроме него. */
+function passwordCell(student) {
+  if (!student.password_shown) return `<i>свой пароль</i>`;
+  if (!showPasswords) return `<b class="masked">••••••</b>`;
+  return `<b>${escapeHtml(student.password_shown)}</b>`;
+}
+
+function togglePasswords() {
+  showPasswords = !showPasswords;
+  const button = $("passwordsToggle");
+  button.querySelector("span").textContent = showPasswords ? "Скрыть пароли" : "Показать пароли";
+  button.querySelector("use").setAttribute("href", showPasswords ? "#i-eye-off" : "#i-eye");
+  renderTable();
+}
+
 function renderTable() {
   renderBank();
   const host = $("tableHost");
@@ -307,8 +324,13 @@ function renderTable() {
         </td>
         <td><span class="balance-badge">${icon("star")} ${student.total_stars + current}</span></td>
         <td>
-          <span class="code-chip">${escapeHtml(student.token || "—")}</span>
-          <div class="login-chip" title="Логин для входа через сайт">${escapeHtml(student.login || "")}</div>
+          <span class="code-chip" title="Код карточки: для QR-кода и бота. Это не пароль">${escapeHtml(student.token || "—")}</span>
+          <div class="cred-line" title="Логин для входа через сайт">
+            <span>логин</span><b>${escapeHtml(student.login || "—")}</b>
+          </div>
+          <div class="cred-line" title="Пароль для входа через сайт">
+            <span>пароль</span>${passwordCell(student)}
+          </div>
         </td>
         <td>
           <div class="actions">
@@ -337,7 +359,7 @@ function renderTable() {
             <th>Ученик</th>
             <th style="width:220px;">Звёзды за урок (0–${MAX_STUDENT_STARS})</th>
             <th style="width:110px;">Баланс</th>
-            <th style="width:130px;">Коды входа</th>
+            <th style="width:215px;">Вход</th>
             <th style="width:230px;">Действия</th>
           </tr>
         </thead>
@@ -600,7 +622,7 @@ function renderPrizes() {
 
   grid.innerHTML = state.prizes.map((prize) => {
     const photo = prize.image
-      ? `<img src="${escapeHtml(assetUrl(prize.image))}" alt=""
+      ? `<img src="${escapeHtml(assetUrl(prize.image))}" alt="" loading="lazy" decoding="async"
               data-blank="${escapeHtml(blank)}" onerror="this.outerHTML = this.dataset.blank">`
       : blank;
 

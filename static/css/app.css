@@ -699,3 +699,19 @@ body.has-ribbon .hero { padding-top: calc(42px + env(safe-area-inset-top)); }
   .tab.active { background: var(--accent-soft); }
   .toast-host { bottom: 24px; }
 }
+
+/* Подсказка учителю в предпросмотре: почему кнопки блока «Аккаунт» неактивны */
+.preview-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--r-field);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-line);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.preview-note .ic { flex: none; margin-top: 2px; color: var(--gold); }

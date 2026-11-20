@@ -284,9 +284,12 @@ function renderAvatars() {
   $("infoStars").textContent = data.student.total_stars;
   $("infoLogin").textContent = data.student.login || "—";
 
-  // Учителю, который смотрит кабинет глазами ребёнка, выход не нужен:
-  // он бы отвязал Telegram настоящего ученика. Сервер такой запрос тоже отклонит.
-  $("logoutBlock").hidden = isPreview;
+  // Учитель в предпросмотре видит блок «Аккаунт» таким, каким его видит ребёнок,
+  // но кнопки неактивны: иначе он сменил бы пароль или отвязал Telegram настоящего
+  // ученика. Сервер такие запросы из предпросмотра тоже отклоняет.
+  // Раньше блок в предпросмотре прятался целиком — и учитель решал, что его нет.
+  $("logoutBlock").querySelectorAll("button, input").forEach((el) => { el.disabled = isPreview; });
+  $("previewNote").hidden = !isPreview;
 }
 
 function celebrateNewPrizes() {
