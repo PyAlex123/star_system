@@ -202,6 +202,9 @@ tbody tr:hover { background: var(--surface-2); }
 .star-btn .ic { width: 20px; height: 20px; vertical-align: 0; }
 .star-btn:hover { color: var(--gold-line); }
 .star-btn.on { color: var(--gold-bright); }
+/* уже начислено за эту дату раньше — не изменить */
+.star-btn.given, .star-btn.given:hover { color: var(--gold-bright); opacity: .4; cursor: default; }
+.bank-dot.given { background: currentColor; opacity: .35; }
 
 .star-num {
   width: 48px;
@@ -535,4 +538,17 @@ tbody tr:hover { background: var(--surface-2); }
   overflow-wrap: anywhere;   /* переносить только если совсем не влезает */
 }
 .cred-line b.masked { letter-spacing: .12em; color: var(--muted); }
+.cred-eye {
+  align-self: center;
+  margin-left: 2px;
+  padding: 2px;
+  line-height: 0;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.cred-eye .ic { width: 15px; height: 15px; }
+.cred-eye:hover { color: var(--ink); background: var(--line); }
 .cred-line i { font-family: var(--font); font-style: italic; color: var(--muted); }

@@ -237,28 +237,97 @@ function removeClass() {
 
 /* ── Банк урока и таблица ─────────────────────────────────── */
 
+/** Сегодня по часам компьютера учителя. toISOString() дал бы дату по Гринвичу:
+ *  в Ташкенте до пяти утра это ещё вчера. */
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function lessonDay() { return $("lessonDate").value || localToday(); }
+
+/* Лимиты действуют на дату, а не на одно нажатие «Завершить урок»: классу — 10 звёзд
+   за день, ученику — 5. Решает сервер, а панель показывает остаток, чтобы учитель
+   не упирался в ошибку. Правило подсчёта то же, что в backend/routers/lessons.py. */
+function classGotOn(day) {
+  return (state.lessons || [])
+    .filter((l) => l.class_id === activeClass && l.date === day)
+    .reduce((sum, l) => sum + (l.total_stars || 0), 0);
+}
+
+function studentGotOn(student, day) {
+  const reason = `Урок (${day})`;
+  return (student.history || [])
+    .filter((h) => h.date === day && h.reason === reason && h.delta > 0)
+    .reduce((sum, h) => sum + h.delta, 0);
+}
+
 function usedBank() {
   return classStudents().reduce((sum, s) => sum + (draft[s.id] || 0), 0);
 }
 
-function renderBank() {
-  const left = MAX_LESSON_BANK - usedBank();
-  $("bankText").textContent = `Банк урока: ${left}`;
-  $("bank").className = "bank" + (left === 0 ? " empty" : "");
-  $("bankDots").innerHTML = Array.from({ length: MAX_LESSON_BANK },
-    (_, i) => `<span class="bank-dot ${i < left ? "on" : ""}"></span>`).join("");
+function bankLeft() {
+  return Math.max(0, MAX_LESSON_BANK - classGotOn(lessonDay()) - usedBank());
 }
 
-/** Пароль в строке журнала: скрыт точками, пока учитель не нажмёт «Показать пароли».
- *  Если ребёнок сменил пароль сам, его не знает никто, кроме него. */
+function renderBank() {
+  const given = classGotOn(lessonDay());
+  const left = bankLeft();
+  $("bankText").textContent = given
+    ? `Банк дня: ${left} (уже начислено ${given})`
+    : `Банк дня: ${left}`;
+  $("bank").title = `За одну дату класс получает не больше ${MAX_LESSON_BANK} звёзд, ` +
+                    `ученик — не больше ${MAX_STUDENT_STARS}, сколько бы уроков ни завершили`;
+  $("bank").className = "bank" + (left === 0 ? " empty" : "");
+  $("bankDots").innerHTML = Array.from({ length: MAX_LESSON_BANK }, (_, i) => {
+    const cls = i < given ? "given" : i < given + usedBank() ? "" : "on";
+    return `<span class="bank-dot ${cls}"></span>`;
+  }).join("");
+}
+
+/** Выбрали другую дату — у неё свой банк. Черновик подрезаем под новые остатки. */
+function onLessonDateChange() {
+  const day = lessonDay();
+  let room = MAX_LESSON_BANK - classGotOn(day);
+  for (const student of classStudents()) {
+    const cap = Math.max(0, MAX_STUDENT_STARS - studentGotOn(student, day));
+    const value = Math.max(0, Math.min(draft[student.id] || 0, cap, room));
+    draft[student.id] = value;
+    room -= value;
+  }
+  renderTable();
+}
+
+/** Пароль в строке журнала: скрыт точками. Открыть можно все сразу кнопкой
+ *  «Показать пароли» или один — глазом в строке. Если ребёнок сменил пароль сам,
+ *  его не знает никто, кроме него. */
+let flippedPasswords = new Set();   // строки, где глаз нажат вопреки общей кнопке
+
+function passwordVisible(student) {
+  return showPasswords !== flippedPasswords.has(student.id);
+}
+
 function passwordCell(student) {
   if (!student.password_shown) return `<i>свой пароль</i>`;
-  if (!showPasswords) return `<b class="masked">••••••</b>`;
-  return `<b>${escapeHtml(student.password_shown)}</b>`;
+  const visible = passwordVisible(student);
+  const text = visible
+    ? `<b>${escapeHtml(student.password_shown)}</b>`
+    : `<b class="masked">••••••</b>`;
+  return `${text}<button class="cred-eye" type="button"
+            title="${visible ? "Скрыть пароль" : "Показать пароль"}"
+            aria-label="${visible ? "Скрыть пароль" : "Показать пароль"}"
+            onclick="togglePassword(${student.id})">${icon(visible ? "eye-off" : "eye")}</button>`;
+}
+
+function togglePassword(studentId) {
+  if (flippedPasswords.has(studentId)) flippedPasswords.delete(studentId);
+  else flippedPasswords.add(studentId);
+  renderTable();
 }
 
 function togglePasswords() {
   showPasswords = !showPasswords;
+  flippedPasswords = new Set();
   const button = $("passwordsToggle");
   button.querySelector("span").textContent = showPasswords ? "Скрыть пароли" : "Показать пароли";
   button.querySelector("use").setAttribute("href", showPasswords ? "#i-eye-off" : "#i-eye");
@@ -290,13 +359,22 @@ function renderTable() {
     return;
   }
 
+  const day = lessonDay();
   const rows = list.map((student, index) => {
     const current = draft[student.id] || 0;
+    // Звёзды показывают весь день: сначала уже начисленные раньше (их не изменить),
+    // потом звёзды этого урока.
+    const got = Math.min(MAX_STUDENT_STARS, studentGotOn(student, day));
     const starButtons = Array.from({ length: MAX_STUDENT_STARS }, (_, i) => {
       const value = i + 1;
-      return `<button class="star-btn ${value <= current ? "on" : ""}"
-                      onclick="setDraft(${student.id}, ${value === current ? value - 1 : value})"
-                      aria-label="${value} звёзд">${icon("star")}</button>`;
+      if (value <= got) {
+        return `<button class="star-btn given" disabled
+                        title="Уже начислено за ${escapeHtml(day)}">${icon("star")}</button>`;
+      }
+      const lessonValue = value - got;
+      return `<button class="star-btn ${lessonValue <= current ? "on" : ""}"
+                      onclick="setDraft(${student.id}, ${lessonValue === current ? lessonValue - 1 : lessonValue})"
+                      aria-label="${lessonValue} звёзд">${icon("star")}</button>`;
     }).join("");
 
     const linked = student.tg_id
@@ -318,7 +396,8 @@ function renderTable() {
         <td>
           <div class="stars-cell">
             ${starButtons}
-            <input type="number" class="star-num" min="0" max="${MAX_STUDENT_STARS}" value="${current}"
+            <input type="number" class="star-num" min="0" max="${MAX_STUDENT_STARS - got}" value="${current}"
+                   title="${got ? `За этот урок. Раньше за ${escapeHtml(day)} уже ${got}` : "За этот урок"}"
                    onchange="setDraft(${student.id}, parseInt(this.value) || 0)">
           </div>
         </td>
@@ -357,7 +436,7 @@ function renderTable() {
           <tr>
             <th class="col-num">№</th>
             <th>Ученик</th>
-            <th style="width:220px;">Звёзды за урок (0–${MAX_STUDENT_STARS})</th>
+            <th style="width:220px;" title="Серые звёзды уже начислены за эту дату">Звёзды за день (до ${MAX_STUDENT_STARS})</th>
             <th style="width:110px;">Баланс</th>
             <th style="width:215px;">Вход</th>
             <th style="width:230px;">Действия</th>
@@ -369,13 +448,21 @@ function renderTable() {
 }
 
 function setDraft(studentId, value) {
-  value = Math.max(0, Math.min(MAX_STUDENT_STARS, value));
+  const day = lessonDay();
+  const student = state.students.find((s) => s.id === studentId);
+  const cap = Math.max(0, MAX_STUDENT_STARS - (student ? studentGotOn(student, day) : 0));
+  if (value > cap) {
+    toast(cap ? `${student.name}: за этот день можно добавить ещё не больше ${cap}`
+              : `${student.name} уже получил(а) ${MAX_STUDENT_STARS} звёзд за этот день`, "error");
+  }
+  value = Math.max(0, Math.min(cap, value));
   const others = classStudents().reduce(
     (sum, s) => (s.id === studentId ? sum : sum + (draft[s.id] || 0)), 0);
-  const available = MAX_LESSON_BANK - others;
+  const available = Math.max(0, MAX_LESSON_BANK - classGotOn(day) - others);
 
   if (value > available) {
-    toast(`В банке урока осталось только ${available}`, "error");
+    toast(available ? `В банке дня осталось только ${available}`
+                    : `Банк дня исчерпан: за ${day} классу уже начислено ${MAX_LESSON_BANK} звёзд`, "error");
     value = available;
   }
   draft[studentId] = value;
@@ -522,9 +609,13 @@ async function submitLesson() {
 
   const awards = list.map((s) => ({ student_id: s.id, stars: draft[s.id] || 0 }));
   const total = awards.reduce((sum, a) => sum + a.stars, 0);
+  const date = lessonDay();
+
+  if (total === 0 && classGotOn(date) >= MAX_LESSON_BANK) {
+    return toast(`За ${date} классу уже начислено ${MAX_LESSON_BANK} звёзд — банк дня исчерпан`, "error");
+  }
 
   const send = async () => {
-    const date = $("lessonDate").value || new Date().toISOString().split("T")[0];
     await api("/api/lessons/complete", {
       method: "POST",
       json: { class_id: activeClass, date, awards },
@@ -929,7 +1020,7 @@ async function logout() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  $("lessonDate").value = new Date().toISOString().split("T")[0];
+  $("lessonDate").value = localToday();
   $("newStudentName").addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
   $("newClassName").addEventListener("keydown", (e) => { if (e.key === "Enter") createClass(); });
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });

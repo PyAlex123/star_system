@@ -10,9 +10,32 @@ from .common import bad_request, class_or_404, student_or_404
 router = APIRouter(prefix="/api", tags=["lessons"], dependencies=[Depends(require_teacher)])
 
 
+def lesson_reason(day: str) -> str:
+    return f"Урок ({day})"
+
+
+def class_stars_on(database: Dict[str, Any], class_id: int, day: str) -> int:
+    """Сколько звёзд класс уже получил за уроки в этот день."""
+    return sum(lesson.get("total_stars", 0) for lesson in database.get("lessons", [])
+               if lesson.get("class_id") == class_id and lesson.get("date") == day)
+
+
+def student_stars_on(student: Dict[str, Any], day: str) -> int:
+    """Сколько звёзд ученик уже получил за уроки в этот день.
+
+    Считаем по истории ученика, а не по записям уроков: уроки до обновления
+    не хранят раскладку по ученикам, а история есть всегда."""
+    reason = lesson_reason(day)
+    return sum(entry.get("delta", 0) for entry in student.get("history", [])
+               if entry.get("date") == day and entry.get("reason") == reason
+               and entry.get("delta", 0) > 0)
+
+
 @router.post("/lessons/complete")
 def complete_lesson(payload: schemas.LessonComplete):
-    """Звёзды за урок: не больше банка урока на класс и лимита на одного ученика."""
+    """Звёзды за урок. Лимиты считаются на дату, а не на нажатие кнопки:
+    классу — не больше MAX_LESSON_BANK за день, ученику — не больше MAX_STUDENT_STARS.
+    Иначе «Завершить урок» второй раз за ту же дату давал бы новый полный банк."""
     total_stars = sum(a.stars for a in payload.awards)
     if total_stars > config.MAX_LESSON_BANK:
         raise bad_request(f"Превышен лимит {config.MAX_LESSON_BANK} звёзд на урок")
@@ -38,12 +61,29 @@ def complete_lesson(payload: schemas.LessonComplete):
                 raise bad_request(f"{student['name']} учится не в классе {cls['name']}")
             students.append((student, award.stars))
 
+        day = payload.date
+        already = class_stars_on(database, cls["id"], day)
+        if total_stars and already + total_stars > config.MAX_LESSON_BANK:
+            left = max(0, config.MAX_LESSON_BANK - already)
+            raise bad_request(
+                f"За {day} классу {cls['name']} уже начислено {already} из "
+                f"{config.MAX_LESSON_BANK} звёзд. " +
+                (f"Можно добавить ещё не больше {left}." if left else "Банк этого дня исчерпан."))
+        for student, stars in students:
+            got = student_stars_on(student, day)
+            if got + stars > config.MAX_STUDENT_STARS:
+                left = max(0, config.MAX_STUDENT_STARS - got)
+                raise bad_request(
+                    f"{student['name']} уже получил(а) за {day} {got} из "
+                    f"{config.MAX_STUDENT_STARS} звёзд. " +
+                    (f"Можно добавить ещё не больше {left}." if left else "Больше за этот день нельзя."))
+
         for student, stars in students:
             student["total_stars"] += stars
             student["history"].insert(0, {
-                "date": payload.date,
+                "date": day,
                 "delta": stars,
-                "reason": f"Урок ({payload.date})",
+                "reason": lesson_reason(day),
             })
 
         database["lessons"].insert(0, {
@@ -53,6 +93,7 @@ def complete_lesson(payload: schemas.LessonComplete):
             "date": payload.date,
             "total_stars": total_stars,
             "students_rewarded": len(students),
+            "awards": {str(student["id"]): stars for student, stars in students},
         })
         return len(students)
 

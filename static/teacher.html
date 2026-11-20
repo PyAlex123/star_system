@@ -48,10 +48,10 @@
         <label for="lessonDate" class="scope-label">
           <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Дата урока
         </label>
-        <input type="date" id="lessonDate">
+        <input type="date" id="lessonDate" onchange="onLessonDateChange()">
         <div class="bank" id="bank">
           <svg class="ic ic-sm"><use href="#i-star"></use></svg>
-          <span id="bankText">Банк урока: 10</span>
+          <span id="bankText">Банк дня: 10</span>
           <span class="bank-dots" id="bankDots"></span>
         </div>
       </div>
