@@ -58,6 +58,27 @@ body.app {
 
 .hero-top { display: flex; align-items: center; gap: 12px; }
 
+/* Своя кнопка закрытия: внутри Telegram мы запрещаем свайп вниз,
+   поэтому выход должен быть виден явно. Вне Telegram кнопка скрыта. */
+.hero-close {
+  flex: none;
+  margin-left: auto;
+  align-self: flex-start;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--r-btn);
+  border: 1px solid rgba(243, 239, 228, .32);
+  background: rgba(0, 0, 0, .18);
+  color: var(--hero-dim);
+  cursor: pointer;
+  transition: background .15s var(--ease), color .15s var(--ease);
+}
+
+.hero-close:hover { background: rgba(0, 0, 0, .3); color: #f3efe4; }
+.hero-close .ic { width: 17px; height: 17px; vertical-align: 0; }
+
 .avatar-btn {
   position: relative;
   flex: none;
@@ -170,7 +191,10 @@ body.app {
 
 /* ── Контент ───────────────────────────────────────────────── */
 
-main.content { padding: 18px 0 10px; }
+/* Только вертикальные отступы — боковые приходят из .shell (16px).
+   Сокращённая запись padding здесь обнуляла бы их: у main.content
+   специфичность выше, и контент упирался бы в края экрана. */
+main.content { padding-top: 18px; padding-bottom: 10px; }
 
 .view { display: none; }
 .view.active { display: block; }

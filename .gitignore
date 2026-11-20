@@ -25,3 +25,6 @@ tools/
 Thumbs.db
 .idea/
 .vscode/
+
+# Снимки экранов для работы над дизайном — в репозиторий не нужны
+screenshots/

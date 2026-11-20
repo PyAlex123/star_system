@@ -502,8 +502,23 @@ async function logoutAccount() {
   $("screenBye").hidden = false;
 }
 
+function lockTelegramWindow() {
+  if (!insideTelegram) return;
+
+  // Главная беда на iPhone: свайп вниз сворачивает и закрывает кабинет
+  // прямо посреди работы — ребёнок теряет страницу, пролистывая рейтинг.
+  // disableVerticalSwipes появился в Bot API 7.7; в старых клиентах метода
+  // просто нет, поэтому вызов защищён.
+  try { tg.disableVerticalSwipes?.(); } catch (e) { /* старый клиент */ }
+
+  // Если клиент всё-таки попытается закрыть окно — Telegram спросит подтверждение.
+  try { tg.enableClosingConfirmation?.(); } catch (e) { /* старый клиент */ }
+}
+
 function closeCabinet() {
   if (insideTelegram) {
+    // Своё закрытие — намеренное, лишний вопрос «точно выйти?» здесь только мешает
+    try { tg.disableClosingConfirmation?.(); } catch (e) { /* старый клиент */ }
     tg.close?.();
     return;
   }
@@ -518,6 +533,7 @@ function closeCabinet() {
     tg.expand();
     applyTelegramTheme();
     tg.onEvent?.("themeChanged", applyTelegramTheme);
+    lockTelegramWindow();
   }
 
   try {
@@ -531,6 +547,7 @@ function closeCabinet() {
 
   $("screenLoading").hidden = true;
   $("app").hidden = false;
+  $("heroClose").hidden = !insideTelegram;   // вне Telegram закрывать нечего
   renderAll();
 
   // Вкладку можно открыть сразу по адресу: /app?view=rating
