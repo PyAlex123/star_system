@@ -73,6 +73,28 @@ class TeacherLogin(BaseModel):
     password: str
 
 
+class StudentLogin(BaseModel):
+    """Вход через сайт — для детей без Telegram."""
+    login: str
+    password: str
+
+
+class PasswordChange(BaseModel):
+    """Ребёнок меняет себе пароль: старый нужен, чтобы чужой не поменял."""
+    current: str
+    new: str
+
+
+class PasswordReset(BaseModel):
+    """Учитель выдаёт новый пароль. Пусто — система придумает сама."""
+    password: Optional[str] = None
+
+
+class StudentUpdate(BaseModel):
+    name: Optional[str] = None
+    login: Optional[str] = None
+
+
 class TwaAuth(BaseModel):
     init_data: str
 

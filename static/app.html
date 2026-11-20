@@ -26,6 +26,9 @@
   <h2 id="errorTitle">Не удалось войти</h2>
   <p id="errorText"></p>
   <button class="btn" onclick="location.reload()">Попробовать снова</button>
+  <a class="btn btn-ghost" id="errorEnterLink" href="#">
+    <svg class="ic"><use href="#i-key"></use></svg> Войти по логину и паролю
+  </a>
 </div>
 
 <!-- Выход из аккаунта -->
@@ -148,7 +151,25 @@
       <div id="logoutBlock" style="margin-top:22px;">
         <div class="eyebrow">Аккаунт</div>
         <div class="panel">
-          <p class="muted" style="margin:0;font-size:13.5px;">
+          <div class="info-list" style="margin-top:0;border-top:0;">
+            <div class="info-item"><span>Логин для входа с сайта</span><span id="infoLogin">—</span></div>
+          </div>
+
+          <button class="btn btn-ghost" style="margin-top:12px;" onclick="togglePasswordForm()">
+            <svg class="ic"><use href="#i-key"></use></svg> Сменить пароль
+          </button>
+
+          <div id="passwordForm" hidden style="margin-top:12px;">
+            <input type="password" id="passCurrent" style="width:100%;"
+                   placeholder="Текущий пароль" autocomplete="current-password">
+            <input type="password" id="passNew" style="width:100%;margin-top:8px;"
+                   placeholder="Новый пароль, минимум 5 символов" autocomplete="new-password">
+            <button class="btn" style="margin-top:10px;" onclick="savePassword()">
+              <svg class="ic"><use href="#i-check"></use></svg> Сохранить пароль
+            </button>
+          </div>
+
+          <p class="muted" style="margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;">
             Выход открепит твой Telegram от карточки. Звёзды и аватар останутся —
             чтобы вернуться, отсканируй QR со своей карточки или пришли код боту.
           </p>

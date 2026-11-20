@@ -106,6 +106,7 @@ function showError(title, text) {
   $("screenError").hidden = false;
   $("errorTitle").textContent = title;
   $("errorText").textContent = text;
+  $("errorEnterLink").href = `${BASE}/enter`;
 }
 
 async function authenticate() {
@@ -148,8 +149,9 @@ async function authenticate() {
   }
 
   throw new Error(
-    "Кабинет открывается из Telegram. Отсканируй QR-код со своей карточки — " +
-    "откроется бот, а в нём кнопка «Зайти в свой кабинет»."
+    "Кабинет открывается из Telegram: отсканируй QR-код со своей карточки, " +
+    "и в боте появится кнопка «Зайти в свой кабинет». " +
+    "Нет Telegram — войди по логину и паролю с карточки."
   );
 }
 
@@ -329,6 +331,7 @@ function renderAvatars() {
     ? `${data.leaderboard.my_place} из ${data.leaderboard.class_size}`
     : "—";
   $("infoStars").textContent = data.student.total_stars;
+  $("infoLogin").textContent = data.student.login || "—";
 
   // Учителю, который смотрит кабинет глазами ребёнка, выход не нужен:
   // он бы отвязал Telegram настоящего ученика. Сервер такой запрос тоже отклонит.
@@ -456,6 +459,38 @@ async function uploadPhoto(event) {
     haptic("error");
     toast(error.message, "error");
   }
+}
+
+/* ── Пароль для входа с сайта ─────────────────────────────── */
+
+function togglePasswordForm() {
+  const box = $("passwordForm");
+  box.hidden = !box.hidden;
+  if (!box.hidden) $("passCurrent").focus();
+}
+
+async function savePassword() {
+  const current = $("passCurrent").value;
+  const next = $("passNew").value.trim();
+
+  if (next.length < 5) {
+    toast("Новый пароль — минимум 5 символов", "error");
+    return;
+  }
+
+  try {
+    await api("/api/me/password", { method: "POST", json: { current, new: next } });
+  } catch (error) {
+    haptic("error");
+    toast(error.message, "error");
+    return;
+  }
+
+  $("passCurrent").value = "";
+  $("passNew").value = "";
+  $("passwordForm").hidden = true;
+  haptic("success");
+  toast("Пароль изменён — теперь его знаешь только ты", "success", "check");
 }
 
 /* ── Выход из аккаунта ────────────────────────────────────── */

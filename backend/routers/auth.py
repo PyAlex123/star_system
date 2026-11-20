@@ -1,7 +1,7 @@
 """Вход: ученик через Telegram Web App, учитель по паролю."""
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from .. import config, db, schemas, security
+from .. import config, db, passwords, ratelimit, schemas, security
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -77,11 +77,50 @@ def login_preview(student_id: int):
     return {"token": security.issue_student_token(student_id, preview=True), "preview": True}
 
 
+def _guard(scope: str, key: str) -> None:
+    """Тормозит перебор пароля. Сообщаем, сколько ждать, — честнее, чем молчать."""
+    wait = ratelimit.retry_after(scope, key)
+    if wait:
+        minutes = max(1, round(wait / 60))
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Слишком много попыток входа. Попробуйте через {minutes} мин.",
+            headers={"Retry-After": str(wait)},
+        )
+
+
+@router.post("/student")
+def login_student(payload: schemas.StudentLogin, request: Request):
+    """Вход через сайт по логину и паролю — для детей без Telegram."""
+    ip = ratelimit.client_key(request)
+    login = passwords.normalize_login(payload.login)
+    _guard("student", ip)
+    _guard("student-login", login)
+
+    student = db.find_by_login(db.load_db(), login)
+    if not student or not passwords.verify_password(payload.password,
+                                                    student.get("password_hash", "")):
+        ratelimit.register_failure("student", ip)
+        ratelimit.register_failure("student-login", login)
+        # Не уточняем, что именно неверно: иначе логины можно перебрать по ответу
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
+
+    ratelimit.reset("student", ip)
+    ratelimit.reset("student-login", login)
+    return {"token": security.issue_student_token(student["id"])}
+
+
 @router.post("/teacher")
 def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Request):
     """Вход в панель учителя. Сессия кладётся в httpOnly-cookie."""
+    ip = ratelimit.client_key(request)
+    _guard("teacher", ip)
+
     if not security.check_teacher_password(payload.password):
+        ratelimit.register_failure("teacher", ip)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный пароль")
+
+    ratelimit.reset("teacher", ip)
 
     token = security.issue_teacher_token()
     response.set_cookie(

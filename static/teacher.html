@@ -289,12 +289,41 @@
 </div>
 
 <div class="backdrop" id="modalQr" onclick="if(event.target===this) closeModal('modalQr')">
-  <div class="modal" style="max-width:360px; text-align:center;">
-    <h3 id="qrName">QR-код ученика</h3>
+  <div class="modal" style="max-width:420px;">
+    <h3 id="qrName">Данные для входа</h3>
     <p class="modal-sub" id="qrSub"></p>
-    <img id="qrImage" alt="QR-код" style="width:220px; height:220px; image-rendering:pixelated;">
-    <div class="modal-actions" style="justify-content:center;">
-      <button class="btn btn-ghost" onclick="closeModal('modalQr')">Закрыть</button>
+
+    <div class="access-qr">
+      <img id="qrImage" alt="QR-код">
+      <div class="access-qr-note">
+        Через Telegram: навести камеру на QR.<br>
+        Код карточки — <b id="qrCode">—</b>
+      </div>
+    </div>
+
+    <div class="eyebrow" style="margin-top:18px;">Без Telegram — через сайт</div>
+    <div class="access-site" id="accessSite">—</div>
+
+    <div class="field">
+      <label for="accessLogin">Логин</label>
+      <div class="access-row">
+        <input type="text" id="accessLogin" autocapitalize="off" spellcheck="false">
+        <button class="btn btn-ghost btn-sm" onclick="saveLogin()">Сохранить</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Пароль</label>
+      <div class="access-row">
+        <div class="access-password" id="accessPassword">—</div>
+        <button class="btn btn-ghost btn-sm" onclick="resetPassword()">Новый пароль</button>
+      </div>
+      <p class="access-note" id="accessNote"></p>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="resetTokenFromAccess()">Новый код карточки</button>
+      <button class="btn" onclick="closeModal('modalQr')">Закрыть</button>
     </div>
   </div>
 </div>

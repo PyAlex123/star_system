@@ -13,13 +13,16 @@ import threading
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
+from . import passwords
 from .config import DB_FILE
 
 _lock = threading.RLock()
 
 # 2 -> 3: появились школы. Классы стали объектами {id, school_id, name},
-# у ученика вместо названия класса хранится class_id.
-DB_VERSION = 3
+#         у ученика вместо названия класса хранится class_id.
+# 3 -> 4: вход через сайт. У ученика появились login, password_hash
+#         и password_shown (открытый пароль до первой самостоятельной смены).
+DB_VERSION = 4
 
 # Алфавит кодов без символов, которые дети путают при ручном вводе (O/0, I/1)
 _TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -211,11 +214,26 @@ def migrate(db: Dict[str, Any]) -> bool:
             changed = True
 
     tokens = {s["token"] for s in db["students"] if s.get("token")}
+    logins = {s["login"] for s in db["students"] if s.get("login")}
     for student in db["students"]:
         if not student.get("token"):
             token = new_token(tokens)
             tokens.add(token)
             student["token"] = token
+            changed = True
+
+        # Вход через сайт: логин и пароль выдаются каждому, даже если класс
+        # пользуется Telegram. Так ребёнок без аккаунта не остаётся за бортом.
+        if not student.get("login"):
+            login = passwords.suggest_login(student.get("name", ""), logins)
+            logins.add(login)
+            student["login"] = login
+            changed = True
+        if not student.get("password_hash"):
+            passwords.set_credentials(student)
+            changed = True
+        if "password_shown" not in student:
+            student["password_shown"] = None
             changed = True
         for field, default in (("tg_id", None), ("tg_username", None), ("bound_at", None)):
             if field not in student:
@@ -341,6 +359,20 @@ def find_by_token(db: Dict[str, Any], token: str) -> Optional[Dict[str, Any]]:
     if not token:
         return None
     return next((s for s in db["students"] if (s.get("token") or "").upper() == token), None)
+
+
+def find_by_login(db: Dict[str, Any], login: str) -> Optional[Dict[str, Any]]:
+    """Ученик по логину. Регистр не важен: дети набирают как придётся."""
+    wanted = passwords.normalize_login(login)
+    if not wanted:
+        return None
+    return next((s for s in db["students"]
+                 if passwords.normalize_login(s.get("login")) == wanted), None)
+
+
+def logins_taken(db: Dict[str, Any], except_id: Optional[int] = None) -> set:
+    return {passwords.normalize_login(s.get("login")) for s in db["students"]
+            if s.get("login") and s["id"] != except_id}
 
 
 def find_by_tg_id(db: Dict[str, Any], tg_id: int) -> Optional[Dict[str, Any]]:

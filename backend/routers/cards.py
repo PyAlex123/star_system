@@ -45,6 +45,15 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str) -> str:
     token = html.escape(student["token"])
     base = config.URL_PREFIX
     bound = "вход выполнен" if student.get("tg_id") else "ждёт первого входа"
+
+    # Вход через сайт — для тех, у кого нет Telegram. Пароль печатаем, только
+    # пока ребёнок не сменил его сам: после этого он известен лишь ему.
+    site = html.escape(config.site_url("/enter").replace("https://", "").replace("http://", ""))
+    login = html.escape(student.get("login") or "—")
+    shown = student.get("password_shown")
+    password = (f"<b>{html.escape(shown)}</b>" if shown
+                else "<i>свой пароль</i>")
+
     return f"""
     <div class="card">
       <div class="card-top">
@@ -56,6 +65,12 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str) -> str:
       <div class="code">код: <b>{token}</b></div>
       <div class="hint">Наведи камеру телефона на QR — откроется бот.<br>
         Если камера не читает, отправь боту код выше.</div>
+      <div class="web">
+        <div class="web-title">Без Telegram — через сайт</div>
+        <div class="web-site">{site}</div>
+        <div class="web-row"><span>логин</span><b>{login}</b></div>
+        <div class="web-row"><span>пароль</span>{password}</div>
+      </div>
       <div class="status">{bound}</div>
     </div>
     """

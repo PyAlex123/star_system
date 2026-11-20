@@ -10,6 +10,7 @@ let activeClass = null;    // id класса
 let draft = {};            // { student_id: звёзды за текущий урок }
 
 let deductTarget = null;
+let accessTarget = null;   // ученик, открытый в окне «Данные для входа»
 let schoolTarget = null;   // null = создаём новую школу
 let prizeTarget = null;    // null = создаём новый приз
 let photoTarget = null;
@@ -347,10 +348,13 @@ function renderTable() {
           </div>
         </td>
         <td><span class="balance-badge">${icon("star")} ${student.total_stars + current}</span></td>
-        <td><span class="code-chip">${escapeHtml(student.token || "—")}</span></td>
+        <td>
+          <span class="code-chip">${escapeHtml(student.token || "—")}</span>
+          <div class="login-chip" title="Логин для входа через сайт">${escapeHtml(student.login || "")}</div>
+        </td>
         <td>
           <div class="actions">
-            <button class="icon-btn" title="Показать QR-код" onclick="showQr(${student.id})">${icon("qr")}</button>
+            <button class="icon-btn" title="Данные для входа: QR, логин, пароль" onclick="showQr(${student.id})">${icon("qr")}</button>
             <button class="icon-btn" title="Посмотреть кабинет глазами ученика"
                     onclick="previewCabinet(${student.id})">${icon("eye")}</button>
             <button class="icon-btn" title="Выдать приз или списать звёзды"
@@ -375,7 +379,7 @@ function renderTable() {
             <th>Ученик</th>
             <th style="width:220px;">Звёзды за урок (0–${MAX_STUDENT_STARS})</th>
             <th style="width:110px;">Баланс</th>
-            <th style="width:110px;">Код</th>
+            <th style="width:130px;">Коды входа</th>
             <th style="width:230px;">Действия</th>
           </tr>
         </thead>
@@ -455,14 +459,69 @@ async function resetAvatar(id) {
   }
 }
 
+/* ── Данные для входа ─────────────────────────────────────── */
+
+function renderAccessPassword(student) {
+  const box = $("accessPassword");
+  if (student?.password_shown) {
+    box.textContent = student.password_shown;
+    box.classList.remove("hidden-pass");
+    $("accessNote").textContent = "Этот пароль напечатан на карточке ученика.";
+  } else {
+    box.textContent = "ученик сменил пароль сам";
+    box.classList.add("hidden-pass");
+    $("accessNote").textContent =
+      "Посмотреть его нельзя — пароль знает только ребёнок. Забыл? Выдайте новый.";
+  }
+}
+
 function showQr(id) {
   const student = state.students.find((s) => s.id === id);
   if (!student) return;
+  accessTarget = id;
+
   $("qrName").textContent = student.name;
-  $("qrSub").textContent =
-    `${classById(student.class_id)?.name || "—"} · код ${student.token}`;
+  $("qrSub").textContent = classById(student.class_id)?.name || "—";
+  $("qrCode").textContent = student.token || "—";
   $("qrImage").src = `${BASE}/api/students/${id}/qr.png?size=10&t=${Date.now()}`;
+  $("accessSite").textContent = `${location.origin}${BASE}/enter`;
+  $("accessLogin").value = student.login || "";
+  renderAccessPassword(student);
+
   openModal("modalQr");
+}
+
+async function saveLogin() {
+  const login = $("accessLogin").value.trim().toLowerCase();
+  if (!login) return toast("Логин не может быть пустым", "error");
+  try {
+    await api(`/api/students/${accessTarget}`, { method: "PATCH", json: { login } });
+    await loadState();
+    $("accessLogin").value = login;
+    toast("Логин сохранён", "success", "check");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function resetPassword() {
+  try {
+    const result = await api(`/api/students/${accessTarget}/password`,
+                             { method: "POST", json: {} });
+    await loadState();
+    renderAccessPassword(state.students.find((s) => s.id === accessTarget));
+    toast(`Новый пароль: ${result.password}`, "success", "key");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function resetTokenFromAccess() {
+  // Окно подтверждения в разметке идёт раньше этого, поэтому оказалось бы
+  // под ним. Закрываем текущее и отдаём работу обычному сбросу кода.
+  const id = accessTarget;
+  closeModal("modalQr");
+  resetToken(id);
 }
 
 function previewCabinet(id) {

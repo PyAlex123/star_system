@@ -142,6 +142,12 @@ def login_page():
     return _page("login.html")
 
 
+@app.get("/enter", response_class=HTMLResponse)
+def student_login_page():
+    """Вход ученика по логину и паролю — для тех, у кого нет Telegram."""
+    return _page("enter.html")
+
+
 @app.get("/app", response_class=HTMLResponse)
 def student_app():
     """Кабинет ученика (Telegram Web App). Данные отдаются только после проверки initData."""

@@ -110,6 +110,47 @@ body { background: var(--paper); padding: 0 0 40px; }
 .hint { font-size: 10px; color: #6d7872; line-height: 1.4; }
 .status { font-size: 10px; color: #8d978f; }
 
+/* Вход через сайт: отбит линией, чтобы ребёнок не путал его с кодом для бота */
+.web {
+  width: 100%;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed #c9bfa6;
+  text-align: left;
+}
+
+.web-title {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: #8d978f;
+}
+
+.web-site {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #1b241f;
+  margin: 2px 0 4px;
+}
+
+.web-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: #6d7872;
+  line-height: 1.5;
+}
+
+.web-row b, .web-row i {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: #1b241f;
+  letter-spacing: .02em;
+}
+
+.web-row i { font-style: italic; color: #8d978f; letter-spacing: 0; }
+
 @media print {
   @page { size: A4; margin: 10mm; }
 

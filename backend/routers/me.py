@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from .. import config, db, images, schemas
+from .. import config, db, images, passwords, schemas
 from ..security import require_student
 
 router = APIRouter(prefix="/api/me", tags=["student"])
@@ -100,6 +100,7 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
         "student": {
             "id": fresh["id"],
             "name": fresh["name"],
+            "login": fresh.get("login") or "",
             "class_name": db.class_name(database, fresh.get("class_id")),
             "school_name": db.school_name_of_class(database, fresh.get("class_id")),
             "total_stars": fresh["total_stars"],
@@ -184,6 +185,38 @@ def unbind_self(request: Request, student: Dict[str, Any] = Depends(require_stud
         fresh["tg_id"] = None
         fresh["tg_username"] = None
         fresh["bound_at"] = None
+        return None
+
+    db.transaction(_apply)
+    return {"ok": True}
+
+
+@router.post("/password")
+def change_password(payload: schemas.PasswordChange, request: Request,
+                    student: Dict[str, Any] = Depends(require_student)):
+    """Ребёнок меняет себе пароль для входа через сайт."""
+    if getattr(request.state, "student_preview", False):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Это предпросмотр кабинета, пароль здесь не меняется.")
+
+    new = (payload.new or "").strip()
+    if len(new) < 5:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Новый пароль слишком короткий — нужно хотя бы 5 символов")
+    if " " in new:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "В пароле не должно быть пробелов")
+
+    if not passwords.verify_password(payload.current, student.get("password_hash", "")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Текущий пароль указан неверно")
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_student(database, student["id"])
+        if not fresh:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        fresh["password_hash"] = passwords.hash_password(new)
+        # Пароль придуман ребёнком — учителю его больше не показываем,
+        # у него остаётся только возможность выдать новый.
+        fresh["password_shown"] = None
         return None
 
     db.transaction(_apply)
