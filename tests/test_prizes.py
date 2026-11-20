@@ -41,7 +41,8 @@ def test_photo_upload_served_and_resized(teacher):
     assert served.status_code == 200
     from PIL import Image
     import io
-    assert Image.open(io.BytesIO(served.content)).size == (800, 600)
+    width = config.PRIZE_IMAGE_WIDTH
+    assert Image.open(io.BytesIO(served.content)).size == (width, width * 3 // 4)
 
 
 def test_photo_removed(teacher):

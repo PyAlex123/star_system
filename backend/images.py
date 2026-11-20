@@ -57,13 +57,17 @@ def save_square(data: bytes, destination: Path, size: int = config.AVATAR_SIZE) 
 
 def save_wide(data: bytes, destination: Path,
               box: Tuple[int, int] = (config.PRIZE_IMAGE_WIDTH, int(config.PRIZE_IMAGE_WIDTH * 0.75))) -> None:
-    """Вписывает фото приза в прямоугольник 4:3 на белом фоне и сохраняет WEBP."""
+    """Заполняет рамку 4:3 фотографией приза (обрезка по центру) и сохраняет WEBP.
+
+    Раньше фото вписывалось в рамку на белом фоне: вертикальный снимок с телефона
+    получал белые полосы по бокам, а в тёмной теме они особенно бросались в глаза.
+    Окно приза в панели показывает ту же обрезку, так что учитель видит результат
+    до сохранения.
+    """
     image = _open(data)
-    image.thumbnail(box, Image.LANCZOS)
-    canvas = Image.new("RGB", box, (255, 255, 255))
-    canvas.paste(image, ((box[0] - image.width) // 2, (box[1] - image.height) // 2))
+    framed = ImageOps.fit(image, box, method=Image.LANCZOS, centering=(0.5, 0.5))
     destination.parent.mkdir(parents=True, exist_ok=True)
-    canvas.save(destination, "WEBP", quality=86, method=5)
+    framed.save(destination, "WEBP", quality=82, method=5)
 
 
 # ── Где лежат загрузки ───────────────────────────────────────────────────────

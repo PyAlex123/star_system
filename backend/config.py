@@ -127,7 +127,7 @@ MAX_STUDENT_STARS = 5     # максимум звёзд одному учени�
 # Загрузка картинок
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 AVATAR_SIZE = 320
-PRIZE_IMAGE_WIDTH = 800
+PRIZE_IMAGE_WIDTH = 640    # карточка приза на телефоне ~175 точек: 640 хватает и для плотных экранов
 
 BOT_ENABLED = bool(BOT_TOKEN)
 

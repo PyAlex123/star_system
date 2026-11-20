@@ -16,11 +16,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "static" / "img" / "prizes"
-SIZE = (800, 600)
+SIZE = (640, 480)   # как config.PRIZE_IMAGE_WIDTH: на телефоне карточка ~175 точек
 
 # Викимедиа требует «описательный» User-Agent и блокирует браузерный,
 # остальные сайты наоборот отдают картинку только браузеру.
@@ -115,16 +115,26 @@ def download(url: str, attempts: int = 3) -> bytes:
     raise last_error
 
 
-def to_webp(data: bytes, destination: Path) -> None:
-    """Вписываем снимок в 800×600 на белом фоне — чтобы витрина выглядела ровно."""
+# Куда смотреть при обрезке: (доля по горизонтали, доля по вертикали).
+# Вертикальный снимок в горизонтальной рамке теряет верх и низ — фокус решает,
+# что останется. По умолчанию — центр.
+FOCUS = {
+    "headset-mousepad": (0.5, 0.06),   # голова и гарнитура целиком, а не колени
+    "led-kit": (0.5, 0.22),            # колба светодиода, а не только середина
+}
+
+
+def to_webp(data: bytes, destination: Path, focus=(0.5, 0.5)) -> None:
+    """Заполняем рамку 4:3 снимком целиком, обрезая лишнее вокруг точки фокуса.
+
+    Раньше снимок вписывался в рамку на белом фоне: у вертикальных фото по бокам
+    оставались белые полосы до 44% кадра, в тёмной теме — особенно заметные.
+    """
     image = Image.open(io.BytesIO(data))
     image.load()
-    image = image.convert("RGB")
-    image.thumbnail(SIZE, Image.LANCZOS)
-
-    canvas = Image.new("RGB", SIZE, (255, 255, 255))
-    canvas.paste(image, ((SIZE[0] - image.width) // 2, (SIZE[1] - image.height) // 2))
-    canvas.save(destination, "WEBP", quality=86, method=5)
+    image = ImageOps.exif_transpose(image).convert("RGB")
+    framed = ImageOps.fit(image, SIZE, method=Image.LANCZOS, centering=focus)
+    framed.save(destination, "WEBP", quality=82, method=6)
 
 
 def main() -> int:
@@ -141,7 +151,7 @@ def main() -> int:
 
         for url in urls:
             try:
-                to_webp(download(url), destination)
+                to_webp(download(url), destination, FOCUS.get(name, (0.5, 0.5)))
                 print(f"[OK]   {name}.webp  <-  {url.split('/')[-1][:60]}")
                 credits.append(f"- **{name}.webp** — {title}  \n"
                                f"  Источник: {source}  \n"
