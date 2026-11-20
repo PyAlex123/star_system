@@ -1,14 +1,15 @@
 """Точка сборки приложения."""
 import logging
 from contextlib import asynccontextmanager
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
-from . import config
+from . import assets, config
 from .bot.bot import start_bot, stop_bot
 from .routers import auth, cards, lessons, me, prizes, schools, students, telegram
 from .security import require_teacher_page
@@ -101,40 +102,92 @@ async def validation_error(request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": "; ".join(messages)})
 
 
-@app.middleware("http")
-async def cache_headers(request, call_next):
-    """CSS и JS браузер обязан перепроверять, иначе после обновления системы
-    у детей останется старая версия кабинета. Картинки и шрифты можно кешировать надолго.
-    """
-    response = await call_next(request)
-    path = request.url.path
-    if path.startswith("/static/"):
-        if path.endswith((".css", ".js")):
-            response.headers["Cache-Control"] = "no-cache"
-        elif path.startswith("/static/uploads/"):
-            response.headers["Cache-Control"] = "public, max-age=300"
-        else:
-            response.headers["Cache-Control"] = "public, max-age=604800"
-    return response
-
-
 # Кабинет ученика веб-версия Telegram открывает во фрейме — ей встраивание
 # разрешаем. Всё остальное (панель учителя, вход, карточки) встраивать нельзя:
 # иначе чужой сайт может наложить на нашу страницу невидимые кнопки (кликджекинг).
 TELEGRAM_FRAME_ANCESTORS = "https://web.telegram.org https://*.telegram.org"
 
 
-@app.middleware("http")
-async def security_headers(request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "same-origin"
-    if request.url.path == "/app":
-        response.headers["Content-Security-Policy"] = f"frame-ancestors {TELEGRAM_FRAME_ANCESTORS}"
-    else:
-        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
-        response.headers["X-Frame-Options"] = "DENY"
-    return response
+def _cache_control(path: str, query: str) -> Optional[str]:
+    if not path.startswith("/static/"):
+        return None
+    if path.endswith((".css", ".js")):
+        # С отметкой версии — навсегда: обновился файл — изменился и адрес.
+        # Без отметки (старые ссылки) — перепроверять, чтобы не застрять на старой версии.
+        return "public, max-age=31536000, immutable" if "v=" in query else "no-cache"
+    if path.startswith("/static/uploads/"):
+        return "public, max-age=300"
+    return "public, max-age=604800"
+
+
+class ResponseHeaders:
+    """Заголовки кеша и безопасности — одним лёгким ASGI-слоем.
+
+    Раньше это были два слоя @app.middleware. Они построены на BaseHTTPMiddleware,
+    который пропускает каждый ответ через свою обёртку — в том числе картинки и
+    шрифты, отдаваемые потоком. Здесь мы только дописываем заголовки к началу ответа.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope["path"]
+        query = scope.get("query_string", b"").decode("latin-1")
+        extra = [(b"x-content-type-options", b"nosniff"), (b"referrer-policy", b"same-origin")]
+        if path == "/app":
+            extra.append((b"content-security-policy",
+                          f"frame-ancestors {TELEGRAM_FRAME_ANCESTORS}".encode()))
+        else:
+            extra += [(b"content-security-policy", b"frame-ancestors 'none'"),
+                      (b"x-frame-options", b"DENY")]
+        cache = _cache_control(path, query)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = [(k, v) for k, v in message.get("headers", [])
+                           if not (cache and k.lower() == b"cache-control")]
+                if cache:
+                    headers.append((b"cache-control", cache.encode()))
+                message["headers"] = headers + extra
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+# Сжимаем только текст: страницы, CSS, JS, SVG. Картинки и шрифты уже сжаты —
+# повторное сжатие только тратит процессор. Ответы API не трогаем: они маленькие,
+# а сжатие ответов с секретами рядом с текстом от пользователя — лишний риск (BREACH).
+_COMPRESSIBLE_STATIC = (".css", ".js", ".svg")
+_COMPRESSIBLE_PAGES = {"/", "/teacher", "/login", "/enter", "/app"}
+
+
+def _compressible(path: str) -> bool:
+    if path.startswith("/static/"):
+        return path.endswith(_COMPRESSIBLE_STATIC)
+    return path in _COMPRESSIBLE_PAGES or path.startswith("/cards/")
+
+
+class SelectiveGZip:
+    """gzip для текстовых ответов — обычно в 3–5 раз меньше по сети."""
+
+    def __init__(self, app):
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=500)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and _compressible(scope["path"]):
+            await self.gzip(scope, receive, send)
+        else:
+            await self.app(scope, receive, send)
+
+
+app.add_middleware(SelectiveGZip)
+app.add_middleware(ResponseHeaders)
 
 
 # Загруженные картинки лежат в каталоге данных, а не внутри static/.
@@ -154,7 +207,7 @@ app.include_router(telegram.router)
 
 # ── Отдача страниц ───────────────────────────────────────────────────────────
 
-_page_cache: Dict[str, Tuple[float, str]] = {}
+_page_cache: Dict[str, Tuple[tuple, str]] = {}
 
 
 ICONS_FILE = config.STATIC_DIR / "img" / "icons.svg"
@@ -167,16 +220,21 @@ def render_page(name: str) -> str:
     {{ICONS}} — набор иконок вставляется прямо в страницу: внешний спрайт через
                 <use href="файл.svg#id"> не всегда грузится в WebView Telegram.
 
+    К ссылкам на CSS и JS дописывается отметка версии (см. backend/assets.py).
+
     Результат кешируем по времени изменения файлов, чтобы правки подхватывались
-    без перезапуска сервера.
+    без перезапуска сервера. В отметку входят и подключаемые CSS/JS: поменяли
+    стиль — страница получит новую ссылку на него.
     """
     path = config.STATIC_DIR / name
-    stamp = path.stat().st_mtime + ICONS_FILE.stat().st_mtime
+    stamp = (path.stat().st_mtime_ns, ICONS_FILE.stat().st_mtime_ns, assets.files_stamp(),
+             config.URL_PREFIX)
     cached = _page_cache.get(name)
     if cached and cached[0] == stamp:
         return cached[1]
 
-    html = path.read_text(encoding="utf-8").replace("{{BASE}}", config.URL_PREFIX)
+    html = assets.add_versions(path.read_text(encoding="utf-8"))
+    html = html.replace("{{BASE}}", config.URL_PREFIX)
     if "{{ICONS}}" in html:
         html = html.replace("{{ICONS}}", ICONS_FILE.read_text(encoding="utf-8"))
     _page_cache[name] = (stamp, html)
@@ -187,8 +245,15 @@ def _page(name: str) -> HTMLResponse:
     return HTMLResponse(render_page(name), headers={"Cache-Control": "no-cache"})
 
 
-@app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_teacher_page)])
+@app.get("/", response_class=HTMLResponse)
+def entry_page():
+    """Главная: «Я ученик» или «Я учитель». Сюда попадает каждый, кто набрал адрес сайта."""
+    return _page("index.html")
+
+
+@app.get("/teacher", response_class=HTMLResponse, dependencies=[Depends(require_teacher_page)])
 def teacher_page():
+    """Журнал учителя. Без входа — перенаправление на /login."""
     return _page("teacher.html")
 
 

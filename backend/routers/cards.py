@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import HTMLResponse
 from qrcode.image.pil import PilImage
 
-from .. import config, db
+from .. import assets, config, db
 from ..security import require_teacher, require_teacher_page
 
 router = APIRouter(tags=["cards"])
@@ -108,8 +108,8 @@ def class_cards(class_id: int):
 <head>
 <meta charset="UTF-8">
 <title>Карточки: {html.escape(title)}</title>
-<link rel="stylesheet" href="{base}/static/css/theme.css">
-<link rel="stylesheet" href="{base}/static/css/cards.css">
+<link rel="stylesheet" href="{base}{assets.versioned('css/theme.css')}">
+<link rel="stylesheet" href="{base}{assets.versioned('css/cards.css')}">
 </head>
 <body>
 <div class="toolbar no-print">
@@ -118,7 +118,7 @@ def class_cards(class_id: int):
     <span class="muted">· {html.escape(school)} · учеников: {len(students)}</span>
   </div>
   <div class="toolbar-actions">
-    <a class="btn btn-ghost" href="{base}/">В журнал</a>
+    <a class="btn btn-ghost" href="{base}/teacher">В журнал</a>
     <button class="btn" onclick="window.print()">Печать</button>
   </div>
 </div>

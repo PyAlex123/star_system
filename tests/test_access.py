@@ -27,7 +27,7 @@ def test_api_closed_without_login(client, method, path):
 
 
 def test_teacher_page_redirects_to_login(client):
-    r = client.get("/", follow_redirects=False)
+    r = client.get("/teacher", follow_redirects=False)
     assert r.status_code == 307
     assert r.headers["location"].startswith("/login?next=")
 
@@ -76,6 +76,7 @@ def test_teacher_cookie_is_not_a_student_session(teacher):
 # ── Страницы ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path,marker", [
+    ("/", "Я ученик"),
     ("/login", "Панель учителя"),
     ("/enter", "Вход в кабинет"),
     ("/app", "Открываем твой кабинет"),
@@ -89,11 +90,11 @@ def test_public_pages(client, path, marker):
 
 
 def test_teacher_page_renders(teacher):
-    r = teacher.get("/")
+    r = teacher.get("/teacher")
     assert r.status_code == 200
     assert "Журнал звёзд" in r.text
     assert r.text.count('<symbol id="i-') > 30, "иконки вшиты в страницу"
-    assert 'href="/static/css/theme.css"' in r.text
+    assert 'href="/static/css/theme.css?v=' in r.text
 
 
 def test_pages_not_cached(client):

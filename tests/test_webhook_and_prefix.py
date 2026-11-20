@@ -64,13 +64,13 @@ def prefix(monkeypatch):
 
 def test_prefix_in_page_links(client, prefix):
     html = client.get("/login").text
-    assert 'href="/stars/static/css/theme.css"' in html
+    assert 'href="/stars/static/css/theme.css?v=' in html
     assert 'const BASE = "/stars"' in html
 
 
 def test_prefix_in_login_redirect(client, prefix):
-    r = client.get("/", follow_redirects=False)
-    assert r.headers["location"] == "/stars/login?next=/stars/"
+    r = client.get("/teacher", follow_redirects=False)
+    assert r.headers["location"] == "/stars/login?next=/stars/teacher"
 
 
 def test_prefix_limits_teacher_cookie(client, prefix):
@@ -82,7 +82,8 @@ def test_prefix_limits_teacher_cookie(client, prefix):
 def test_prefix_in_cards(teacher, prefix):
     html = teacher.get("/cards/1").text
     assert 'src="/stars/api/students/' in html
-    assert 'href="/stars/static/css/cards.css"' in html
+    assert 'href="/stars/static/css/cards.css?v=' in html
+    assert 'href="/stars/teacher"' in html, "«В журнал» — с подпутём"
 
 
 def test_prefix_in_external_urls(prefix):

@@ -217,7 +217,8 @@ def test_telegram_photo_taken_from_signed_data(client):
 # ── 9. Заголовки безопасности ────────────────────────────────────────────────
 
 def test_teacher_pages_cannot_be_framed(teacher, client):
-    for r in (teacher.get("/"), client.get("/login"), client.get("/enter"), teacher.get("/cards/1")):
+    for r in (client.get("/"), teacher.get("/teacher"), client.get("/login"),
+              client.get("/enter"), teacher.get("/cards/1")):
         assert r.headers["x-frame-options"] == "DENY"
         assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
 

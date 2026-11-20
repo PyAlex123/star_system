@@ -14,6 +14,7 @@
 {{ICONS}}
 
 <form class="box" onsubmit="submitLogin(event)">
+  <a class="back-link" href="{{BASE}}/"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg> Выбор входа</a>
   <div class="mark"><svg class="ic"><use href="#i-star"></use></svg></div>
   <h1>Панель учителя</h1>
   <p class="sub">Журнал звёзд и карточки классов</p>
@@ -29,8 +30,7 @@
 
   <p class="hint">
     Пароль задаётся в файле <code>.env</code> (параметр <code>TEACHER_PASSWORD</code>).
-    Если он не задан, временный пароль печатается в окне сервера при запуске.<br><br>
-    Это вход для учителя. Ученикам — <a href="{{BASE}}/enter">сюда</a>.
+    Если он не задан, временный пароль печатается в окне сервера при запуске.
   </p>
 </form>
 
@@ -57,7 +57,7 @@ async function submitLogin(event) {
     // next приходит из нашего же редиректа и уже содержит подпуть.
     // Внешние адреса не пускаем — только пути своего сайта.
     const next = new URLSearchParams(location.search).get("next") || "";
-    const safe = next.startsWith("/") && !next.startsWith("//") ? next : BASE + "/";
+    const safe = next.startsWith("/") && !next.startsWith("//") ? next : BASE + "/teacher";
     location.href = safe;
   } catch (error) {
     document.getElementById("errorText").textContent = error.message;
