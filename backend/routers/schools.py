@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends
 
 from .. import db, images, schemas
+from .. import themes
 from ..security import require_superadmin, require_teacher
 from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
 
@@ -30,7 +31,8 @@ def add_school(item: schemas.SchoolCreate):
     def _apply(database: Dict[str, Any]):
         if any(s["name"].strip().lower() == name.lower() for s in database["schools"]):
             raise bad_request("Такая школа уже есть")
-        school = {"id": db.next_id(database["schools"]), "name": name}
+        school = {"id": db.next_id(database["schools"]), "name": name,
+                  "theme": themes.DEFAULT_THEME}
         database["schools"].append(school)
         return school
 
@@ -47,6 +49,22 @@ def rename_school(school_id: int, item: schemas.SchoolUpdate):
         return school
 
     return {"ok": True, "school": db.transaction(_apply)}
+
+
+@router.put("/schools/{school_id}/theme")
+def set_school_theme(school_id: int, item: schemas.SchoolTheme,
+                     user: Dict[str, Any] = Depends(require_teacher)):
+    """Тема оформления школы. Меняют администратор и учителя этой школы:
+    тему увидят все её ученики, учителя и печатные карточки."""
+    def _apply(database: Dict[str, Any]):
+        school = school_or_404(database, school_id, user)
+        if school.get("theme") == item.theme:
+            return db.NO_SAVE
+        school["theme"] = item.theme
+        return None
+
+    db.transaction(_apply)
+    return {"ok": True, "theme": item.theme}
 
 
 @router.delete("/schools/{school_id}", dependencies=[Depends(require_superadmin)])

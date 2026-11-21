@@ -1,669 +1,823 @@
-/* Панель учителя — рабочий стол.
+/* ──────────────────────────────────────────────────────────────
+   Панель учителя — по макету docs/design/«Звёзды - Учитель.dc.html»
+   (T1 журнал, T1a итог урока, T2 призы, T2a/T2b окна, T3 уроки).
+   Только var(--…) из tokens.css. Различия тем — переключатели --show-*
+   и --ov*, а не копии экранов.
+   ────────────────────────────────────────────────────────────── */
 
-   Плотная, как настоящий журнал: разделение линиями, а не воздухом и тенями,
-   числа шрифтом с засечками, подписи разделов прописными. */
+body.teacher { min-height: 100vh; display: flex; flex-direction: column; }
 
-body.teacher { background: var(--paper); }
+/* Роли: кнопки администратора учитель не видит (сервер проверяет сам) */
+body:not(.is-admin) .admin-only { display: none !important; }
+body:not(.is-teacher) .teacher-only { display: none !important; }
+
+.grow { flex: 1; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 /* ── Шапка ─────────────────────────────────────────────────── */
 
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 10px 20px;
+  z-index: 30;
   background: var(--surface);
-  border-bottom: 1px solid var(--line-strong);
+  background-image: var(--head-grid, none);
+  background-size: 24px 24px;
+  border-bottom: var(--bw) solid var(--line);
 }
-
-.brand { display: flex; align-items: center; gap: 10px; }
-
-.brand-mark {
-  width: 32px; height: 32px;
-  border-radius: var(--r-field);
-  background: var(--accent);
-  color: var(--gold-bright);
+.topbar-in {
+  max-width: 1344px;
+  margin: 0 auto;
+  padding: 0 32px;
+  height: 64px;
   display: grid;
-  place-items: center;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
 }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-text { min-width: 0; display: flex; flex-direction: column; }
+.brand-title { font: var(--dw) 18px/22px var(--font-display); white-space: nowrap; }
+.brand-sub { font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.brand-text { font-family: var(--font-display); font-weight: 600; font-size: 16px; line-height: 1.15; }
-.brand-text small { display: block; font-family: var(--font); font-size: 11.5px; font-weight: 400; color: var(--muted); }
-
-.nav { display: flex; border: 1px solid var(--line-strong); border-radius: var(--r-btn); overflow: hidden; }
-
-.nav button {
-  border: none;
+.nav {
+  display: flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r11);
   background: var(--surface);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-  padding: 7px 15px;
-  cursor: pointer;
+}
+.nav button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r8);
+  background: transparent;
+  color: var(--accent-text);
+  font: 600 14px/1 var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
 }
+.nav button .ic { width: 17px; height: 17px; }
+.nav button:hover { background: var(--surface-2); }
+.nav button[aria-current="page"] { background: var(--primary); color: var(--on-primary); }
+.topbar-end { justify-self: end; display: flex; gap: 8px; }
 
-.nav button + button { border-left: 1px solid var(--line); }
-.nav button.active { background: var(--accent); color: #fffdf8; }
+/* ── Страницы ──────────────────────────────────────────────── */
 
-.layout { max-width: 1180px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.page { display: none; flex: 1; width: 100%; max-width: 1344px; margin: 0 auto; padding: 24px 32px 0; }
+.page.active { display: block; }
+#page-prizes, #page-lessons, #page-users { padding: 28px 32px 48px; }
+.page.narrow { max-width: 1040px; }
+.page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+.page-head > div:first-child { flex: 1; min-width: 260px; }
 
-.page { display: none; flex-direction: column; gap: 16px; }
-.page.active { display: flex; }
-
-/* ── Панель урока ──────────────────────────────────────────── */
+/* ── Панель урока: школа, дата, банк, Excel ────────────────── */
 
 .toolbar {
+  position: relative;
+  z-index: 20;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  padding: 12px 16px;
+  padding: 10px 12px 10px 16px;
 }
+.tool { display: flex; align-items: center; gap: 10px; }
+.vrule { width: 1px; height: 28px; background: var(--line); }
+
+/* Кнопка-поле: «Наша школа · 3 класса», «21.11.2026 · сб» */
+.chip-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px 0 12px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r10);
+  background: var(--field-bg);
+  color: var(--text);
+  font: 600 14px/1 var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip-btn:hover { border-color: var(--accent-text); }
+.chip-dim { color: var(--muted); font-weight: 500; }
+.chip-main { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+#schoolMenu .menu { left: 58px; width: 270px; }
+
+/* Дата — настоящее поле date под плашкой: клик открывает календарь */
+.date-chip { padding: 0 12px; font-variant-numeric: tabular-nums; }
+.date-chip input[type="date"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.date-chip input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; cursor: pointer; }
+.date-chip:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 .bank {
   display: flex;
   align-items: center;
-  gap: 9px;
-  border: 1px solid var(--accent-line);
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-radius: var(--r-field);
-  padding: 6px 12px;
-  font-weight: 600;
-  font-size: 13.5px;
+  gap: 12px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--r10);
+  background: var(--star-bg);
+  color: var(--star-text);
 }
+.bank.over { background: var(--danger-bg); color: var(--danger); }
+.bank-num { font: var(--nw) 17px/1 var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bank-dots { display: flex; gap: 2px; }
+.bank-dots svg { width: 13px; height: 13px; }
+.bank-dot { fill: none; stroke: var(--line-strong); stroke-width: 2; stroke-linejoin: round; }
+.bank-dot.on { fill: var(--star); stroke: var(--star-depth); }
+.bank-dot.given { fill: var(--star-soft); stroke: var(--star-soft); }
+.bank-text { font-size: 13px; font-weight: 500; white-space: nowrap; }
 
-.bank.empty { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
+.menu.wide { width: 280px; }
 
-.bank-dots { display: flex; gap: 3px; }
-.bank-dot { width: 7px; height: 7px; border-radius: 50%; border: 1px solid currentColor; }
-.bank-dot.on { background: currentColor; }
+/* ── Вкладки классов ───────────────────────────────────────── */
 
-/* ── Выбор школы и классов ─────────────────────────────────── */
+.class-tabs {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 20px;
+  padding-left: 16px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+.class-tab {
+  flex: none;
+  height: 38px;
+  padding: 0 18px;
+  background: var(--tab-off);
+  border: var(--bw) solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--r12) var(--r12) 0 0;
+  font: var(--nw) 16px/1 var(--font-num);
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.class-tab:hover { background: var(--bg); color: var(--text); }
+/* «Стикербук»: у классов свои цвета (по порядку), неактивные — тоже цветные */
+.class-tab.c0 { background: var(--cls-a-bg, var(--tab-off)); }
+.class-tab.c1 { background: var(--cls-b-bg, var(--tab-off)); }
+.class-tab.c2 { background: var(--cls-c-bg, var(--tab-off)); }
+[data-theme="sticker"] .class-tab { color: var(--text); }
 
-.scope-bar {
+.class-tab.active {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
+  height: 44px;
+  padding: 0 4px 0 18px;
+  margin-bottom: -1px;
+  background: var(--surface);
+  color: var(--accent-text);
+  font-size: 17px;
+  box-shadow: inset 0 3px 0 var(--accent);
+  cursor: default;
 }
-
-.scope-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--muted);
+.class-tab.active.c0 { background: var(--cls-a-bg, var(--surface)); }
+.class-tab.active.c1 { background: var(--cls-b-bg, var(--surface)); }
+.class-tab.active.c2 { background: var(--cls-c-bg, var(--surface)); }
+.class-tab.active .icon-btn { margin-left: 6px; width: 32px; height: 32px; }
+.class-tab-wrap { position: static; flex: none; }
+.class-tab-wrap .menu { top: auto; margin-top: 4px; }
+.class-add {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-
-#schoolSelect { min-width: 190px; font-weight: 600; }
-
-.scope-divider { width: 1px; align-self: stretch; background: var(--line); margin: 0 2px; }
-
-.class-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
-
-.class-tab {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  padding: 6px 13px;
-  border-radius: var(--r-field);
-  cursor: pointer;
-}
-
-.class-tab:hover { border-color: var(--ink-2); }
-.class-tab.active { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
-
-/* ── Таблица учеников ──────────────────────────────────────── */
-
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-card); }
-
-table { width: 100%; border-collapse: collapse; background: var(--surface); min-width: 820px; }
-
-th {
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  text-align: left;
-  padding: 9px 13px;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--line-strong);
-}
-
-td { padding: 8px 13px; border-top: 1px solid var(--line); vertical-align: middle; }
-tbody tr:hover { background: var(--surface-2); }
-
-.col-num { width: 40px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
-.student-cell { display: flex; align-items: center; gap: 10px; }
-
-.avatar-sm {
-  width: 32px; height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--surface-3);
-  flex: none;
-}
-
-.avatar-sm img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.student-name { font-weight: 600; font-size: 14px; }
-.student-meta { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
-.student-meta .ic { width: 12px; height: 12px; vertical-align: -2px; }
-.student-meta.linked { color: var(--accent); }
-
-.code-chip {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  letter-spacing: .04em;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-field);
-  padding: 2px 7px;
-}
-
-.stars-cell { display: flex; align-items: center; gap: 1px; }
-
-.star-btn {
-  cursor: pointer;
-  color: var(--line-strong);
+  height: 38px;
+  padding: 0 14px;
   background: none;
-  border: none;
-  padding: 2px;
-  line-height: 0;
-  transition: color .12s;
+  border: 1px dashed var(--line-strong);
+  border-bottom: 0;
+  border-radius: var(--r12) var(--r12) 0 0;
+  color: var(--accent-text);
+  font: 600 14px/1 var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
 }
+.class-add:hover { background: var(--surface-2); }
 
-.star-btn .ic { width: 20px; height: 20px; vertical-align: 0; }
-.star-btn:hover { color: var(--gold-line); }
-.star-btn.on { color: var(--gold-bright); }
-/* уже начислено за эту дату раньше — не изменить */
-.star-btn.given, .star-btn.given:hover { color: var(--gold-bright); opacity: .4; cursor: default; }
-.bank-dot.given { background: currentColor; opacity: .35; }
+/* Меню класса выносим из прокручиваемого ряда, иначе его обрежет */
+.class-menu { position: fixed; width: 230px; }
 
-.star-num {
-  width: 48px;
-  text-align: center;
-  font-weight: 600;
-  margin-left: 8px;
-  font-variant-numeric: tabular-nums;
+/* ── Лист журнала ──────────────────────────────────────────── */
+
+.sheet {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: 0 var(--r18) var(--r18) var(--r18);
+  box-shadow: var(--shadow-card);
 }
+.sheet-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; flex-wrap: wrap; }
+.sheet-title { font-size: 12px; }
+.sheet-rule { flex: 1; min-width: 20px; height: 1px; background: var(--line); }
+.kbd-hints { font-size: 13px; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.kbd-more { align-items: center; gap: 6px; margin-left: 6px; }
 
-.balance-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--gold-soft);
-  border: 1px solid var(--gold-line);
-  color: var(--gold);
-  padding: 3px 9px;
-  border-radius: var(--r-field);
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
+/* Колонки: № · ученик · звёзды · баланс · вход · действия.
+   У «Ясно и быстро» колонки «Вход» нет: данные входа — в боковой панели. */
+.jt { --cols: 40px minmax(200px, 1fr) 214px 130px 170px 250px; border-top: 1px solid var(--line); }
+[data-theme="clear"] .jt { --cols: 40px minmax(220px, 1fr) 270px 150px 250px; }
+@media (max-width: 1279px) {
+  .jt { --cols: 36px minmax(160px, 1fr) 214px 120px 150px 130px; }
+  [data-theme="clear"] .jt { --cols: 36px minmax(160px, 1fr) 270px 120px 130px; }
+  .jt .act-label { display: none; }
+}
+.jt-head, .jt-row { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 16px; }
+.jt-head {
+  height: 40px;
+  background: var(--surface-3);
+  font: 600 11px/14px var(--font-ui);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.jt-head .right { text-align: right; padding-right: 4px; }
+.jt-row {
+  position: relative;
+  min-height: 56px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+.jt-row:nth-child(even of .jt-row) { background: var(--surface-2); }
+.jt-row.picked, .jt-row.menu-open { background: var(--accent-soft); }
+.jt-row.menu-open { z-index: 20; }
+.jt-row:focus-visible { outline: 3px solid var(--star); outline-offset: -3px; }
+
+.cell-num { font: var(--nw) 16px/1 var(--font-num); color: var(--muted); }
+.cell-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.av-sm {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--line);
+}
+.st-name {
+  min-width: 0;
+  font-size: 15px;
   font-weight: 600;
-  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.balance-badge .ic { width: 13px; height: 13px; vertical-align: -1px; }
-.balance-badge.bumped { animation: bump .4s var(--ease); }
-
-@keyframes bump {
-  50% { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
-}
-
-.actions { display: flex; gap: 4px; }
-
-.icon-btn {
-  width: 30px; height: 30px;
-  border-radius: var(--r-field);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-2);
+.has-panel .st-name {
   cursor: pointer;
-  display: grid;
-  place-items: center;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--line-strong);
+}
+.st-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--line-strong); }
+.st-dot.in { background: var(--success); }
+.tag-hidden .ic { width: 12px; height: 12px; }
+
+/* Звёзды за урок: кнопки-звёзды (все темы, кроме clear) */
+.cell-stars { display: flex; align-items: center; gap: 8px; }
+.star-row { display: flex; }
+.star-btn {
+  width: 28px;
+  height: 36px;
   padding: 0;
-  transition: all .14s var(--ease);
-}
-
-.icon-btn .ic { width: 16px; height: 16px; vertical-align: 0; }
-.icon-btn:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.icon-btn.danger:hover { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
-
-/* ── Призы ─────────────────────────────────────────────────── */
-
-.prize-admin-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.prize-admin {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  overflow: hidden;
+  border: 0;
+  background: none;
   display: flex;
-  flex-direction: column;
-}
-
-.prize-admin.hidden-prize { opacity: .5; }
-
-.prize-admin-photo {
-  position: relative;
-  aspect-ratio: 4 / 3;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
-  overflow: hidden;
-}
-
-.prize-admin-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.prize-admin-photo .no-photo {
-  width: 100%; height: 100%;
-  display: grid; place-items: center;
-  color: var(--muted);
-}
-
-.photo-overlay {
-  position: absolute;
-  inset: auto 0 0 0;
-  padding: 7px;
-  display: flex;
-  justify-content: flex-end;
-  opacity: 0;
-  transition: opacity .16s;
-}
-
-.prize-admin:hover .photo-overlay { opacity: 1; }
-
-.prize-admin-body { padding: 12px 13px 13px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
-.prize-admin-name { font-family: var(--font-display); font-weight: 600; font-size: 14.5px; line-height: 1.25; }
-.prize-admin-desc { font-size: 12.5px; color: var(--muted); flex: 1; }
-.prize-admin-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-
-/* ── История уроков ────────────────────────────────────────── */
-
-.lesson-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-}
-
-.lesson-row:last-child { border-bottom: none; }
-
-.lesson-plus {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--gold);
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
-.lesson-plus .ic { width: 13px; height: 13px; vertical-align: -1px; }
-
-/* ── Блок фотографии в форме приза ─────────────────────────── */
-
-.photo-field { display: flex; gap: 14px; align-items: flex-start; }
-
-.photo-preview {
-  flex: none;
-  width: 128px;
-  aspect-ratio: 4 / 3;
-  border-radius: var(--r-field);
-  border: 1px dashed var(--line-strong);
-  background: var(--surface-2);
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  padding: 6px;
-}
-
-.photo-preview.filled { border-style: solid; border-color: var(--line); padding: 0; }
-.photo-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
-
-.photo-field-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-
-/* ── Модальные окна ────────────────────────────────────────── */
-
-.backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(20, 26, 22, .5);
-  display: none;
   align-items: center;
   justify-content: center;
-  padding: 18px;
-  z-index: 70;
+  cursor: pointer;
 }
+.star-btn svg { width: 22px; height: 22px; }
+.star-btn polygon { fill: none; stroke: var(--line-strong); stroke-width: 1.5; stroke-linejoin: round; }
+.star-btn.on polygon { fill: var(--star); stroke: var(--star); }
+.star-btn.preview polygon { fill: var(--star-soft); stroke: var(--star-soft); }
+/* Уже начислено за эту дату раньше — не изменить */
+.star-btn.given { cursor: default; }
+.star-btn.given polygon { fill: var(--star-soft); stroke: var(--star-soft); opacity: .7; }
 
-.backdrop.open { display: flex; }
-
-.modal {
-  background: var(--surface);
-  border-radius: var(--r-card);
-  border: 1px solid var(--line-strong);
-  border-top: 3px solid var(--accent);
-  padding: 22px;
-  width: 100%;
-  max-width: 470px;
-  box-shadow: var(--shadow-pop);
-  max-height: 88dvh;
-  overflow-y: auto;
+/* «Ясно и быстро»: сегменты 0–5 */
+.seg-stars {
+  padding: 2px;
+  gap: 2px;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r8);
+  background: var(--surface-2);
 }
-
-.modal h3 { font-size: 19px; margin-bottom: 5px; }
-.modal .modal-sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
-
-.field { margin-bottom: 13px; }
-.field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; }
-.field input, .field select, .field textarea { width: 100%; }
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 9px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+.seg-stars button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: 600 14px/1 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
 }
+.seg-stars button[aria-checked="true"] { background: var(--primary); color: var(--on-primary); }
+.seg-stars button:disabled { color: var(--line-strong); cursor: not-allowed; }
 
-/* ── Тосты ─────────────────────────────────────────────────── */
+.star-num {
+  width: 40px;
+  height: 36px !important;
+  padding: 0 !important;
+  border-radius: var(--r8) !important;
+  border: 1px solid var(--line-strong) !important;
+  text-align: center;
+  font: 600 15px/1 var(--font-ui) !important;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+}
+.star-num::-webkit-inner-spin-button, .star-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.star-num.set { border-color: var(--star) !important; }
 
-.toast-host {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
+.cell-bal { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.after { font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Колонка «Вход»: код, статус и окошко с логином и паролем */
+.cell-login { position: relative; flex-direction: column; align-items: flex-start; gap: 2px; }
+.code-btn { cursor: pointer; }
+.code-btn:hover { border-color: var(--line-strong); background: var(--field-bg); }
+.code-btn .ic { width: 12px; height: 12px; color: var(--muted); }
+.login-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.login-status.in { color: var(--success); }
+.login-status .ic { width: 13px; height: 13px; }
+
+.pop {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  z-index: 50;
+  width: 300px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  z-index: 90;
-  max-width: 350px;
-}
-
-.toast {
-  background: var(--ink);
-  color: var(--paper);
-  padding: 10px 15px;
-  border-radius: var(--r-btn);
-  font-size: 13.5px;
-  font-weight: 500;
-  box-shadow: var(--shadow-pop);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  animation: toast-in .2s var(--ease);
-}
-
-.toast.success { background: var(--accent); color: #fffdf8; }
-.toast.error { background: var(--danger); color: #fffdf8; }
-
-@keyframes toast-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-
-.empty-note {
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-  padding: 30px 18px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-card);
-}
-
-.hint-text { font-size: 12.5px; color: var(--muted); }
-
-@media (max-width: 760px) {
-  .layout { padding: 14px; }
-  .topbar { padding: 10px 14px; }
-  .toast-host { left: 14px; right: 14px; max-width: none; }
-}
-
-/* ── Окно «Данные для входа» ─────────────────────────────── */
-
-.access-qr {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-}
-
-.access-qr img {
-  width: 108px; height: 108px;
-  flex: none;
-  image-rendering: pixelated;
-  background: #fff;
-  border-radius: var(--r-field);
-}
-
-.access-qr-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
-
-.access-qr-note b {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 14px;
-  letter-spacing: .08em;
-  color: var(--ink);
-}
-
-.access-site {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 13px;
-  color: var(--ink-2);
-  margin-bottom: 14px;
-}
-
-.access-row { display: flex; gap: 8px; align-items: center; }
-.access-row input { flex: 1; min-width: 0; }
-
-.access-password {
-  flex: 1;
-  min-width: 0;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 15px;
-  letter-spacing: .04em;
-  color: var(--ink);
-  background: var(--gold-soft);
-  border: 1px solid var(--gold-line);
-  border-radius: var(--r-field);
-  padding: 7px 11px;
-}
-
-.access-password.hidden-pass {
-  font-family: var(--font);
-  font-size: 13px;
-  letter-spacing: 0;
-  font-style: italic;
-  color: var(--muted);
-  background: var(--surface-2);
-  border-color: var(--line);
-}
-
-.access-note { margin: 7px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-
-/* Логин под кодом карточки: мелко, чтобы не спорить с кодом за внимание */
-/* Логин и пароль под кодом карточки — с подписями, чтобы код не путали с паролем */
-.cred-line {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 3px;
-  font-size: 11px;
-  line-height: 1.35;
-}
-.cred-line > span {
-  flex: none;
-  width: 42px;
-  color: var(--muted);
-}
-.cred-line b, .cred-line i {
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-weight: 500;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;   /* переносить только если совсем не влезает */
-}
-.cred-line b.masked { letter-spacing: .12em; color: var(--muted); }
-.cred-eye {
-  align-self: center;
-  margin-left: 2px;
-  padding: 2px;
-  line-height: 0;
-  background: none;
-  border: none;
-  border-radius: 4px;
-  color: var(--muted);
-  cursor: pointer;
-}
-.cred-eye .ic { width: 15px; height: 15px; }
-.cred-eye:hover { color: var(--ink); background: var(--line); }
-.cred-line i { font-family: var(--font); font-style: italic; color: var(--muted); }
-
-/* ── Роли: что видит администратор, а что учитель ─────────────────────────── */
-body:not(.is-admin) .admin-only { display: none !important; }
-body:not(.is-teacher) .teacher-only { display: none !important; }
-
-/* ── Выбор класса ──────────────────────────────────────────────────────────── */
-#classSelect { min-width: 170px; font-weight: 600; }
-
-.class-grid {
-  display: grid;
-  grid-template-columns: 28px repeat(5, 1fr);
-  gap: 5px;
-  align-items: center;
-}
-.grid-head {
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
-.grid-cell {
-  height: 32px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .12s, border-color .12s, color .12s;
-}
-.grid-cell:hover { border-color: var(--accent); }
-.grid-cell.picked { background: var(--accent); border-color: var(--accent); color: #fffdf8; }
-.grid-cell.exists { background: var(--surface-2); border-color: var(--line); color: var(--muted); cursor: default; }
-.grid-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-/* ── Выпадающее меню (Excel) ───────────────────────────────────────────────── */
-.menu-wrap { position: relative; }
-.menu-caret { margin-left: 2px; transition: transform .15s; }
-.menu-wrap.open .menu-caret { transform: rotate(180deg); }
-.menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
-  min-width: 290px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-card);
-  box-shadow: var(--shadow-pop);
-  display: none;
-}
-.menu-wrap.open .menu { display: block; }
-.menu > button, .menu > label {
-  display: flex;
-  align-items: flex-start;
   gap: 10px;
-  width: 100%;
-  padding: 9px 10px;
-  border: none;
-  border-radius: 7px;
-  background: none;
-  color: var(--ink);
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r12);
+  box-shadow: var(--shadow-pop);
+  white-space: normal;
+}
+.cred-grid {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 36px;
+  align-items: center;
+  row-gap: 6px;
+  column-gap: 8px;
+  font-size: 13px;
+}
+.cred-grid .mono { font-size: 13px; overflow-wrap: anywhere; }
+.cred-grid .masked { letter-spacing: .04em; }
+.cred-grid i { color: var(--muted); }
+.pop-foot { border-top: 1px solid var(--line); padding-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pop-foot .btn { margin-left: -8px; padding: 0 8px; font-size: 13px; }
+.pop-foot small { font-size: 12px; color: var(--muted); }
+
+.cell-act { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.act-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0 10px;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r9);
+  background: var(--surface);
+  color: var(--text);
+  font: 600 13px/1 var(--font-ui);
+  cursor: pointer;
+}
+.act-btn:hover { border-color: var(--line-strong); background: var(--field-bg); }
+.act-btn.more { width: 36px; padding: 0; }
+.act-btn.more[aria-expanded="true"] { border-color: var(--accent); }
+.cell-act .menu { top: calc(100% + 4px); width: 260px; }
+/* У нижнего края экрана окошко раскрывается вверх, иначе его закроет итог урока */
+.cell-act .menu.up { top: auto; bottom: calc(100% + 4px); }
+.pop.up { top: auto; bottom: 30px; }
+
+/* ── Новый ученик ──────────────────────────────────────────── */
+
+.add-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.add-ring {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  margin-left: 42px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--line-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+#newStudentName { width: 300px; }
+.add-stars { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+#newStudentStars { width: 64px; font-variant-numeric: tabular-nums; }
+
+/* ── Пустые состояния журнала ──────────────────────────────── */
+
+.sheet .empty { padding: 48px 20px; border-top: 1px solid var(--line); }
+
+/* ── Липкий итог урока ─────────────────────────────────────── */
+
+.lesson-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  margin-top: 20px;
+  padding: 0 0 16px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 30%);
+}
+.lesson-bar-in {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 12px 12px 20px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r20);
+  box-shadow: var(--shadow-pop);
+}
+.lesson-sum { display: inline-flex; align-items: center; gap: 6px; font: var(--nw) 22px/1 var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lesson-who { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* «Стикербук»: кнопка завершения мятная с чёрным текстом */
+.finish-btn:not(:disabled) { background: var(--finish-bg, var(--primary)); color: var(--finish-fg, var(--on-primary)); }
+.finish-btn:not(:disabled):hover { background: var(--finish-bg, var(--primary-hover)); }
+
+/* ── Боковая панель ученика ────────────────────────────────── */
+
+.side-panel {
+  position: fixed;
+  top: 65px;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: 400px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  animation: panel-in 180ms ease-out both;
+}
+@keyframes panel-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 0 24px; }
+.sp-body { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
+.sp-who { display: flex; align-items: center; gap: 16px; }
+.sp-who img { width: 72px; height: 72px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-2); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--avatar-ring); }
+.sp-name { font: var(--dw) 22px/28px var(--font-display); overflow-wrap: anywhere; }
+.sp-status { font-size: 13px; line-height: 18px; color: var(--muted); }
+.sp-status.in { color: var(--success); }
+.sp-bal { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: var(--r14); background: var(--surface-2); border: var(--bw) solid var(--line); }
+.sp-bal .caps { flex: 1; letter-spacing: .14em; }
+.sp-bal-num { display: inline-flex; align-items: center; gap: 6px; font: var(--nw) 30px/1 var(--font-num); font-variant-numeric: tabular-nums; color: var(--star-text); white-space: nowrap; }
+.sp-bal-after { font-size: 14px; font-weight: 600; color: var(--success); white-space: nowrap; }
+.sp-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sp-btns .btn { font-size: 14px; }
+.sp-sec { display: flex; flex-direction: column; gap: 10px; }
+.sp-sec .caps { letter-spacing: .14em; }
+.sp-sec .cred-grid { grid-template-columns: 72px minmax(0, 1fr) 36px; font-size: 14px; }
+.sp-hist { border: var(--bw) solid var(--line); border-radius: var(--r14); overflow: hidden; }
+.sp-hist-row { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+.sp-hist-row:last-child { border-bottom: 0; }
+.sp-hist-row .d { width: 84px; flex: none; font-size: 13px; color: var(--muted); }
+.sp-hist-row .t { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-hist-row .a { flex: none; font: var(--nw) 16px/1 var(--font-num); white-space: nowrap; color: var(--star-text); }
+.sp-hist-row .a.minus { color: var(--muted); }
+.sp-danger { padding: 14px 16px; border: 1px solid var(--danger-bg); border-radius: var(--r14); }
+.sp-danger .caps { color: var(--danger); }
+
+/* ── Окно «Итог урока» ─────────────────────────────────────── */
+
+.modal.finish { padding: 0; gap: 0; overflow: hidden; }
+.finish-head { padding: 22px 24px 14px; }
+.finish-head .modal-title { margin-top: 6px; }
+.finish-list { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.finish-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 64px 92px; align-items: center; gap: 12px; min-height: 52px; padding: 0 24px; border-bottom: 1px solid var(--line-soft); }
+.finish-row:last-child { border-bottom: 0; }
+.finish-row img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.finish-row .n { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finish-row .v { font: var(--nw) 17px/1 var(--font-num); color: var(--star-text); white-space: nowrap; text-align: right; }
+.finish-row .ft { font-size: 13px; color: var(--muted); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.finish-row .ft b { color: var(--text); }
+.finish-note { padding: 14px 24px; display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.finish-actions { padding: 0 24px 22px; }
+
+/* ── Окно «Выдать приз» ────────────────────────────────────── */
+
+.modal.give { max-width: 600px; padding: 0; gap: 0; }
+.give-head { padding: 22px 24px 14px; display: flex; align-items: center; gap: 14px; }
+.give-head img { width: 48px; height: 48px; flex: none; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px var(--bg), 0 0 0 4px var(--line); }
+.give-who { flex: 1; min-width: 0; }
+.give-name { font: var(--dw) 22px/28px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill-star.big { height: 32px; padding: 0 12px 0 10px; gap: 5px; }
+.pill-star.big b { font-size: 17px; }
+.give-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 24px 8px; display: flex; flex-direction: column; gap: 6px; }
+.give-item {
+  display: grid;
+  grid-template-columns: 20px 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 6px 12px 6px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r12);
+  background: var(--surface);
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
-.menu > button .ic, .menu > label .ic { margin-top: 2px; color: var(--accent); flex: none; }
-.menu > button:hover, .menu > label:hover { background: var(--surface-2); }
-.menu small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 1px; }
-.menu-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.give-item[aria-checked="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.give-item[aria-disabled="true"] { background: var(--surface-2); cursor: not-allowed; }
+.give-item[aria-disabled="true"] img { opacity: .5; }
+.give-item[aria-disabled="true"] .gn { color: var(--muted); }
+.give-item[aria-disabled="true"] .gs { color: var(--star-text); }
+.radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line-strong); display: flex; align-items: center; justify-content: center; }
+.radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); opacity: 0; }
+.give-item[aria-checked="true"] .radio { border-color: var(--accent); }
+.give-item[aria-checked="true"] .radio::after { opacity: 1; }
+.give-item img { width: 64px; aspect-ratio: 4 / 3; border-radius: 6px; object-fit: cover; background: var(--surface-2); }
+.give-item .gx { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.give-item .gn { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.give-item .gs { font-size: 12px; line-height: 16px; color: var(--muted); }
+.give-item .gp { font: var(--nw) 16px/1 var(--font-num); color: var(--star-text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.give-sum { margin: 8px 24px 0; padding: 12px 16px; border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); display: flex; align-items: center; gap: 12px; font-size: 14px; }
+.give-num { font: var(--nw) 20px/1 var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.give-num.accent { color: var(--accent-text); }
+.give-actions { padding: 16px 24px 22px; flex-wrap: nowrap; }
 
-/* ── Учителя ───────────────────────────────────────────────────────────────── */
-.tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
-.check-list {
+/* ── Призы (T2) ────────────────────────────────────────────── */
+
+.prize-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.prize-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  max-height: 190px;
-  overflow-y: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r18);
+  box-shadow: var(--shadow-card);
 }
-.check-list .check {
+.cat-band { display: var(--show-q); height: 6px; }
+.cat-small { background: var(--cat-s); }
+.cat-medium { background: var(--cat-m); }
+.cat-large { background: var(--cat-l); }
+.prize-photo { position: relative; aspect-ratio: var(--photo-ar); background: var(--surface-2); }
+.prize-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.prize-card.off .prize-photo img { opacity: .45; }
+.no-photo { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.price-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px 0 8px;
+  background: var(--surface);
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: var(--float-shadow);
+}
+.price-badge .ic { width: 14px; height: 14px; color: var(--star); --ic-stroke: var(--star-depth); }
+.price-badge b { font: var(--nw) 15px/1 var(--font-num); color: var(--star-text); font-variant-numeric: tabular-nums; }
+.hidden-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.hidden-badge .ic { width: 13px; height: 13px; }
+.prize-acts {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+.prize-card:hover .prize-acts, .prize-card:focus-within .prize-acts { opacity: 1; transform: none; }
+@media (hover: none) { .prize-acts { opacity: 1; transform: none; } }
+.prize-acts button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: var(--r9);
+  background: var(--surface);
+  color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  font-size: 13.5px;
-  color: var(--ink);
-  margin: 0;
-  padding: 4px 2px;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--float-shadow);
+}
+.prize-acts button:hover { background: var(--accent-soft); color: var(--accent-text); }
+.prize-acts button.danger { color: var(--danger); }
+.prize-acts button.danger:hover { background: var(--danger-bg); }
+.prize-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.prize-body h3 { font: var(--dw) 18px/24px var(--font-display); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prize-body p { font-size: 14px; line-height: 20px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.prize-cat { margin-top: auto; padding-top: 8px; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+/* Форма приза */
+.prize-form-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 12px; }
+.with-star { position: relative; display: block; }
+.with-star input { width: 100%; padding-right: 36px; font-variant-numeric: tabular-nums; }
+.with-star .ic { position: absolute; right: 12px; top: 13px; }
+.split { display: flex; justify-content: space-between; }
+.split .muted { font-weight: 500; font-variant-numeric: tabular-nums; }
+.seg-fill { display: grid; grid-template-columns: repeat(3, 1fr); border-color: var(--line-strong); background: var(--field-bg); }
+.seg-fill > button { height: 38px; }
+.photo-field { display: flex; gap: 16px; align-items: flex-start; }
+.photo-preview {
+  position: relative;
+  width: 200px;
+  flex: none;
+  aspect-ratio: var(--photo-ar);
+  border-radius: var(--r12);
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px dashed var(--line-strong);
+}
+.photo-preview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo-preview .no-photo { flex-direction: column; gap: 6px; font-size: 13px; }
+.photo-side { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* ── Уроки (T3) ────────────────────────────────────────────── */
+
+.class-seg { flex-wrap: wrap; }
+.class-seg > button { font: var(--nw) 15px/1 var(--font-num); }
+.lesson-list { display: flex; flex-direction: column; gap: 12px; }
+.lesson { background: var(--surface); border: var(--bw) solid var(--line); border-radius: var(--r18); box-shadow: var(--shadow-card); overflow: hidden; }
+.lesson-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 68px;
+  padding: 12px 20px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
   cursor: pointer;
 }
-.check-list .check input { width: auto; margin: 0; accent-color: var(--accent); }
-
-.info-body { font-size: 13.5px; color: var(--ink-2); }
-.info-body p { margin: 0 0 10px; }
-.info-body ul { margin: 0; padding-left: 18px; max-height: 240px; overflow-y: auto; }
-.info-body li { margin-bottom: 4px; }
-
-.cred-box {
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--surface-2);
+.lesson-toggle:hover { background: var(--surface-2); }
+.lesson-toggle > .ic { color: var(--muted); transition: transform 150ms ease-out; }
+.lesson-toggle[aria-expanded="true"] > .ic { transform: rotate(90deg); }
+.lesson-when { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.lesson-date { font: var(--dw) 18px/24px var(--font-display); }
+.lesson-meta { font-size: 13px; line-height: 18px; color: var(--muted); }
+.pill-star.plus { height: 30px; padding: 0 12px 0 10px; gap: 5px; }
+.pill-star.plus b { font-size: 16px; }
+.lesson-items { border-top: 1px solid var(--line); }
+.lesson-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 90px 130px 150px;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 20px 0 54px;
+  border-bottom: 1px solid var(--line-soft);
 }
-.cred-box div { display: flex; gap: 10px; padding: 3px 0; }
-.cred-box span { width: 58px; flex: none; color: var(--muted); }
-.cred-box b { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
+.lesson-item img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.lesson-item .n { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lesson-item .v { font: var(--nw) 17px/1 var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--star-text); }
+.lesson-item .s { font-size: 13px; color: var(--muted); }
+.lesson-item .b { display: flex; justify-content: flex-end; }
+.lesson-item.undone { background: var(--surface-2); }
+.lesson-item.undone img { opacity: .5; }
+.lesson-item.undone .n, .lesson-item.undone .v { text-decoration: line-through; color: var(--muted); }
+.lesson-item.undone .act-btn { color: var(--accent-text); }
+.lesson-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 20px 12px 54px; background: var(--surface-2); font-size: 13px; color: var(--muted); }
+.lesson-foot .btn { font-size: 13px; }
+
+/* ── Учителя ───────────────────────────────────────────────── */
+
+.users { overflow: hidden; }
+.users-head, .user-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 150px 130px minmax(160px, 1.5fr) 132px; align-items: center; gap: 12px; padding: 0 20px; }
+.users-head { height: 40px; background: var(--surface-3); font: 600 11px/14px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.user-row { min-height: 56px; border-top: 1px solid var(--line-soft); }
+.user-row .n { font-weight: 600; }
+.user-row .acts { display: flex; justify-content: flex-end; gap: 6px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* ── Окна: классы, учителя, данные входа, тема ─────────────── */
+
+.class-grid { display: grid; grid-template-columns: 28px repeat(5, 1fr); gap: 4px; align-items: center; }
+.grid-head { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); }
+.grid-cell {
+  height: 32px;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r8);
+  background: var(--surface);
+  color: var(--text);
+  font: var(--nw) 14px/1 var(--font-num);
+  cursor: pointer;
+}
+.grid-cell:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.grid-cell.picked { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.grid-cell.exists { background: var(--surface-3); color: var(--muted); border-color: transparent; cursor: default; }
+
+.check-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.check { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--r8); cursor: pointer; font-size: 14px; }
+.check:hover { background: var(--surface-2); }
+.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+.info-body { font-size: 15px; line-height: 22px; color: var(--text); }
+.info-body p { margin-bottom: 10px; color: var(--muted); }
+.info-body ul { margin: 0; padding-left: 20px; font-size: 14px; }
+.cred-box { display: grid; grid-template-columns: 72px 1fr; row-gap: 8px; padding: 14px 16px; border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); }
+.cred-box span { color: var(--muted); font-size: 14px; }
+.cred-box b { font: 500 14px/20px var(--font-mono); overflow-wrap: anywhere; }
+.confirm-text { font-size: 15px; line-height: 22px; color: var(--muted); text-wrap: pretty; }
+.confirm-text b { color: var(--text); white-space: nowrap; }
+code { font: 500 12px var(--font-mono); background: var(--surface-2); border: var(--bw) solid var(--line); border-radius: 4px; padding: 1px 4px; color: var(--text); }
+
+.access-qr { display: flex; gap: 16px; align-items: center; }
+.access-qr img { width: 132px; height: 132px; flex: none; border-radius: var(--r12); border: var(--bw) solid var(--line); background: #fff; image-rendering: pixelated; }
+.access-qr-note { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 14px; line-height: 20px; color: var(--muted); }
+.access-grid { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; row-gap: 8px; column-gap: 10px; font-size: 14px; }
+.access-edit { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.access-edit input { flex: 1; min-width: 0; }
+.access-password { flex: 1; font-size: 14px; }
+.access-password.hidden-pass { font-family: var(--font-ui); color: var(--muted); font-style: italic; }
+
+/* Выбор темы: каждая плитка несёт свой data-theme и рисуется своими токенами */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.theme-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r14);
+  box-shadow: var(--shadow-card);
+}
+.theme-tile[aria-checked="true"] { outline: 3px solid var(--star); outline-offset: 2px; }
+.tt-hero { position: relative; padding: 12px 14px 14px; background: var(--hero-bg); color: var(--hero-fg); background-image: var(--hero-img, var(--sky)); background-size: var(--sky-size); }
+.tt-hero .tt-title { font: var(--dw) 18px/22px var(--font-display); }
+.tt-hero .tt-bal { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; font: var(--nw) 30px/1 var(--font-num); color: var(--balance-fg); }
+.tt-hero .tt-bal .ic { width: 20px; height: 20px; color: var(--star); --ic-stroke: var(--star-depth); }
+.tt-hero .tt-bal small { font: 500 13px/1 var(--font-ui); color: var(--hero-muted); }
+.tt-body { padding: 12px 14px; display: flex; align-items: center; gap: 8px; background: var(--bg); background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 27px, var(--rule) 27px, var(--rule) 28px); }
+.tt-btn { height: 30px; padding: 0 10px; white-space: nowrap; font-size: 12px !important; display: inline-flex; align-items: center; border-radius: var(--r9); background: var(--primary); color: var(--on-primary); font: 600 13px/1 var(--font-ui); box-shadow: var(--depth-primary); }
+.tt-name { padding: 10px 14px 12px; background: var(--surface); border-top: var(--bw) solid var(--line); font: 600 14px/18px var(--font-ui); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tt-name .ic { color: var(--accent-text); }
+.theme-mode { flex-direction: column; gap: 8px; }
+
+/* ── Узкие экраны (планшет) ────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .topbar-in { grid-template-columns: auto 1fr auto; padding: 0 16px; }
+  .brand-sub { display: none; }
+  .page { padding: 16px 16px 0; }
+  #page-prizes, #page-lessons, #page-users { padding: 20px 16px 40px; }
+  .kbd-hints { display: none; }
+  .jt { overflow-x: auto; }
+}

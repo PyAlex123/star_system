@@ -30,7 +30,22 @@ _lock = threading.RLock()
 #         больше не выдаются повторно (settings.last_student_id).
 # 5 -> 6: пользователи панели. Вместо одного общего пароля — список users:
 #         суперадмин и учителя со своими логинами, паролями и школами.
-DB_VERSION = 6
+# 6 -> 7: темы оформления. У школы появилась theme; у урока — id и undone
+#         (отменённые начисления); категории призов small/medium/large;
+#         у ученика rating_hidden («скрыт из рейтинга»).
+DB_VERSION = 7
+
+# Категории призов как в макетах: небольшой, средний, большой
+PRIZE_CATEGORIES = ("small", "medium", "large")
+
+
+def category_by_cost(cost: int) -> str:
+    """Категория для старых призов («electronics», «gadgets») — по цене."""
+    if cost >= 60:
+        return "large"
+    if cost >= 40:
+        return "medium"
+    return "small"
 
 # Поля ученика, которые не покидают сервер даже в панели учителя
 SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
@@ -53,25 +68,25 @@ AVATAR_PRESETS = [
 ]
 
 DEFAULT_PRIZES = [
-    {"id": 1, "name": "Большой набор «Знаток»", "cost": 70, "category": "electronics",
+    {"id": 1, "name": "Большой набор «Знаток»", "cost": 70, "category": "large",
      "desc": "999 схем для сборки без пайки",
      "image": "/static/img/prizes/znatok-999.webp", "active": True},
-    {"id": 2, "name": "Игровая клавиатура с RGB", "cost": 70, "category": "gadgets",
+    {"id": 2, "name": "Игровая клавиатура с RGB", "cost": 70, "category": "large",
      "desc": "Механический отклик и подсветка",
      "image": "/static/img/prizes/keyboard-rgb.webp", "active": True},
-    {"id": 3, "name": "Стандартный набор «Знаток»", "cost": 50, "category": "electronics",
+    {"id": 3, "name": "Стандартный набор «Знаток»", "cost": 50, "category": "medium",
      "desc": "320 увлекательных электронных схем",
      "image": "/static/img/prizes/znatok-320.webp", "active": True},
-    {"id": 4, "name": "Набор паяльника", "cost": 50, "category": "electronics",
+    {"id": 4, "name": "Набор паяльника", "cost": 50, "category": "medium",
      "desc": "Паяльник с регулировкой, припой и подставка",
      "image": "/static/img/prizes/soldering-kit.webp", "active": True},
-    {"id": 5, "name": "Игровая мышь (Logitech / Bloody)", "cost": 50, "category": "gadgets",
+    {"id": 5, "name": "Игровая мышь (Logitech / Bloody)", "cost": 50, "category": "medium",
      "desc": "Точный сенсор и программируемые кнопки",
      "image": "/static/img/prizes/gaming-mouse.webp", "active": True},
-    {"id": 6, "name": "Набор датчиков для Arduino", "cost": 30, "category": "electronics",
+    {"id": 6, "name": "Набор датчиков для Arduino", "cost": 30, "category": "small",
      "desc": "Модули света, звука, расстояния и температуры",
      "image": "/static/img/prizes/arduino-sensors.webp", "active": True},
-    {"id": 7, "name": "Игровые наушники / Коврик XXL", "cost": 30, "category": "gadgets",
+    {"id": 7, "name": "Игровые наушники / Коврик XXL", "cost": 30, "category": "small",
      "desc": "Полноразмерная гарнитура или большой коврик",
      "image": "/static/img/prizes/headset-mousepad.webp", "active": True},
     {"id": 8, "name": "Набор светодиодов / Брелок", "cost": 12, "category": "small",
@@ -81,7 +96,7 @@ DEFAULT_PRIZES = [
 
 DEFAULT_DB: Dict[str, Any] = {
     "version": DB_VERSION,
-    "schools": [{"id": 1, "name": "Наша школа"}],
+    "schools": [{"id": 1, "name": "Наша школа", "theme": "notebook"}],
     "classes": [
         {"id": 1, "school_id": 1, "name": "5-А"},
         {"id": 2, "school_id": 1, "name": "5-Б"},
@@ -341,9 +356,31 @@ def migrate(db: Dict[str, Any]) -> bool:
         if "active" not in prize:
             prize["active"] = True
             changed = True
-        if "category" not in prize:
-            prize["category"] = "small"
+        if prize.get("category") not in PRIZE_CATEGORIES:
+            prize["category"] = category_by_cost(int(prize.get("cost") or 0))
             changed = True
+
+    from .themes import clean_theme, DEFAULT_THEME
+    for school in db["schools"]:
+        if not clean_theme(school.get("theme")):
+            school["theme"] = DEFAULT_THEME
+            changed = True
+
+    # Урокам — постоянный номер: по нему учитель отменяет ошибочное начисление
+    settings = db["settings"]
+    last_lesson = max([settings.get("last_lesson_id", 0)] +
+                      [int(lesson.get("id") or 0) for lesson in db["lessons"]])
+    for lesson in reversed(db["lessons"]):      # новые сверху — номера по порядку проведения
+        if not lesson.get("id"):
+            last_lesson += 1
+            lesson["id"] = last_lesson
+            changed = True
+        if "undone" not in lesson:
+            lesson["undone"] = {}
+            changed = True
+    if settings.get("last_lesson_id", 0) != last_lesson:
+        settings["last_lesson_id"] = last_lesson
+        changed = True
 
     tokens = {s["token"] for s in db["students"] if s.get("token")}
     logins = {s["login"] for s in db["students"] if s.get("login")}

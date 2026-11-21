@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="{{THEME}}" data-mode="{{MODE}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Витрина компонентов — Звёзды</title>
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
+<style>
+  .ui { max-width: 1200px; margin: 0 auto; padding: 32px; display: flex; flex-direction: column; gap: 40px; }
+  .ui-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .ui-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .sw > div { border: var(--bw) solid var(--line); border-radius: var(--r14); overflow: hidden; background: var(--surface); font-size: 12px; }
+  .sw > div > span { display: block; height: 56px; }
+  .sw > div > b { display: block; padding: 8px 10px; font: 500 12px/16px var(--font-mono); }
+  .type > * { margin-bottom: 8px; }
+  .night { padding: 20px; border-radius: var(--r18); background: var(--bg); background-image: var(--sky); background-size: var(--sky-size); color: var(--text); }
+</style>
+</head>
+<body>
+{{ICONS}}
+<main class="ui">
+  <div>
+    <h1 class="page-title">Витрина компонентов</h1>
+    <p class="page-sub">Все элементы — из tokens.css. Тема меняется ссылками ниже.</p>
+  </div>
+  <div class="ui-bar">
+    <div class="seg" role="radiogroup" aria-label="Тема" id="themeSeg">
+      <a class="btn btn-quiet btn-sm" href="?theme=notebook">Тетрадь отличника</a>
+      <a class="btn btn-quiet btn-sm" href="?theme=quest">Звёздный квест</a>
+      <a class="btn btn-quiet btn-sm" href="?theme=sky">Созвездие</a>
+      <a class="btn btn-quiet btn-sm" href="?theme=clear">Ясно и быстро</a>
+      <a class="btn btn-quiet btn-sm" href="?theme=sticker">Стикербук</a>
+    </div>
+    <div class="seg only-clear-flex" role="radiogroup" aria-label="Светлая или тёмная">
+      <button onclick="applyMode('light')">Светлая</button>
+      <button onclick="applyMode('dark')">Тёмная</button>
+      <button onclick="applyMode('auto')">Авто</button>
+    </div>
+  </div>
+
+  <section>
+    <h2 class="eyebrow">01 · Цвет</h2>
+    <div class="sw">
+      <div><span style="background:var(--bg)"></span><b>--bg</b></div>
+      <div><span style="background:var(--surface)"></span><b>--surface</b></div>
+      <div><span style="background:var(--surface-2)"></span><b>--surface-2</b></div>
+      <div><span style="background:var(--line)"></span><b>--line</b></div>
+      <div><span style="background:var(--text)"></span><b>--text</b></div>
+      <div><span style="background:var(--muted)"></span><b>--muted</b></div>
+      <div><span style="background:var(--primary)"></span><b>--primary</b></div>
+      <div><span style="background:var(--accent)"></span><b>--accent</b></div>
+      <div><span style="background:var(--accent-soft)"></span><b>--accent-soft</b></div>
+      <div><span style="background:var(--star)"></span><b>--star</b></div>
+      <div><span style="background:var(--star-bg)"></span><b>--star-bg</b></div>
+      <div><span style="background:var(--success)"></span><b>--success</b></div>
+      <div><span style="background:var(--danger)"></span><b>--danger</b></div>
+      <div><span style="background:var(--hero-bg)"></span><b>--hero-bg</b></div>
+    </div>
+  </section>
+
+  <section class="type">
+    <h2 class="eyebrow">02 · Типографика</h2>
+    <div class="num" style="font-size:56px;line-height:56px">1 250</div>
+    <div style="font:var(--dw) 26px/32px var(--font-display)">Иванов Артём — заголовок</div>
+    <div style="font:var(--dw) 18px/24px var(--font-display)">Стандартный набор «Знаток»</div>
+    <div>Основной текст 15/22: звёзды ставят на уроке, до 5 за раз.</div>
+    <div class="mono">PZ8J TFRQ · ivanov.artem</div>
+    <div style="font:700 22px/24px var(--font-hand)">ещё 11 — почти!</div>
+  </section>
+
+  <section>
+    <h2 class="eyebrow">03 · Кнопки и поля</h2>
+    <div class="ui-row">
+      <button class="btn">Главная</button>
+      <button class="btn btn-ghost">Вторичная</button>
+      <button class="btn btn-outline">Контурная</button>
+      <button class="btn btn-danger">Удалить</button>
+      <button class="btn btn-danger-quiet">Удалить ученика…</button>
+      <button class="btn" disabled>Недоступна</button>
+      <button class="icon-btn boxed" aria-label="Ещё" title="Ещё"><svg class="ic"><use href="#i-more"></use></svg></button>
+    </div>
+    <div class="ui-row" style="margin-top:16px">
+      <div class="field" style="width:260px"><label for="f1">Логин</label><input id="f1" class="input-mono" value="ivanov.artem"></div>
+      <div class="field" style="width:260px"><label for="f2">Пароль</label><input id="f2" class="invalid" type="password" value="kvant343">
+        <span class="field-error"><svg class="ic"><use href="#i-warning"></use></svg>Неверный пароль — он напечатан на карточке</span></div>
+      <div class="field" style="width:200px"><label for="f3">Класс</label><input id="f3" value="5-А" disabled></div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="eyebrow">04 · Метки, баланс, ввод звёзд</h2>
+    <div class="ui-row">
+      <div class="seg"><button aria-checked="true" role="radio">Все</button><button role="radio" aria-checked="false">Уже доступны (3)</button></div>
+      <span class="pill-star"><svg class="ic"><use href="#i-star"></use></svg><b>39</b></span>
+      <span class="code-chip">PZ8JTFRQ</span>
+      <span class="tag tag-accent">только что</span>
+      <span class="tag">вне рейтинга</span>
+      <span class="stamp"><span><svg class="ic"><use href="#i-star"></use></svg></span></span>
+      <kbd>Ctrl+Enter</kbd>
+    </div>
+    <div class="ui-row" style="margin-top:16px">
+      <span class="star-row" style="display:flex">
+        <button class="star-btn on"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="star-btn on"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="star-btn on"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="star-btn preview"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="star-btn"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+      </span>
+      <span class="seg-stars" style="display:inline-flex">
+        <button>0</button><button>1</button><button>2</button><button aria-checked="true">3</button><button>4</button><button>5</button>
+      </span>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="eyebrow">05 · Окно и уведомление</h2>
+    <div class="modal" style="position:static;max-width:440px">
+      <div class="modal-title">Начислить 7 звёзд 4 ученикам?</div>
+      <p class="modal-sub">Урок сохранится во вкладке «Уроки» — там можно отменить ошибку.</p>
+      <div class="modal-actions"><button class="btn btn-ghost">Отмена</button><button class="btn">Начислить 7 ★</button></div>
+    </div>
+    <div class="toast" style="margin-top:16px;width:max-content"><span class="toast-mark"><svg class="ic"><use href="#i-star"></use></svg></span>Начислено 7 звёзд · урок сохранён в «Уроках»</div>
+  </section>
+
+  <section class="only-sky">
+    <h2 class="eyebrow">06 · Ночная палитра (кабинет ученика)</h2>
+    <div class="night" data-night>
+      <span class="num" style="font-size:56px;color:var(--balance-fg);text-shadow:var(--glow)">39</span>
+      <button class="btn" style="margin-left:16px">Покажу учителю</button>
+    </div>
+  </section>
+</main>
+<script>window.APP_BASE = "{{BASE}}";</script>
+<script src="{{BASE}}/static/js/common.js"></script>
+</body>
+</html>

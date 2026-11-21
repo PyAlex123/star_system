@@ -1,60 +1,82 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="{{THEME}}" data-mode="{{MODE}}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light dark">
 <title>Вход в панель учителя</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/auth.css">
 </head>
-<body>
+<body class="auth" data-night>
 
 {{ICONS}}
 
-<form class="box" onsubmit="submitLogin(event)">
-  <a class="back-link" href="{{BASE}}/"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg> Выбор входа</a>
-  <div class="mark"><svg class="ic"><use href="#i-star"></use></svg></div>
-  <h1>Панель учителя</h1>
-  <p class="sub">Журнал звёзд и карточки классов</p>
+<form class="auth-card auth-col" data-day onsubmit="submitLogin(event)" novalidate>
+  <a class="back-link" href="{{BASE}}/"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>Выбор входа</a>
+
+  <div class="auth-head">
+    <span class="stamp"><span><svg class="ic"><use href="#i-star"></use></svg></span></span>
+    <div>
+      <div class="auth-title">Панель учителя</div>
+      <div class="auth-sub">Журнал звёзд и карточки классов</div>
+    </div>
+  </div>
 
   <div class="field">
     <label for="login">Логин</label>
-    <input type="text" id="login" autocomplete="username" autocapitalize="none" spellcheck="false"
-           autofocus required>
+    <input type="text" id="login" class="input-mono" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required>
   </div>
 
   <div class="field">
     <label for="password">Пароль</label>
-    <input type="password" id="password" autocomplete="current-password" required>
+    <span class="with-eye">
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button type="button" class="icon-btn" id="eyeBtn" onclick="togglePasswordView()"
+              aria-label="Показать пароль" title="Показать пароль"><svg class="ic"><use href="#i-eye"></use></svg></button>
+    </span>
+  </div>
+
+  <div class="form-error" id="error" role="alert" hidden>
+    <svg class="ic"><use href="#i-warning"></use></svg><span id="errorText"></span>
   </div>
 
   <button class="btn btn-block" type="submit" id="submitBtn">Войти</button>
-
-  <div class="error" id="error">
-    <svg class="ic ic-sm"><use href="#i-warning"></use></svg><span id="errorText"></span>
-  </div>
 </form>
 
 <script>
 const BASE = "{{BASE}}";
 
+function togglePasswordView() {
+  const input = document.getElementById("password");
+  const show = input.type === "password";
+  input.type = show ? "text" : "password";
+  const button = document.getElementById("eyeBtn");
+  const label = show ? "Скрыть пароль" : "Показать пароль";
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  button.querySelector("use").setAttribute("href", show ? "#i-eye-off" : "#i-eye");
+}
+
 async function submitLogin(event) {
   event.preventDefault();
   const button = document.getElementById("submitBtn");
   const errorBox = document.getElementById("error");
+  const login = document.getElementById("login").value.trim();
+  const password = document.getElementById("password").value;
+  errorBox.hidden = true;
+  if (!login || !password) {
+    document.getElementById("errorText").textContent = "Введите логин и пароль";
+    errorBox.hidden = false;
+    return;
+  }
   button.disabled = true;
-  errorBox.classList.remove("show");
-
   try {
     const response = await fetch(BASE + "/api/auth/teacher", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        login: document.getElementById("login").value,
-        password: document.getElementById("password").value,
-      }),
+      body: JSON.stringify({ login, password }),
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
@@ -67,7 +89,7 @@ async function submitLogin(event) {
     location.href = safe;
   } catch (error) {
     document.getElementById("errorText").textContent = error.message;
-    errorBox.classList.add("show");
+    errorBox.hidden = false;
     button.disabled = false;
   }
 }

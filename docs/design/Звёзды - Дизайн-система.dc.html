@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Звёзды — дизайн-система «Тетрадь отличника»</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,600&amp;family=Onest:wght@400;500;600;700&amp;family=Unbounded:wght@600;700;800&amp;family=Nunito:wght@500;600;700;800&amp;family=Geologica:wght@400..700&amp;family=Golos+Text:wght@400..700&amp;family=Rubik:wght@400..800&amp;family=Caveat:wght@700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:var(--accent-text)}a:hover{color:var(--primary-hover)}
+button,input{font-family:inherit}
+:focus-visible{outline:3px solid var(--star);outline-offset:2px}
+@keyframes stampIn{from{transform:rotate(-10deg) scale(1.4);opacity:0}to{transform:rotate(-10deg) scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important;transition-duration:1ms!important}}
+</style>
+</helmet>
+<div style="max-width:1200px;margin:0 auto;padding:40px 32px 80px;display:flex;flex-direction:column;gap:56px">
+
+<header data-screen-label="Обложка" style="display:flex;flex-direction:column;gap:18px;padding-bottom:28px;border-bottom:1px solid var(--line)">
+  <div style="display:flex;align-items:center;gap:16px">
+    <div style="width:64px;height:64px;flex:none;border-radius:50%;border:2.5px solid var(--star-text);padding:4px;transform:rotate(-10deg)"><div style="width:100%;height:100%;border-radius:50%;border:1px solid var(--star-text);background:var(--star-bg);display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></div></div>
+    <div>
+      <div style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">{{ kicker }}</div>
+      <h1 style="margin:2px 0 0;font:var(--dw) 40px/46px var(--font-display)">{{ themeTitle }}</h1>
+    </div>
+  </div>
+  <p style="margin:0;max-width:720px;font-size:17px;line-height:26px;color:var(--muted);text-wrap:pretty">{{ themeDesc }}</p>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:14px;font-weight:600;color:var(--muted)">Тема:</span><div role="radiogroup" aria-label="Тема оформления" style="display:inline-flex;flex-wrap:wrap;max-width:100%;padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface);flex:none"><button role="radio" aria-checked="{{ themeNb.sel }}" onClick="{{ setNb }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeNb.bg }};color:{{ themeNb.fg }}">Тетрадь отличника</button><button role="radio" aria-checked="{{ themeQ.sel }}" onClick="{{ setQ }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeQ.bg }};color:{{ themeQ.fg }}">Звёздный квест</button><button role="radio" aria-checked="{{ themeS.sel }}" onClick="{{ setS }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeS.bg }};color:{{ themeS.fg }}">Созвездие</button><button role="radio" aria-checked="{{ themeC.sel }}" onClick="{{ setC }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeC.bg }};color:{{ themeC.fg }}">Ясно и быстро</button><button role="radio" aria-checked="{{ themeK.sel }}" onClick="{{ setK }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeK.bg }};color:{{ themeK.fg }}">Стикербук</button></div><div role="radiogroup" aria-label="Светлая или тёмная" style="display:var(--show-clear-flex);padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface);flex:none"><button role="radio" aria-checked="{{ modeL.sel }}" onClick="{{ setModeL }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeL.bg }};color:{{ modeL.fg }}">Светлая</button><button role="radio" aria-checked="{{ modeD.sel }}" onClick="{{ setModeD }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeD.bg }};color:{{ modeD.fg }}">Тёмная</button><button role="radio" aria-checked="{{ modeA.sel }}" onClick="{{ setModeA }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeA.bg }};color:{{ modeA.fg }}">Авто</button></div></div>
+  <nav aria-label="Макеты" style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="Звёзды - Ученик.dc.html" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:var(--r10);background:var(--primary);color:var(--on-primary);font-size:14px;font-weight:600;text-decoration:none">Кабинет ученика · 390×844</a>
+    <a href="Звёзды - Учитель.dc.html" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface);color:var(--text);font-size:14px;font-weight:600;text-decoration:none">Панель учителя · 1440×900</a>
+    <a href="Звёзды - Печать.dc.html" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface);color:var(--text);font-size:14px;font-weight:600;text-decoration:none">Печать А4</a>
+    <a href="tokens.css" style="display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 14px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface);color:var(--text);font:600 13px/1 'JetBrains Mono',monospace;text-decoration:none">tokens.css</a>
+  </nav>
+</header>
+
+<section data-screen-label="Цвета" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">01 · Цвет</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+  <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="6">
+    <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:20px;align-items:start">
+      <div style="padding-top:6px"><div style="font:var(--dw) 18px/24px var(--font-display)">{{ g.name }}</div><div style="font-size:13px;line-height:18px;color:var(--muted);margin-top:2px;text-wrap:pretty">{{ g.note }}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">
+        <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="4">
+          <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14);overflow:hidden">
+            <div style="height:72px;background:{{ c.swatch }};border-bottom:1px solid var(--line);display:flex;align-items:flex-end;padding:8px 10px;font:var(--dw) 18px/1 var(--font-display);color:{{ c.on }}">{{ c.sample }}</div>
+            <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:2px">
+              <span style="font:600 12px/16px 'JetBrains Mono',monospace;color:var(--text)">{{ c.var }}</span>
+              <span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">{{ c.hex }}</span>
+              <span style="font-size:12px;line-height:16px;color:var(--muted);margin-top:4px;text-wrap:pretty">{{ c.use }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+  <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:14px;line-height:21px;color:var(--text)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+    <span style="text-wrap:pretty">Контраст: текст на бумаге 13.9:1 · приглушённый 5.2:1 · белый на чернилах 9:1 · <code style="font:500 13px 'JetBrains Mono',monospace">--color-star-text</code> на светлом 5.8:1. Чистое золото <code style="font:500 13px 'JetBrains Mono',monospace">var(--star)</code> даёт 4:1 на тёмно-зелёном — только для иконок, полос и крупных цифр. На золотой заливке текст всегда <code style="font:500 13px 'JetBrains Mono',monospace">--color-text</code>.</span>
+  </div>
+</section>
+
+<section data-night="" data-screen-label="Ночная палитра" style="display:var(--show-sky);border-radius:var(--r20);padding:24px;background-color:var(--bg);background-image:var(--sky);background-size:var(--sky-size)">
+  <div style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap">01b · Ночь · кабинет ученика</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">
+      <sc-for list="{{ nightSw }}" as="c" hint-placeholder-count="10">
+        <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14);overflow:hidden">
+          <div style="height:56px;background:{{ c.swatch }};border-bottom:1px solid var(--line)"></div>
+          <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:2px"><span style="font:600 12px/16px 'JetBrains Mono',monospace">{{ c.var }}</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">{{ c.hex }}</span><span style="font-size:12px;line-height:16px;color:var(--muted);margin-top:4px">{{ c.use }}</span></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <span style="display:inline-flex;align-items:baseline;gap:10px"><svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="align-self:center"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg><span style="font:var(--nw) 56px/56px var(--font-num);color:var(--balance-fg);text-shadow:var(--glow)">39</span><span style="font-size:17px;color:var(--muted)">звёзд</span></span>
+      <span style="display:inline-flex;align-items:center;height:48px;padding:0 22px;border-radius:var(--r14);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600">Покажу учителю</span>
+      <span style="font-size:14px;line-height:21px;color:var(--muted);max-width:360px">Свечение — только баланс и только что зажжённая звезда. Фон — 3 статичных слоя точек, мерцают 3 точки.</span>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Типографика" style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">02 · Типографика</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+  <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden">
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:10px 20px;background:var(--surface-3);font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)"><span>Образец</span><span>Роль</span><span>Шрифт · px</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft)"><span style="display:flex;align-items:baseline;gap:10px"><span style="font:var(--nw) 56px/56px var(--font-num);font-variant-numeric:tabular-nums">39</span><span style="font-size:17px;color:var(--muted)">звёзд</span></span><span style="font-size:14px">Баланс</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Literata 56/56 · 600</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft);background:var(--surface-2)"><span style="font:var(--dw) 26px/32px var(--font-display)">Иванов Артём</span><span style="font-size:14px">Имя в шапке, заголовок страницы</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Literata 26/32 · 600</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft)"><span style="font:var(--dw) 18px/24px var(--font-display)">Набор датчиков для Arduino</span><span style="font-size:14px">Название приза (до 2 строк)</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Literata 18/24 · 600</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft);background:var(--surface-2)"><span style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">Витрина призов</span><span style="font-size:14px">Заголовок секции + линейка</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Onest 12/16 · 600 · 0.12em</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft)"><span style="font-size:15px;line-height:22px">Покажи этот экран учителю — он выдаст приз и спишет звёзды.</span><span style="font-size:14px">Основной текст</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Onest 15/22 · 400</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft);background:var(--surface-2)"><span style="font-size:15px;line-height:20px;font-weight:600">Завершить урок и начислить</span><span style="font-size:14px">Кнопки, чипы, вкладки</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">Onest 15/20 · 600</span></div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) 220px 120px;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--line-soft)"><span style="font:500 13px/16px 'JetBrains Mono',monospace;letter-spacing:.06em">PZ8J TFRQ · ivanov.artem</span><span style="font-size:14px">Коды входа, логины</span><span style="font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">JetBrains Mono 13/16 · 500</span></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;font-size:14px;line-height:21px">
+    <div style="padding:14px 16px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12)"><b>Число и ★ — одно целое.</b> Всегда в одном блоке с <code style="font:500 12px 'JetBrains Mono',monospace">white-space: nowrap</code>: <span style="white-space:nowrap;color:var(--star-text);font-weight:600">осталось 11 ★</span>.</div>
+    <div style="padding:14px 16px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12)"><b>Склонения</b> через <code style="font:500 12px 'JetBrains Mono',monospace">Intl.PluralRules('ru')</code>: {{ plurals }}.</div>
+    <div style="padding:14px 16px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12)"><b>Кавычки:</b> внешние «ёлочки», внутренние „лапки“ — «Стандартный набор „Знаток“». Цифры — <code style="font:500 12px 'JetBrains Mono',monospace">tabular-nums</code>, тысячи через неразрывный пробел: 1 250.</div>
+  </div>
+</section>
+
+<section data-screen-label="Форма" style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">03 · Отступы, радиусы, тени, линейка</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Шкала отступов</div>
+      <sc-for list="{{ spaces }}" as="sp" hint-placeholder-count="8">
+        <div style="display:flex;align-items:center;gap:12px"><span style="width:84px;font:500 12px/16px 'JetBrains Mono',monospace;color:var(--muted)">{{ sp.name }}</span><span style="height:12px;border-radius:3px;background:var(--primary);width:{{ sp.px }}"></span><span style="font:500 12px/16px 'JetBrains Mono',monospace">{{ sp.px }}</span></div>
+      </sc-for>
+    </div>
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Радиусы</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;text-align:center;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--muted)">
+        <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:52px;height:52px;border:1.5px solid var(--accent);border-radius:var(--r8);background:var(--accent-soft)"></span>sm 8</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:52px;height:52px;border:1.5px solid var(--accent);border-radius:var(--r12);background:var(--accent-soft)"></span>md 12</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:52px;height:52px;border:1.5px solid var(--accent);border-radius:var(--r18);background:var(--accent-soft)"></span>lg 18</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:6px"><span style="width:52px;height:28px;margin:12px 0;border:1.5px solid var(--accent);border-radius:999px;background:var(--accent-soft)"></span>pill</span>
+      </div>
+      <div style="font-size:13px;line-height:19px;color:var(--muted)">sm — поля и мелкие кнопки, md — кнопки и сегменты, lg — карточки и шторки, pill — цены и чипы.</div>
+    </div>
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:18px 20px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Тени</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--muted);text-align:center">
+        <span style="display:flex;flex-direction:column;gap:8px"><span style="height:56px;border-radius:var(--r12);background:var(--surface);border:var(--bw) solid var(--line);box-shadow:var(--shadow-card)"></span>card</span>
+        <span style="display:flex;flex-direction:column;gap:8px"><span style="height:56px;border-radius:var(--r12);background:var(--surface);border:var(--bw) solid var(--line);box-shadow:var(--shadow-pop)"></span>pop</span>
+        <span style="display:flex;flex-direction:column;gap:8px"><span style="height:56px;border-radius:var(--r12) var(--r12) 0 0;background:var(--surface);border:var(--bw) solid var(--line);border-top:3px solid var(--accent);box-shadow:0 -8px 32px -12px rgba(20,33,28,.35)"></span>sheet</span>
+      </div>
+      <div style="height:84px;border-radius:var(--r12);border:var(--bw) solid var(--line);background-color:var(--bg);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--rule) 27px,var(--rule) 28px);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);text-align:center;padding:0 12px">Тетрадная линейка 28 px — только пустые состояния и «История»</div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Иконки" style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">04 · Иконки Lucide · линия 1.75</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg>gift · Призы, выдать</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>trophy · Рейтинг</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>history · История</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg>user-round · Профиль</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3"></path><path d="M21 21v.01"></path><path d="M12 7v3a2 2 0 0 1-2 2H7"></path><path d="M3 12h.01"></path><path d="M12 3h.01"></path><path d="M12 16v.01"></path><path d="M16 12h1"></path><path d="M21 12v.01"></path><path d="M12 21v-1"></path></svg>qr-code · Карточка</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>eye · Показать пароль</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>rotate-ccw · Перевыпустить</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path><path d="m2 2 20 20"></path></svg>eye-off · Скрыть</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--danger)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>trash-2 · только в меню</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>more · Ещё действия</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>target · Мотивация</div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);font-size:12px;color:var(--muted)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>undo-2 · Отменить</div>
+  </div>
+  <div style="font-size:14px;line-height:21px;color:var(--muted)">Каждая иконка-кнопка — с <code style="font:500 12px 'JetBrains Mono',monospace">aria-label</code> и всплывающей подсказкой. Эмодзи в интерфейсе не используются.</div>
+</section>
+
+<section data-screen-label="Компоненты" style="display:flex;flex-direction:column;gap:20px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">05 · Компоненты и состояния</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+
+  <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;overflow-x:auto">
+    <div style="font:var(--dw) 17px/22px var(--font-display);margin-bottom:14px">Кнопки</div>
+    <div style="display:grid;grid-template-columns:120px repeat(5,minmax(130px,1fr));gap:12px 14px;align-items:center;min-width:820px">
+      <span></span>
+      <span style="font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">default</span><span style="font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">hover</span><span style="font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">pressed</span><span style="font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">focus</span><span style="font:600 11px/14px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">disabled</span>
+      <span style="font-size:13px;font-weight:600">Главная</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--primary);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Готово</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--primary-hover);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Готово</span>
+      <span style="height:44px;border-radius:var(--r10);background:#0F4232;color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;transform:scale(.98)">Готово</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--primary);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;outline:3px solid var(--star);outline-offset:2px">Готово</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--line);color:var(--muted);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Готово</span>
+      <span style="font-size:13px;font-weight:600">Вторичная</span>
+      <span style="height:44px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Своё фото</span>
+      <span style="height:44px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface-2);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Своё фото</span>
+      <span style="height:44px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--line-soft);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;transform:scale(.98)">Своё фото</span>
+      <span style="height:44px;border-radius:var(--r10);border:var(--bw) solid var(--line-strong);background:var(--surface);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;outline:3px solid var(--star);outline-offset:2px">Своё фото</span>
+      <span style="height:44px;border-radius:var(--r10);border:var(--bw) solid var(--line);background:var(--surface-2);color:var(--muted);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Своё фото</span>
+      <span style="font-size:13px;font-weight:600">Контурная</span>
+      <span style="height:44px;border-radius:var(--r10);border:1.5px solid var(--accent);color:var(--accent-text);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Войти</span>
+      <span style="height:44px;border-radius:var(--r10);border:1.5px solid var(--accent);background:var(--accent-soft);color:var(--accent-text);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Войти</span>
+      <span style="height:44px;border-radius:var(--r10);border:1.5px solid var(--accent);background:#CFE2D8;color:var(--accent-text);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;transform:scale(.98)">Войти</span>
+      <span style="height:44px;border-radius:var(--r10);border:1.5px solid var(--accent);color:var(--accent-text);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;outline:3px solid var(--star);outline-offset:2px">Войти</span>
+      <span style="height:44px;border-radius:var(--r10);border:1.5px solid var(--line-strong);color:var(--muted);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Войти</span>
+      <span style="font-size:13px;font-weight:600">Опасная</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--danger);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Удалить</span>
+      <span style="height:44px;border-radius:var(--r10);background:#9A3022;color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Удалить</span>
+      <span style="height:44px;border-radius:var(--r10);background:#82281C;color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;transform:scale(.98)">Удалить</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--danger);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;outline:3px solid var(--star);outline-offset:2px">Удалить</span>
+      <span style="height:44px;border-radius:var(--r10);background:var(--line);color:var(--muted);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Удалить</span>
+    </div>
+    <div style="margin-top:14px;font-size:13px;line-height:19px;color:var(--muted)">Высота: 44–52 px на телефоне, 36–44 px на десктопе. Опасное действие — только внутри меню или подтверждения.</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Поля ввода</div>
+      <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;font-weight:600">По умолчанию</span><span style="height:44px;border:var(--bw) solid var(--line-strong);border-radius:var(--r10);background:var(--field-bg);padding:0 12px;display:flex;align-items:center;font:500 15px 'JetBrains Mono',monospace">ivanov.artem</span></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;font-weight:600">Фокус</span><span style="height:44px;border:1px solid var(--accent);border-radius:var(--r10);background:var(--field-bg);padding:0 12px;display:flex;align-items:center;box-shadow:0 0 0 3px var(--accent-soft);font-size:15px">Набор «Знаток»<span style="width:1.5px;height:20px;background:var(--primary);margin-left:1px"></span></span></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;font-weight:600">Ошибка</span><span style="height:44px;border:1px solid var(--danger);border-radius:var(--r10);background:var(--field-bg);padding:0 12px;display:flex;align-items:center;font:500 15px 'JetBrains Mono',monospace">kvant343</span><span style="display:flex;gap:6px;align-items:center;color:var(--danger);font-size:13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>Неверный пароль — он напечатан на карточке</span></label>
+      <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;font-weight:600;color:var(--muted)">Недоступно</span><span style="height:44px;border:var(--bw) solid var(--line);border-radius:var(--r10);background:var(--surface-2);padding:0 12px;display:flex;align-items:center;font-size:15px;color:var(--muted)">5-А</span></label>
+    </div>
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Сегменты, чипы, пилюли</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface)"><span style="height:40px;border-radius:var(--r9);background:var(--primary);color:var(--on-primary);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Все</span><span style="height:40px;border-radius:var(--r9);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center">Уже доступны (3)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:14px;border-radius:var(--r12);background:var(--primary)">
+        <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;font-size:13px;font-weight:500;color:var(--on-primary)">Наша школа</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border:1px solid rgba(255,255,255,.28);border-radius:999px;font-size:13px;font-weight:500;color:var(--on-primary)">5-А</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid rgba(255,255,255,.28);border-radius:999px;font-size:13px;font-weight:600;color:var(--on-primary)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--star)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"></circle><path d="M15.48 12.89 17 22l-5-3-5 3 1.52-9.11"></path></svg>7-е место из 10</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 12px 0 10px;border-radius:999px;background:var(--star);color:var(--on-star)"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--text)"></polygon></svg><span style="font:var(--nw) 16px/1 var(--font-num)">39</span></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span style="display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px 0 8px;border-radius:999px;background:var(--star-bg);color:var(--star-text)"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)"></polygon></svg><span style="font:var(--nw) 15px/1 var(--font-num)">39</span></span>
+        <span style="font-size:13px;color:var(--muted)">→ 44</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px;border:var(--bw) solid var(--line);border-radius:6px;background:var(--surface-2);font:500 13px/16px 'JetBrains Mono',monospace;letter-spacing:.06em">PZ8JTFRQ</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--success)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>вошёл</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle></svg>ждёт входа</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Карточка приза · 2 статуса</div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,173px));gap:12px">
+        <div style="background:var(--surface);border:1px solid var(--ok-line);border-radius:var(--r18);overflow:hidden;box-shadow:var(--shadow-card)">
+          <div style="position:relative;aspect-ratio:4/3"><img src="assets/prizes/arduino.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><span style="position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px 0 7px;background:var(--surface);border-radius:999px;box-shadow:0 1px 3px rgba(27,36,32,.2)"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)"></polygon></svg><span style="font:var(--nw) 15px/1 var(--font-num);color:var(--star-text)">30</span></span><span style="position:absolute;top:0;right:10px;width:44px;padding:7px 0 13px;background:var(--primary);color:var(--on-primary);clip-path:polygon(0 0,100% 0,100% 100%,50% calc(100% - 7px),0 100%);display:flex;flex-direction:column;align-items:center;gap:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size:9px;line-height:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase">Хватает</span></span></div>
+          <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px"><span style="font:var(--dw) 16px/21px var(--font-display)">Набор датчиков для Arduino</span><span style="font-size:13px;line-height:18px;color:var(--muted)">Модули света и звука</span><span style="display:flex;gap:6px;color:var(--accent-text);font-size:13px;line-height:17px;font-weight:600;padding-top:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M20 6 9 17l-5-5"></path></svg>Можно забрать — подойди к учителю</span></div>
+        </div>
+        <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden;box-shadow:var(--shadow-card)">
+          <div style="position:relative;aspect-ratio:4/3"><img src="assets/prizes/znatok-std.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"><span style="position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 9px 0 7px;background:var(--surface);border-radius:999px;box-shadow:0 1px 3px rgba(27,36,32,.2)"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)"></polygon></svg><span style="font:var(--nw) 15px/1 var(--font-num);color:var(--star-text)">50</span></span></div>
+          <div style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px"><span style="font:var(--dw) 16px/21px var(--font-display)">Стандартный набор «Знаток»</span><span style="font-size:13px;line-height:18px;color:var(--muted)">320 электронных схем</span><span style="display:flex;flex-direction:column;gap:6px;padding-top:6px"><span style="display:block;height:6px;border-radius:999px;background:var(--line-soft);overflow:hidden"><span style="display:block;height:100%;width:78%;border-radius:999px;background:var(--star)"></span></span><span style="font-size:13px;font-weight:600;color:var(--star-text);white-space:nowrap">ещё 11 ★</span></span></div>
+        </div>
+      </div>
+      <div style="font-size:13px;line-height:19px;color:var(--muted)">Фото 4:3, <code style="font:500 12px 'JetBrains Mono',monospace">object-fit: cover</code>. «Хватает» = лента-закладка: иконка + слово + цвет. Название — максимум 2 строки.</div>
+    </div>
+
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div style="font:var(--dw) 17px/22px var(--font-display)">Печати</div><button onClick="{{ replay }}" style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:var(--bw) solid var(--line-strong);border-radius:var(--r9);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>Шлёпнуть ещё раз</button></div>
+      <div style="display:flex;align-items:center;justify-content:space-around;gap:16px;flex-wrap:wrap;padding:12px 0">
+        <span style="display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px;color:var(--muted)"><span style="width:42px;height:42px;border-radius:50%;border:1.5px solid var(--star-text);padding:2.5px;transform:rotate(-10deg)"><span style="width:100%;height:100%;border-radius:50%;border:1px solid var(--star-text);background:var(--star-bg);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)"></polygon></svg></span></span>история, тост</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px;color:var(--muted)">{{ stampEl }}праздник · 250 мс</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:10px;font-size:12px;color:var(--muted)"><span style="padding:6px 12px;border:2.5px solid var(--accent);border-radius:var(--r8);color:var(--accent-text);font:700 16px/20px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;transform:rotate(-8deg);box-shadow:inset 0 0 0 2px var(--surface),inset 0 0 0 3px var(--accent)">Выдано</span>приз выдан</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:14px 34px 14px 16px;background:var(--star-bg);clip-path:polygon(0 0,100% 0,calc(100% - 16px) 50%,100% 100%,0 100%);border-radius:var(--r12) 0 0 var(--r12);font-size:15px;line-height:22px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--star-text)" stroke-width="1.75" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+        <span>Ещё <b style="color:var(--star-text)">3 звезды</b> — и ты поднимешься на <b style="color:var(--star-text)">6-е место</b></span>
+      </div>
+      <div style="font-size:13px;line-height:19px;color:var(--muted)">Без конфетти: праздник — это печать. Мотивация — закладка, говорит «ещё N до M-го места», не стыдит.</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px">
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Ввод звёзд · строка журнала</div>
+      <sc-for list="{{ starDemo }}" as="d" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:12px;min-height:56px;padding:0 12px;border-radius:var(--r10);background:{{ d.bg }}">
+          <span style="width:110px;font-size:13px;color:var(--muted)">{{ d.label }}</span>
+          <span style="display:flex">
+            <sc-for list="{{ d.stars }}" as="s" hint-placeholder-count="5"><span style="width:28px;height:36px;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="{{ s.fill }}" stroke="{{ s.stroke }}" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span></sc-for>
+          </span>
+          <span style="width:40px;height:36px;border:1px solid {{ d.border }};border-radius:var(--r8);background:var(--field-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600">{{ d.val }}</span>
+        </div>
+      </sc-for>
+      <div style="font-size:13px;line-height:19px;color:var(--muted)">Клик по той же звезде — сброс до 0. С клавиатуры: 0–5 ставят значение, ↑/↓ — соседний ученик.</div>
+    </div>
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div style="font:var(--dw) 17px/22px var(--font-display)">Аватар-герой · нижняя навигация</div>
+      <div style="display:flex;align-items:center;gap:20px">
+        <span style="display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;color:var(--muted)"><img src="assets/avatars/fox.png" alt="" style="width:64px;height:64px;border-radius:50%;box-shadow:0 0 0 3px var(--bg),0 0 0 4px var(--line)">обычный</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;color:var(--muted)"><span style="position:relative"><img src="assets/avatars/blob.png" alt="" style="width:64px;height:64px;border-radius:50%;display:block;box-shadow:0 0 0 3px var(--accent)"><span style="position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;background:var(--primary);border:2px solid var(--surface);color:var(--on-primary);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></span>выбран</span>
+        <span style="display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;color:var(--muted)"><span style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent-text);box-shadow:0 0 0 3px var(--bg),0 0 0 4px var(--line);font:var(--dw) 22px/1 var(--font-display)">АМ</span>без аватара</span>
+      </div>
+      <div style="display:flex;border-top:1px solid var(--line);padding-top:8px">
+        <span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:600;color:var(--accent-text)"><span style="width:56px;height:30px;border-radius:999px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg></span>Призы · активна</span>
+        <span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:12px;font-weight:600;color:var(--muted)"><span style="width:56px;height:30px;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span>История</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-screen-label="Движение" style="display:flex;flex-direction:column;gap:16px">
+  <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">06 · Движение и правила</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;font-size:14px;line-height:21px">
+    <div style="padding:16px 18px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14)"><div style="font:var(--nw) 16px/22px var(--font-num);margin-bottom:6px">150–200 мс, ease-out</div>Анимируются только печать, сворачивание шапки и смена вкладок (сдвиг 8 px + прозрачность). Только <code style="font:500 12px 'JetBrains Mono',monospace">transform</code> и <code style="font:500 12px 'JetBrains Mono',monospace">opacity</code>; уважаем <code style="font:500 12px 'JetBrains Mono',monospace">prefers-reduced-motion</code>.</div>
+    <div style="padding:16px 18px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14)"><div style="font:var(--dw) 16px/22px var(--font-display);margin-bottom:6px">Telegram</div>Цвет шапки Telegram = <code style="font:500 12px 'JetBrains Mono',monospace">--color-ink-900</code>. Шторки закрываются системной кнопкой «Назад». Нижняя навигация учитывает <code style="font:500 12px 'JetBrains Mono',monospace">safe-area-inset-bottom</code>.</div>
+    <div style="padding:16px 18px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14)"><div style="font:var(--dw) 16px/22px var(--font-display);margin-bottom:6px">Не делать</div>Засечки в мелком тексте, таблицах и кнопках. Второй акцент кроме золота. Бежевое на бежевом без линии. Эмодзи в интерфейсе.</div>
+  </div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  themeInit = (() => { try { const t = localStorage.getItem('zvezdy-theme') || 'notebook'; document.documentElement.dataset.theme = t; return t; } catch (e) { return 'notebook'; } })();
+  setTheme(t) { try { localStorage.setItem('zvezdy-theme', t); } catch (e) {} document.documentElement.dataset.theme = t; this.setState({ theme: t }); }
+  modeInit = (() => { try { const m = localStorage.getItem('zvezdy-mode') || 'light'; document.documentElement.dataset.mode = m; return m; } catch (e) { return 'light'; } })();
+  setMode(m) { try { localStorage.setItem('zvezdy-mode', m); } catch (e) {} document.documentElement.dataset.mode = m; this.setState({ uiMode: m }); }
+  themeVals() {
+    const t = (this.state && this.state.theme) || this.themeInit; const q = t === 'quest';
+    const o = on => ({ sel: on ? 'true' : 'false', bg: on ? 'var(--primary)' : 'transparent', fg: on ? 'var(--on-primary)' : 'var(--text)' });
+    const sk = t === 'sky', cl = t === 'clear', stk = t === 'sticker', nb = !q && !sk && !cl && !stk; const um = (this.state && this.state.uiMode) || this.modeInit;
+    return { theme: t, isQuest: q, isSky: sk, isClear: cl, isSticker: stk, isNotebook: nb, themeK: o(stk), setK: () => this.setTheme('sticker'), themeNb: o(nb), themeQ: o(q), themeS: o(sk), themeC: o(cl), setC: () => this.setTheme('clear'), uiMode: um, modeA: o(um === 'auto'), modeL: o(um === 'light'), modeD: o(um === 'dark'), setModeA: () => this.setMode('auto'), setModeL: () => this.setMode('light'), setModeD: () => this.setMode('dark'), setNb: () => this.setTheme('notebook'), setQ: () => this.setTheme('quest'), setS: () => this.setTheme('sky') };
+  }
+  state = { k: 0 };
+  componentDidMount() { setTimeout(() => this.forceUpdate(), 400); }
+  renderVals() {
+    const C = (v, hex, use, on, sample) => ({ var: v, hex, use, on: on || 'var(--text)', sample: sample || 'Аа' });
+    const colorGroupsOld = [
+      { name: 'Бумага', note: 'Фон и поверхности. Карточки всегда с линией.', items: [C('--color-bg', 'var(--bg)', 'Фон страниц'), C('--color-surface', 'var(--surface)', 'Карточки, шторки, панели'), C('--color-surface-2', 'var(--surface-2)', 'Вложенные блоки, зебра'), C('--color-line', 'var(--line)', 'Линейки и границы'), C('--color-line-strong', 'var(--line-strong)', 'Границы полей и кнопок')] },
+      { name: 'Чернила', note: 'Бренд. Шапка, главные кнопки, выбор.', items: [C('--color-ink-900', 'var(--accent)', 'Шапка, главные кнопки, Telegram', '#FFFFFF'), C('--color-ink-700', 'var(--primary-hover)', 'Hover главной кнопки', '#FFFFFF'), C('--color-ink-100', 'var(--accent-soft)', '«Это ты», активная вкладка', 'var(--accent)'), C('--color-on-ink-muted', 'var(--hero-muted)', 'Подписи на чернилах', 'var(--accent)')] },
+      { name: 'Текст', note: 'Два уровня, оба AA на бумаге.', items: [C('--color-text', 'var(--text)', 'Основной текст', '#FFFFFF'), C('--color-text-muted', 'var(--muted)', 'Подписи, даты, списания', '#FFFFFF')] },
+      { name: 'Звезда', note: 'Единственный акцент кроме чернил.', items: [C('--color-star', 'var(--star)', 'Иконки, полосы, пилюля баланса', 'var(--text)', '★'), C('--color-star-text', 'var(--star-text)', '«+5», цены на светлом', '#FFFFFF', '+5'), C('--color-star-bg', 'var(--star-bg)', 'Пилюли цены, мотивация', 'var(--star-text)', '39')] },
+      { name: 'Статусы', note: 'Всегда вместе с иконкой и словом.', items: [C('--color-success', 'var(--success)', '«вошёл»', '#FFFFFF'), C('--color-danger', 'var(--danger)', 'Удаление, ошибки', '#FFFFFF'), C('--color-danger-bg', 'var(--danger-bg)', 'Фон опасных пунктов', 'var(--danger)')] },
+      { name: 'Пьедестал', note: 'Кромка стопки и кольцо медали.', items: [C('--podium-1', 'var(--star)', '1-е место', 'var(--text)', '1'), C('--podium-2', 'var(--podium-2)', '2-е место', 'var(--text)', '2'), C('--podium-3', 'var(--podium-3)', '3-е место', 'var(--text)', '3')] },
+    ];
+    const Q = this.themeVals().isQuest; const SK = this.themeVals().isSky; const CL = this.themeVals().isClear; const KK = this.themeVals().isSticker;
+    const cssv = n => { try { return getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim(); } catch (e) { return ''; } };
+    const V = (name, nb, q, use, on, sample) => ({ var: '--' + name, hex: cssv(name) || (Q ? q : nb), swatch: 'var(--' + name + ')', use, on: on || 'var(--text)', sample: sample || 'Аа' });
+    const colorGroups = [
+      { name: 'Поверхности', note: Q ? 'Тёплый крем, белые карточки с подложкой.' : 'Бумага. Карточки всегда с линией.', items: [V('bg', '#F4EFE6', '#FFF7EA', 'Фон страниц'), V('surface', '#FFFDF8', '#FFFFFF', 'Карточки, шторки, панели'), V('surface-2', '#FAF6EE', '#FFFBF3', 'Вложенные блоки, зебра'), V('line', '#E4DCCB', '#F0E2CC', 'Границы, подложка карточек'), V('line-strong', '#C9BEA7', '#E0C9A6', 'Границы полей и кнопок')] },
+      { name: 'Действие и выбор', note: Q ? 'Апельсин с тёмным текстом и объёмом. Бирюза — выбор.' : 'Изумрудные чернила: шапка, кнопки, выбор.', items: [V('primary', '#14533F', '#FF7A1A', 'Главные кнопки, активная вкладка', 'var(--on-primary)'), V('on-primary', '#FFFFFF', '#2B1400', 'Текст на главной кнопке', 'var(--primary)'), V('accent', '#14533F', '#12B5A5', 'Кольцо выбора, рамки', 'var(--surface)'), V('accent-soft', '#E3EEE8', '#DDF5F1', '«Это ты», активная иконка', 'var(--accent-text)'), V('hero-bg', '#14533F', '#FFF7EA', 'Шапка кабинета и Telegram', 'var(--hero-fg)')] },
+      { name: 'Текст', note: 'Два уровня, оба AA на фоне.', items: [V('text', '#1B2420', '#231F2B', 'Основной текст', 'var(--surface)'), V('muted', '#5B6660', '#6B6475', 'Подписи, даты, списания', 'var(--surface)')] },
+      { name: 'Звезда', note: Q ? 'Монета: заливка + тёмная кромка.' : 'Золотая печать. Чистое золото — без мелкого текста.', items: [V('star', '#E3A21A', '#FFC21A', 'Иконки, полосы, пилюля баланса', 'var(--on-star)', '★'), V('star-depth', '#E3A21A', '#D79A00', 'Кромка монеты', 'var(--surface)', '★'), V('star-text', '#8A5A00', '#9A5B00', '«+5», цены на светлом', 'var(--surface)', '+5'), V('star-bg', '#FBF0D6', '#FFF1C7', 'Пилюли цены, мотивация', 'var(--star-text)', '39')] },
+      { name: 'Статусы', note: 'Всегда вместе с иконкой и словом.', items: [V('success', '#1F7A4D', '#157A41', '«вошёл», текст успеха', 'var(--surface)'), V('ok-bg', '#14533F', '#22A55B', 'Лента «Хватает»', 'var(--ok-fg)'), V('danger', '#B23A2A', '#B3261E', 'Удаление, ошибки', 'var(--surface)'), V('danger-bg', '#F8E6E2', '#FDE4E4', 'Фон опасных пунктов', 'var(--danger)')] },
+      { name: 'Пьедестал и категории', note: Q ? 'Небольшой — бирюза, средний — апельсин, большой — фиолетовый.' : 'Кромка стопки и медаль.', items: [V('podium-1', '#E3A21A', '#FFC21A', '1-е место', 'var(--on-star)', '1'), V('podium-2', '#A3AEA8', '#C9D2E0', '2-е место', 'var(--on-star)', '2'), V('podium-3', '#B9763C', '#F0A36B', '3-е место', 'var(--on-star)', '3'), V('cat-s', '#14533F', '#12B5A5', 'Небольшой приз', 'var(--surface)', 'S'), V('cat-m', '#8A5A00', '#FF7A1A', 'Средний приз', 'var(--surface)', 'M'), V('cat-l', '#1B2420', '#6A4BFF', 'Большой приз', 'var(--surface)', 'L')] },
+    ];
+    const spaces = [4, 8, 12, 16, 20, 24, 32, 40].map((v, i) => ({ name: '--space-' + [1, 2, 3, 4, 5, 6, 8, 10][i], px: v + 'px' }));
+    const pr = new Intl.PluralRules('ru');
+    const w = n => { const r = pr.select(n); return n + '\u00A0' + (r === 'one' ? 'звезда' : r === 'few' ? 'звезды' : 'звёзд'); };
+    const plurals = [1, 3, 11, 21].map(w).join(' · ');
+    const row = (label, v, hv, bg) => ({
+      label, val: v, bg, border: v ? 'var(--star)' : 'var(--line-strong)',
+      stars: [1, 2, 3, 4, 5].map(k => { const lit = k <= (hv || v); const pre = hv && k > v && k <= hv; return { fill: lit ? (pre ? 'var(--star-soft)' : 'var(--star)') : 'none', stroke: lit ? (pre ? 'var(--star-soft)' : 'var(--star)') : 'var(--line-strong)' }; }),
+    });
+    const h = React.createElement;
+    const stampEl = h('div', { key: 'st' + this.state.k, 'aria-hidden': true, style: { width: 88, height: 88, borderRadius: '50%', border: '2.5px solid var(--star-text)', padding: 4, boxSizing: 'border-box', animation: 'stampIn 250ms ease-out both', transform: 'rotate(-10deg)' } },
+      h('div', { style: { width: '100%', height: '100%', borderRadius: '50%', border: '1px solid var(--star-text)', background: 'var(--star-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 } },
+        h('svg', { width: 34, height: 34, viewBox: '0 0 24 24' }, h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2', fill: 'var(--star)', stroke: 'var(--star-depth)', strokeWidth: 1.5, strokeLinejoin: 'round' })),
+        h('span', { style: { font: '700 10px/12px var(--font-ui)', letterSpacing: '.16em', color: 'var(--star-text)', paddingLeft: '.16em' } }, 'ОТЛИЧНО')));
+    return { ...this.themeVals(),
+      nightSw: [['bg', '#0A0F24', 'Ночное небо'], ['surface', '#131A38', 'Карточки'], ['surface-2', '#1B2450', 'Вложенные, активные'], ['text', '#EEF1FF', 'Текст · 16.9:1'], ['muted', '#A3ACD0', 'Подписи · 7.6:1'], ['star', '#FFD166', 'Звёзды, баланс, цены'], ['primary', '#5CE1E6', 'Кнопки · тёмный текст'], ['accent', '#8E7BFF', 'Туманность: «это ты», орбита'], ['success', '#4ADE80', 'Успех'], ['danger', '#FF7A7A', 'Ошибки']].map(([n, hex, use]) => ({ var: '--' + n, hex, use, swatch: 'var(--' + n + ')' })),
+      colorGroups, spaces,
+      kicker: KK ? '«Звёзды» · вариант 5' : CL ? '«Звёзды» · вариант 4' : SK ? '«Звёзды» · вариант 3' : Q ? '«Звёзды» · вариант 2' : '«Звёзды» · вариант 1',
+      themeTitle: KK ? 'Стикербук' : CL ? 'Ясно и быстро' : SK ? 'Созвездие' : Q ? 'Звёздный квест' : 'Тетрадь отличника',
+      themeDesc: KK ? 'Тетрадь в клетку, в которую клеят наклейки. Жирные чёрные контуры 2 px, плоские яркие цвета, жёсткие тени без размытия. Наклон — только у фото, аватаров и бейджей; один яркий цвет на компонент; Caveat — не больше двух пометок на экран. Шрифт Rubik. Отлично печатается в ч/б.' : CL ? 'Нейтральный продуктовый минимализм: графит, белый и одна янтарная звезда. Характер дают фото призов и аватары, а не декор. Светлая и тёмная темы, «Авто» — как в Telegram. Один цвет — одно значение: янтарь — звёзды, зелёный — можно, красный — опасно, графит — действие. Шрифт Golos Text.' : SK ? 'Звёзды — буквально звёзды. Кабинет ученика — ночное небо: каждая заработанная звезда зажигает точку в созвездии приза. Панель учителя — «дневное небо», печать — белая. Одно семейство Geologica, свечение только у баланса и новой звезды.' : Q ? 'Кабинет как игра: звёзды — монеты, путь к призу — квестовая дорожка, кнопки объёмные и нажимаются физически. Апельсин, бирюза и солнечная звезда на кремовом фоне. Unbounded — только цифры и короткие заголовки, интерфейс на Nunito. Учителю — та же палитра, но спокойнее.' : 'Хорошо свёрстанный школьный дневник: изумрудные чернила, тёплая бумага, золотая печать за заслугу. Засечки — только для имён, чисел и названий; весь интерфейс на Onest. Радость — точечно: штамп, лента «Хватает», грамота.', plurals, stampEl,
+      replay: () => this.setState(s => ({ k: s.k + 1 })),
+      starDemo: [row('пусто', 0, 0, 'var(--surface)'), row('выставлено 3', 3, 0, 'var(--surface-2)'), row('hover на 5', 3, 5, 'var(--surface)')],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -25,6 +25,14 @@ class SchoolUpdate(BaseModel):
     name: Name
 
 
+Theme = Annotated[str, Field(pattern="^(notebook|quest|sky|clear|sticker)$")]
+
+
+class SchoolTheme(BaseModel):
+    """Тема оформления школы — одна из пяти из docs/design."""
+    theme: Theme
+
+
 class ClassCreate(BaseModel):
     school_id: int
     name: Name
@@ -79,13 +87,19 @@ class DeductRequest(BaseModel):
     student_id: int
     amount: int
     reason: Text = ""
+    prize_id: Optional[int] = None      # выдан приз с витрины — для «Мои призы» у ребёнка
+
+
+class LessonUndo(BaseModel):
+    """Отменить или вернуть начисление: одному ученику или всему уроку (student_id пуст)."""
+    student_id: Optional[int] = None
 
 
 class PrizeCreate(BaseModel):
     name: Name
     cost: int = Field(ge=1, le=100_000)
     desc: Text = ""
-    category: Annotated[str, Field(max_length=30)] = "small"
+    category: Annotated[str, Field(pattern="^(small|medium|large)$")] = "small"
     active: bool = True
 
 
@@ -93,7 +107,7 @@ class PrizeUpdate(BaseModel):
     name: Optional[Name] = None
     cost: Optional[int] = Field(default=None, ge=1, le=100_000)
     desc: Optional[Text] = None
-    category: Optional[Annotated[str, Field(max_length=30)]] = None
+    category: Optional[Annotated[str, Field(pattern="^(small|medium|large)$")]] = None
     active: Optional[bool] = None
 
 
@@ -139,6 +153,7 @@ class PasswordReset(BaseModel):
 class StudentUpdate(BaseModel):
     name: Optional[Name] = None
     login: Optional[Annotated[str, Field(max_length=64)]] = None
+    rating_hidden: Optional[bool] = None    # «скрыт из рейтинга»: звёзды копятся, в топе не виден
 
 
 class TwaAuth(BaseModel):

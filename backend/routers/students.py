@@ -84,7 +84,7 @@ def import_rows(rows: List[Tuple[int, str, str, int]], user: Dict[str, Any]) -> 
 
 @router.patch("/students/{student_id}")
 def update_student(student_id: int, item: schemas.StudentUpdate, user: Dict[str, Any] = Depends(require_teacher)):
-    """Правка имени и логина. Звёзды и история не затрагиваются."""
+    """Правка имени, логина и «скрыт из рейтинга». Звёзды и история не затрагиваются."""
     def _apply(database: Dict[str, Any]):
         student = student_or_404(database, student_id, user)
         changed = False
@@ -100,6 +100,10 @@ def update_student(student_id: int, item: schemas.StudentUpdate, user: Dict[str,
             if login in db.logins_taken(database, except_id=student_id):
                 raise bad_request("Такой логин уже занят другим учеником")
             student["login"] = login
+            changed = True
+
+        if item.rating_hidden is not None and bool(student.get("rating_hidden")) != item.rating_hidden:
+            student["rating_hidden"] = item.rating_hidden
             changed = True
 
         return student if changed else db.NO_SAVE

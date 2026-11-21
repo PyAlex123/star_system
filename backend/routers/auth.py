@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from .. import config, db, passwords, ratelimit, schemas, security
+from .. import config, db, passwords, ratelimit, schemas, security, themes
 from .common import student_or_404
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -76,8 +76,10 @@ def login_dev(student_id: int):
 @router.post("/preview")
 def login_preview(student_id: int, user: Dict[str, Any] = Depends(security.require_teacher)):
     """Учитель открывает кабинет глазами конкретного ученика — только из своих школ."""
-    student = student_or_404(db.load_db(), student_id, user)
-    return {"token": security.issue_student_token(student, preview=True), "preview": True}
+    database = db.load_db()
+    student = student_or_404(database, student_id, user)
+    return {"token": security.issue_student_token(student, preview=True), "preview": True,
+            "theme": themes.theme_of_class(database, student.get("class_id"))}
 
 
 def _guard(scope: str, key: str) -> None:
@@ -100,7 +102,8 @@ def login_student(payload: schemas.StudentLogin, request: Request):
     _guard("student-ip", ip)
     _guard("student-login", login)
 
-    student = db.find_by_login(db.load_db(), login)
+    database = db.load_db()
+    student = db.find_by_login(database, login)
     # Хеш считаем всегда, даже для несуществующего логина: иначе ответ «нет такого»
     # приходит заметно быстрее, и по времени можно собрать список логинов класса.
     stored = student.get("password_hash", "") if student else passwords.dummy_hash()
@@ -115,7 +118,19 @@ def login_student(payload: schemas.StudentLogin, request: Request):
     # Обнуляем только счётчик этого логина. Счётчик адреса не трогаем: иначе,
     # имея свой аккаунт, можно чередовать «свой вход — попытки по чужим».
     ratelimit.reset("student-login", login)
-    return {"token": security.issue_student_token(student)}
+
+    # Отметка «входил через сайт»: в журнале учитель видит, что карточка работает
+    def _seen(database_inner):
+        fresh = db.find_student(database_inner, student["id"])
+        if not fresh:
+            return db.NO_SAVE
+        fresh["last_login"] = db.now_iso()
+        return None
+    db.transaction(_seen)
+
+    # Тема школы — чтобы кабинет сразу открылся в своём оформлении
+    return {"token": security.issue_student_token(student),
+            "theme": themes.theme_of_class(database, student.get("class_id"))}
 
 
 def _set_panel_cookie(response: Response, user: Dict[str, Any]) -> None:

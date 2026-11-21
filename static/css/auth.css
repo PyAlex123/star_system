@@ -1,122 +1,110 @@
-/* Страницы входа: учителя (/login) и ученика (/enter).
-   Раньше обе несли одинаковые 50 строк стилей внутри себя.
-   Отличаются только цветом: учитель — зелёный, ученик — янтарь, как звёзды. */
+/* Страницы входа: учителя (/login, макет T0), ученика (/enter, макет S0)
+   и выбор входа (/). Тема — по устройству: последняя выбранная на нём.
+   В «Созвездии» фон ночной (data-night на body), карточка учителя — дневная (data-day). */
 
-body {
+body.auth {
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  background-color: var(--bg);
+  background-image:
+    repeating-linear-gradient(to bottom, transparent 0, transparent 27px, var(--rule) 27px, var(--rule) 28px),
+    var(--sky);
+  background-size: auto, var(--sky-size);
+  color: var(--text);
 }
 
-.box {
-  --auth-color: var(--accent);
-  --auth-mark: var(--gold-bright);
+.auth-col { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }
+
+.auth-card {
   width: 100%;
-  max-width: 370px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px 28px 26px;
   background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-top: 3px solid var(--auth-color);
-  border-radius: var(--r-card);
-  padding: 28px 26px;
+  color: var(--text);
+  border: var(--bw) solid var(--line);
+  border-top: 4px solid var(--accent);
+  border-radius: var(--r18);
+  box-shadow: var(--shadow-pop);
 }
 
-.box.for-student {
-  --auth-color: var(--gold);
-  --auth-mark: #fffdf8;
-}
-
-.mark {
-  width: 40px; height: 40px;
-  border-radius: var(--r-field);
-  background: var(--auth-color);
-  color: var(--auth-mark);
-  display: grid;
-  place-items: center;
-  margin-bottom: 16px;
-}
-.mark .ic { width: 22px; height: 22px; vertical-align: 0; }
-
-h1 { font-size: 22px; margin-bottom: 4px; }
-.sub { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; }
-
-label { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
-input { width: 100%; }
-.field { margin-bottom: 14px; }
-.box .btn { margin-top: 16px; }
-.box .field + .btn { margin-top: 4px; }
-
-.error {
-  display: none;
-  margin-top: 12px;
-  background: var(--danger-soft);
-  border: 1px solid var(--danger-line);
-  color: var(--danger);
-  border-radius: var(--r-field);
-  padding: 9px 12px;
-  font-size: 13px;
-  font-weight: 500;
-}
-.error.show { display: flex; align-items: center; gap: 8px; }
-
-.hint {
-  margin: 20px 0 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-  font-size: 12.5px;
-  color: var(--muted);
-  line-height: 1.55;
-}
-
-code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
-
-/* «← Выбор входа»: ребёнок, попавший на вход учителя, должен сразу видеть, как уйти */
 .back-link {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin: -8px 0 18px;
-  font-size: 13px;
-  font-weight: 500;
+  min-height: 36px;
   color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
   text-decoration: none;
 }
-.back-link:hover { color: var(--ink); }
+.back-link:hover { color: var(--text); }
 
-/* ── Главная: выбор входа ─────────────────────────────────── */
+.auth-head { display: flex; align-items: center; gap: 14px; }
+.auth-title { font: var(--dw) 26px/32px var(--font-display); }
+.auth-sub { font-size: 14px; line-height: 20px; color: var(--muted); }
+.auth-card .field input { height: 44px; }
 
-.entry-choices { display: grid; gap: 12px; margin-top: 6px; }
+.form-error { display: flex; gap: 8px; align-items: flex-start; color: var(--danger); font-size: 14px; line-height: 20px; }
+.form-error .ic { margin-top: 1px; }
 
+/* ── Ученик (S0) ───────────────────────────────────────────── */
+
+.auth-card.student { padding: 24px 20px; box-shadow: var(--shadow-card); }
+.student .auth-title { font-size: 28px; line-height: 34px; text-wrap: balance; }
+.student .auth-lead { font-size: 15px; line-height: 22px; color: var(--muted); text-wrap: pretty; }
+.student .field input {
+  height: 48px;
+  border-radius: var(--r12);
+  padding: 0 14px;
+  font: 500 16px/20px var(--font-mono);
+}
+.student .field input.invalid { border-color: var(--danger); }
+.or-camera { margin-top: -8px; text-align: center; font-size: 13px; line-height: 18px; color: var(--muted); }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.auth-help { display: flex; gap: 12px; align-items: flex-start; padding: 0 8px; font-size: 14px; line-height: 20px; color: var(--muted); text-wrap: pretty; }
+.auth-help .ic { width: 20px; height: 20px; flex: none; }
+
+/* ── Выбор входа (/) ───────────────────────────────────────── */
+
+.entry-choices { display: grid; gap: 12px; }
 .entry-choice {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 16px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-card);
+  padding: 14px 16px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r14);
   background: var(--surface);
-  color: var(--ink);
+  color: var(--text);
   text-decoration: none;
-  transition: border-color .15s var(--ease), background .15s var(--ease);
+  transition: border-color 150ms ease-out, background 150ms ease-out;
 }
-.entry-choice:hover { border-color: var(--choice-color); background: var(--surface-2); }
-
-.entry-choice.student { --choice-color: var(--gold); }
-.entry-choice.teacher { --choice-color: var(--accent); }
-
+.entry-choice:hover { border-color: var(--accent); background: var(--surface-2); color: var(--text); }
 .entry-icon {
   flex: none;
-  width: 44px; height: 44px;
-  border-radius: var(--r-btn);
-  background: var(--choice-color);
-  color: #fffdf8;
-  display: grid;
-  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.entry-icon .ic { width: 22px; height: 22px; vertical-align: 0; }
-
+.entry-choice.student .entry-icon { background: var(--star-bg); color: var(--star-text); border: 1px solid var(--star-line); }
+.entry-choice.teacher .entry-icon { background: var(--primary); color: var(--on-primary); }
+.entry-icon .ic { width: 22px; height: 22px; }
 .entry-text { flex: 1; min-width: 0; }
-.entry-title { display: block; font-size: 16px; font-weight: 600; }
-.entry-note { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
-.entry-choice > .ic { flex: none; color: var(--muted); }
+.entry-title { display: block; font: var(--dw) 17px/22px var(--font-display); }
+.entry-note { display: block; margin-top: 2px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.entry-choice > .ic { color: var(--muted); }
+
+@media (max-width: 480px) {
+  body.auth { padding: 24px 16px; align-items: flex-start; }
+  .auth-card { padding: 22px 18px; }
+}

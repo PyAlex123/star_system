@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from .. import config, db, schemas
 from ..security import require_teacher
-from .common import bad_request, class_or_404, student_or_404
+from .common import bad_request, class_or_404, not_found, student_or_404
 
 router = APIRouter(prefix="/api", tags=["lessons"], dependencies=[Depends(require_teacher)])
 
@@ -86,7 +86,10 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
                 "reason": lesson_reason(day),
             })
 
+        settings = database.setdefault("settings", {})
+        settings["last_lesson_id"] = settings.get("last_lesson_id", 0) + 1
         database["lessons"].insert(0, {
+            "id": settings["last_lesson_id"],
             "class_id": cls["id"],
             "class_name": cls["name"],       # для истории: класс могут переименовать
             "school_name": db.school_name_of_class(database, cls["id"]),
@@ -94,6 +97,7 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
             "total_stars": total_stars,
             "students_rewarded": len(students),
             "awards": {str(student["id"]): stars for student, stars in students},
+            "undone": {},
         })
         return len(students)
 
@@ -110,13 +114,119 @@ def deduct_stars(payload: schemas.DeductRequest, user: Dict[str, Any] = Depends(
         student = student_or_404(database, payload.student_id, user)
         if student["total_stars"] < payload.amount:
             raise bad_request("Недостаточно звёзд на балансе ученика")
-        student["total_stars"] -= payload.amount
-        student["history"].insert(0, {
+        entry = {
             "date": db.today(),
             "delta": -payload.amount,
             "reason": payload.reason.strip() or "Списание учителем",
-        })
+        }
+        if payload.prize_id is not None:
+            prize = next((p for p in database["prizes"] if p["id"] == payload.prize_id), None)
+            if not prize:
+                raise bad_request("Такого приза нет на витрине")
+            entry["prize_id"] = prize["id"]
+        student["total_stars"] -= payload.amount
+        student["history"].insert(0, entry)
         return None
 
     db.transaction(_apply)
     return {"ok": True}
+
+
+# ── Отмена ошибочного начисления ──────────────────────────────────────────────
+
+def _lesson_or_404(database: Dict[str, Any], lesson_id: int, user: Dict[str, Any]) -> Dict[str, Any]:
+    lesson = next((x for x in database.get("lessons", []) if x.get("id") == lesson_id), None)
+    if not lesson:
+        raise not_found("Урок не найден")
+    class_or_404(database, lesson.get("class_id"), user)   # чужой урок — как несуществующий
+    if "awards" not in lesson:
+        raise bad_request("Этот урок проведён до обновления: в нём не записано, кому сколько "
+                          "звёзд начислено. Отменить его нельзя.")
+    lesson.setdefault("undone", {})
+    return lesson
+
+
+def _recount(lesson: Dict[str, Any]) -> None:
+    lesson["total_stars"] = sum(lesson["awards"].values())
+    lesson["students_rewarded"] = len(lesson["awards"])
+
+
+def _drop_lesson_entry(student: Dict[str, Any], day: str, stars: int) -> None:
+    """Убирает из истории ученика запись именно этого начисления."""
+    reason = lesson_reason(day)
+    history = student.get("history", [])
+    for index, entry in enumerate(history):
+        if entry.get("date") == day and entry.get("reason") == reason and entry.get("delta") == stars:
+            del history[index]
+            return
+
+
+@router.post("/lessons/{lesson_id}/undo")
+def undo_lesson(lesson_id: int, payload: schemas.LessonUndo,
+                user: Dict[str, Any] = Depends(require_teacher)):
+    """Отменить начисление одному ученику или всему уроку: звёзды списываются
+    с баланса, запись пропадает из истории. Если звёзды уже потрачены на приз,
+    отменять нельзя — баланс ушёл бы в минус."""
+    def _apply(database: Dict[str, Any]):
+        lesson = _lesson_or_404(database, lesson_id, user)
+        keys = list(lesson["awards"]) if payload.student_id is None else [str(payload.student_id)]
+        if not keys or any(k not in lesson["awards"] for k in keys):
+            raise bad_request("Это начисление уже отменено")
+
+        plan = []
+        for key in keys:
+            stars = lesson["awards"][key]
+            student = db.find_student(database, int(key))
+            if student and student["total_stars"] < stars:
+                raise bad_request(
+                    f"У ученика {student['name']} на балансе {student['total_stars']} ★ — "
+                    f"часть звёзд уже потрачена на приз. Отменить начисление нельзя.")
+            plan.append((key, stars, student))
+
+        for key, stars, student in plan:
+            if student:
+                student["total_stars"] -= stars
+                _drop_lesson_entry(student, lesson["date"], stars)
+            lesson["undone"][key] = lesson["awards"].pop(key)
+        _recount(lesson)
+        return sum(stars for _, stars, _ in plan)
+
+    return {"ok": True, "stars": db.transaction(_apply)}
+
+
+@router.post("/lessons/{lesson_id}/restore")
+def restore_lesson(lesson_id: int, payload: schemas.LessonUndo,
+                   user: Dict[str, Any] = Depends(require_teacher)):
+    """Вернуть отменённое начисление. Лимиты на дату те же, что при уроке."""
+    def _apply(database: Dict[str, Any]):
+        lesson = _lesson_or_404(database, lesson_id, user)
+        keys = list(lesson["undone"]) if payload.student_id is None else [str(payload.student_id)]
+        if not keys or any(k not in lesson["undone"] for k in keys):
+            raise bad_request("Возвращать нечего")
+
+        day = lesson["date"]
+        adding = sum(lesson["undone"][k] for k in keys)
+        already = class_stars_on(database, lesson["class_id"], day)
+        if already + adding > config.MAX_LESSON_BANK:
+            raise bad_request(f"За {day} классу уже начислено {already} из "
+                              f"{config.MAX_LESSON_BANK} звёзд — вернуть нельзя.")
+        plan = []
+        for key in keys:
+            stars = lesson["undone"][key]
+            student = db.find_student(database, int(key))
+            if not student:
+                raise bad_request("Этого ученика больше нет в журнале")
+            got = student_stars_on(student, day)
+            if got + stars > config.MAX_STUDENT_STARS:
+                raise bad_request(f"{student['name']} уже получил(а) за {day} {got} из "
+                                  f"{config.MAX_STUDENT_STARS} звёзд — вернуть нельзя.")
+            plan.append((key, stars, student))
+
+        for key, stars, student in plan:
+            student["total_stars"] += stars
+            student["history"].insert(0, {"date": day, "delta": stars, "reason": lesson_reason(day)})
+            lesson["awards"][key] = lesson["undone"].pop(key)
+        _recount(lesson)
+        return adding
+
+    return {"ok": True, "stars": db.transaction(_apply)}
