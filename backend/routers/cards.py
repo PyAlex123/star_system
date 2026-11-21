@@ -77,6 +77,7 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str
     shown = student.get("password_shown")
     password = f"<b>{html.escape(shown)}</b>" if shown else "<i>свой пароль</i>"
     cls = html.escape(class_label)
+    long_login = " long" if len(student.get("login") or "") > 20 else ""
     size = " xlong" if len(student["name"]) > 28 else " long" if len(student["name"]) > 22 else ""
     return f"""
     <div class="cell" data-id="{student['id']}">
@@ -98,7 +99,7 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str
             <span class="c-web">
               <span class="c-caps">Без Telegram — через сайт</span>
               <span class="c-site">{site}</span>
-              <span class="c-cred">логин <b>{login}</b></span>
+              <span class="c-cred{long_login}">логин <b>{login}</b></span>
               <span class="c-cred">пароль {password}</span>
             </span>
           </div>
