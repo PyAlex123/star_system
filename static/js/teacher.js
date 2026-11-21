@@ -66,7 +66,7 @@ async function sessionSwitched() {
   try {
     const fresh = await requestJson("/api/state");
     if (fresh.me && fresh.me.id !== state.me.id) {
-      try { sessionStorage.setItem("zv_switched", fresh.me.login); } catch (_) {}
+      try { sessionStorage.setItem("zv_switched", JSON.stringify({ now: fresh.me.login, was: state.me.login })); } catch (_) {}
       location.reload();
       return true;
     }
@@ -77,13 +77,17 @@ async function sessionSwitched() {
 }
 
 function reportSwitchedLogin() {
-  let login = null;
-  try { login = sessionStorage.getItem("zv_switched"); sessionStorage.removeItem("zv_switched"); } catch (_) {}
-  if (!login) return;
+  let info = null;
+  try { info = JSON.parse(sessionStorage.getItem("zv_switched") || "null"); sessionStorage.removeItem("zv_switched"); } catch (_) {}
+  if (!info?.now) return;
   showInfo("Вы вошли под другим логином",
-    `<p>В другой вкладке этого браузера выполнен вход как <b>${escapeHtml(login)}</b>. Вход у браузера один на все вкладки,
-     поэтому панель открыта заново под этим логином.</p>
-     <p>Чтобы одновременно работать администратором и учителем, откройте второй вход в другом браузере или в окне инкогнито.</p>`);
+    `<p>Эта вкладка была открыта как <b>${escapeHtml(info.was || "—")}</b>, но в этом окне браузера
+     последний вход выполнен как <b>${escapeHtml(info.now)}</b>. Вход один на все вкладки окна
+     (и на все вкладки инкогнито), поэтому панель открыта под <b>${escapeHtml(info.now)}</b>.</p>
+     <p>Нужен <b>${escapeHtml(info.was || "другой логин")}</b> — войдите заново. Чтобы держать открытыми
+     администратора и учителя одновременно, одного из них откройте в обычном окне, другого — в инкогнито.</p>
+     <div class="row" style="margin-top:14px"><button class="btn btn-ghost" onclick="logout()">
+       ${icon("logout", "ic ic-sm")}Войти другим логином</button></div>`);
 }
 
 let lastFocus = null;
