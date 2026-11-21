@@ -52,8 +52,38 @@ async function api(path, options = {}) {
       location.href = BASE + "/login";
       throw new Error("Сессия истекла");
     }
+    // Отказ в правах бывает, когда в другой вкладке вошли под другим логином:
+    // вход у браузера один на все вкладки. Тогда страница перестраивается под него.
+    if (error.status === 403 && await sessionSwitched()) throw new Error("Вход сменился");
     throw error;
   }
+}
+
+/** В другой вкладке вошли под другим логином? Тогда перезагружаем панель под ним
+ *  и после перезагрузки объясняем, что случилось. */
+async function sessionSwitched() {
+  if (!state.me) return false;
+  try {
+    const fresh = await requestJson("/api/state");
+    if (fresh.me && fresh.me.id !== state.me.id) {
+      try { sessionStorage.setItem("zv_switched", fresh.me.login); } catch (_) {}
+      location.reload();
+      return true;
+    }
+  } catch (error) {
+    if (error.status === 401) { location.href = BASE + "/login"; return true; }
+  }
+  return false;
+}
+
+function reportSwitchedLogin() {
+  let login = null;
+  try { login = sessionStorage.getItem("zv_switched"); sessionStorage.removeItem("zv_switched"); } catch (_) {}
+  if (!login) return;
+  showInfo("Вы вошли под другим логином",
+    `<p>В другой вкладке этого браузера выполнен вход как <b>${escapeHtml(login)}</b>. Вход у браузера один на все вкладки,
+     поэтому панель открыта заново под этим логином.</p>
+     <p>Чтобы одновременно работать администратором и учителем, откройте второй вход в другом браузере или в окне инкогнито.</p>`);
 }
 
 let lastFocus = null;
@@ -1789,8 +1819,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderPanel();
   });
 
+  // Вернулись на вкладку — проверим, не сменился ли вход в другой вкладке
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) sessionSwitched(); });
+
   try {
     await loadState();
+    reportSwitchedLogin();
   } catch (error) {
     toast(error.message, "error");
   }
