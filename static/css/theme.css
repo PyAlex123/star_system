@@ -151,7 +151,7 @@ button, input, select, textarea { font-family: inherit; }
 .btn:hover { background: var(--primary-hover); color: var(--on-primary); }
 .btn:active { transform: translateY(var(--press-y)); box-shadow: var(--depth-pressed); }
 .btn:disabled, .btn[aria-disabled="true"] {
-  background: var(--line); color: var(--muted); box-shadow: none; cursor: not-allowed; transform: none;
+  background: var(--surface-3); color: var(--muted); box-shadow: none; cursor: not-allowed; transform: none;
 }
 
 /* Вторичная: рамка и поверхность */
