@@ -3,16 +3,16 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Dict, Optional, Tuple
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import assets, config
+from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
 from .routers import auth, cards, excel, lessons, me, prizes, schools, students, telegram, users
-from .security import require_teacher_page
+from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
     level=logging.INFO,
@@ -165,7 +165,7 @@ class ResponseHeaders:
 # повторное сжатие только тратит процессор. Ответы API не трогаем: они маленькие,
 # а сжатие ответов с секретами рядом с текстом от пользователя — лишний риск (BREACH).
 _COMPRESSIBLE_STATIC = (".css", ".js", ".svg")
-_COMPRESSIBLE_PAGES = {"/", "/teacher", "/login", "/enter", "/app"}
+_COMPRESSIBLE_PAGES = {"/", "/teacher", "/login", "/enter", "/app", "/_ui"}
 
 
 def _compressible(path: str) -> bool:
@@ -245,37 +245,51 @@ def render_page(name: str) -> str:
     return html
 
 
-def _page(name: str) -> HTMLResponse:
-    return HTMLResponse(render_page(name), headers={"Cache-Control": "no-cache"})
+def _page(name: str, request: Request, theme: str) -> HTMLResponse:
+    """Страница в нужной теме. Тема подставляется на каждый запрос, поверх
+    общего кеша: шаблон один, а школы у посетителей разные."""
+    html = render_page(name).replace(
+        'data-theme="{{THEME}}" data-mode="{{MODE}}"',
+        themes.html_attrs(theme, themes.page_mode(request)))
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/", response_class=HTMLResponse)
-def entry_page():
+def entry_page(request: Request):
     """Главная: «Я ученик» или «Я учитель». Сюда попадает каждый, кто набрал адрес сайта."""
-    return _page("index.html")
+    return _page("index.html", request, themes.device_theme(request, db.load_db()))
 
 
 @app.get("/teacher", response_class=HTMLResponse, dependencies=[Depends(require_teacher_page)])
-def teacher_page():
-    """Журнал учителя. Без входа — перенаправление на /login."""
-    return _page("teacher.html")
+def teacher_page(request: Request):
+    """Журнал учителя. Без входа — перенаправление на /login.
+    Тема — школы, с которой учитель работал последней."""
+    database = db.load_db()
+    return _page("teacher.html", request, themes.panel_theme(request, database, panel_user(request)))
 
 
 @app.get("/login", response_class=HTMLResponse)
-def login_page():
-    return _page("login.html")
+def login_page(request: Request):
+    return _page("login.html", request, themes.device_theme(request, db.load_db()))
 
 
 @app.get("/enter", response_class=HTMLResponse)
-def student_login_page():
+def student_login_page(request: Request):
     """Вход ученика по логину и паролю — для тех, у кого нет Telegram."""
-    return _page("enter.html")
+    return _page("enter.html", request, themes.device_theme(request, db.load_db()))
 
 
 @app.get("/app", response_class=HTMLResponse)
-def student_app():
+def student_app(request: Request):
     """Кабинет ученика (Telegram Web App). Данные отдаются только после проверки initData."""
-    return _page("app.html")
+    return _page("app.html", request, themes.student_page_theme(request, db.load_db()))
+
+
+@app.get("/_ui", response_class=HTMLResponse, dependencies=[Depends(require_superadmin_page)])
+def ui_showcase(request: Request):
+    """Витрина компонентов во всех темах — для проверки дизайна. Только администратор."""
+    theme = themes.clean_theme(request.query_params.get("theme")) or themes.DEFAULT_THEME
+    return _page("ui.html", request, theme)
 
 
 @app.get("/healthz")

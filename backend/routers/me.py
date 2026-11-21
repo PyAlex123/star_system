@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from .. import config, db, images, passwords, schemas, security
+from .. import config, db, images, passwords, schemas, security, themes
 from ..security import require_student
 
 router = APIRouter(prefix="/api/me", tags=["student"])
@@ -34,8 +34,9 @@ def public_card(student: Dict[str, Any], place: int, me_id: int) -> Dict[str, An
 
 
 def class_ranking(database: Dict[str, Any], class_id: int) -> List[Dict[str, Any]]:
-    """Звёзды по убыванию, при равенстве — по алфавиту."""
-    classmates = db.class_students(database, class_id)
+    """Звёзды по убыванию, при равенстве — по алфавиту.
+    Ученики, которых учитель скрыл из рейтинга, в нём не участвуют."""
+    classmates = [s for s in db.class_students(database, class_id) if not s.get("rating_hidden")]
     return sorted(classmates, key=lambda s: (-s["total_stars"], s["name"].lower()))
 
 
@@ -95,6 +96,16 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
     prizes = build_prizes(database, fresh["total_stars"])
     next_prize = next((p for p in prizes if not p["affordable"]), None)
 
+    # Выданные призы: запись истории знает номер приза — ребёнку показываем его фото и название
+    all_prizes = {p["id"]: p for p in database["prizes"]}
+    history = []
+    for entry in fresh.get("history", []):
+        item = dict(entry)
+        prize = all_prizes.get(entry.get("prize_id"))
+        if prize:
+            item["prize"] = {"id": prize["id"], "name": prize["name"], "image": prize.get("image") or ""}
+        history.append(item)
+
     return {
         "student": {
             "id": fresh["id"],
@@ -105,11 +116,13 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
             "total_stars": fresh["total_stars"],
             "avatar": fresh.get("avatar"),
             "avatar_url": avatar_url(fresh),
+            "theme": themes.theme_of_class(database, fresh.get("class_id")),
+            "rating_hidden": bool(fresh.get("rating_hidden")),
         },
         "leaderboard": leaderboard,
         "prizes": prizes,
         "next_prize": next_prize,
-        "history": fresh.get("history", []),
+        "history": history,
         "avatar_presets": db.AVATAR_PRESETS,
     }
 

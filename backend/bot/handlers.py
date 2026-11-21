@@ -9,7 +9,7 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup, Message,
                            WebAppInfo)
 
-from .. import config, db
+from .. import config, db, themes
 
 log = logging.getLogger("stars.bot")
 router = Router()
@@ -17,7 +17,7 @@ router = Router()
 CODE_RE = re.compile(r"^[A-Za-z0-9]{6,16}$")
 
 
-def cabinet_keyboard() -> Optional[InlineKeyboardMarkup]:
+def cabinet_keyboard(student: Optional[Dict[str, Any]] = None) -> Optional[InlineKeyboardMarkup]:
     """Одна кнопка, открывающая Telegram Web App.
 
     Telegram принимает web_app только по HTTPS. Если адрес пока локальный
@@ -26,13 +26,17 @@ def cabinet_keyboard() -> Optional[InlineKeyboardMarkup]:
     url = config.webapp_url()
     if not url.startswith("https://"):
         return None
+    if student:
+        # Тема школы — кабинет сразу открывается в своём оформлении, без мигания
+        url += "?theme=" + themes.theme_of_class(db.load_db(), student.get("class_id"))
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="🚀 Зайти в свой кабинет", web_app=WebAppInfo(url=url))
     ]])
 
 
-async def send_cabinet(message: Message, text: str) -> None:
-    keyboard = cabinet_keyboard()
+async def send_cabinet(message: Message, text: str,
+                       student: Optional[Dict[str, Any]] = None) -> None:
+    keyboard = cabinet_keyboard(student)
     if keyboard is None:
         await message.answer(
             f"{text}\n\n⏳ Кабинет временно недоступен. Загляни чуть позже."
@@ -133,7 +137,7 @@ async def handle_code(message: Message, code: str) -> None:
             f"С возвращением, {name}! 👋\n\n"
             f"У тебя <b>{student['total_stars']} ⭐</b>. Открывай кабинет."
         )
-    await send_cabinet(message, text)
+    await send_cabinet(message, text, student)
 
 
 @router.message(CommandStart())
@@ -148,7 +152,8 @@ async def on_start(message: Message, command: CommandObject) -> None:
         name = html.escape(student["name"].split()[-1]) if student["name"] else "друг"
         await send_cabinet(
             message,
-            f"Привет, {name}! 👋\nУ тебя <b>{student['total_stars']} ⭐</b>. Открывай кабинет."
+            f"Привет, {name}! 👋\nУ тебя <b>{student['total_stars']} ⭐</b>. Открывай кабинет.",
+            student,
         )
         return
 
@@ -178,7 +183,7 @@ async def on_cabinet(message: Message) -> None:
     if not student:
         await message.answer("Сначала отсканируй QR-код со своей карточки 🙂")
         return
-    await send_cabinet(message, f"Твои звёзды: <b>{student['total_stars']} ⭐</b>")
+    await send_cabinet(message, f"Твои звёзды: <b>{student['total_stars']} ⭐</b>", student)
 
 
 @router.message(F.text)

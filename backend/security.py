@@ -212,6 +212,14 @@ def require_teacher_page(request: Request) -> bool:
     return True
 
 
+def require_superadmin_page(request: Request) -> bool:
+    """Служебные страницы администратора: без входа — на форму, учителю — 404."""
+    require_teacher_page(request)
+    if not db.is_superadmin(panel_user(request)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+    return True
+
+
 TeacherDep = Depends(require_teacher)
 SuperadminDep = Depends(require_superadmin)
 TeacherPageDep = Depends(require_teacher_page)

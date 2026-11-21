@@ -1,0 +1,277 @@
+/* «Звёзды» · tokens.css · пять тем
+   Переключение: <html data-theme="notebook"> («Тетрадь отличника»), "quest" («Звёздный квест»), "sky" («Созвездие»), "clear" («Ясно и быстро») или "sticker" («Стикербук»).
+   «Ясно и быстро»: <html data-mode="light|dark|auto">; auto = prefers-color-scheme / Telegram.WebApp.colorScheme; data-light внутри — всегда светлая (печать).
+   «Созвездие»: по умолчанию дневная палитра (учитель, печать); контейнер с атрибутом data-night — ночная (кабинет ученика, вход учителя);
+   data-day внутри data-night возвращает дневную (белая карточка входа).
+   Шрифты: Literata + Onest (notebook), Unbounded + Nunito (quest), Geologica (sky), Golos Text (clear), Rubik + Caveat (sticker), JetBrains Mono (коды).
+   <link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,600&family=Onest:wght@400;500;600;700&family=Unbounded:wght@600;700;800&family=Nunito:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet"> */
+
+:root, [data-theme="notebook"] {
+  /* поверхности */
+  --bg: #F4EFE6; --bg-deep: #EDE6D9; --surface: #FFFDF8; --surface-2: #FAF6EE; --surface-3: #F1EBDF;
+  --line: #E4DCCB; --line-strong: #C9BEA7; --line-soft: #EFE8DA; --tab-off: #EDE6D8;
+  --rule: rgba(228,220,203,.4); /* тетрадная линейка */
+  /* текст */
+  --text: #1B2420; --muted: #5B6660;
+  /* главное действие */
+  --primary: #14533F; --primary-hover: #1D6A52; --on-primary: #FFFFFF;
+  --depth-primary: none; --depth-pressed: none; --press-y: 0px;
+  /* акцент выбора */
+  --accent: #14533F; --accent-text: #14533F; --accent-soft: #E3EEE8;
+  /* шапка кабинета и Telegram */
+  --hero-bg: #14533F; --hero-fg: #FFFFFF; --hero-muted: #B9D3C7; --hero-line: rgba(255,255,255,.16);
+  --hero-chip: rgba(255,255,255,.28); --hero-track: rgba(0,0,0,.24); --hero-tint: rgba(255,255,255,.06);
+  --chrome-btn: rgba(255,255,255,.14);
+  --inverse-bg: #1B2420; --inverse-fg: #FFFFFF; --inverse-muted: #B9D3C7;
+  /* звезда */
+  --star: #E3A21A; --star-depth: #E3A21A; --star-text: #8A5A00; --star-bg: #FBF0D6; --star-line: #EAD9AE; --star-soft: #F1CD7E;
+  /* статусы */
+  --success: #1F7A4D; --ok-line: #9FC2B3; --ok-bg: #14533F; --ok-fg: #FFFFFF;
+  --danger: #B23A2A; --danger-bg: #F8E6E2;
+  /* пьедестал */
+  --podium-1: #E3A21A; --podium-2: #A3AEA8; --podium-3: #B9763C;
+  /* категории призов */
+  --cat-s: #14533F; --cat-m: #8A5A00; --cat-l: #1B2420;
+  /* тени */
+  --scrim: rgba(20,33,28,.5);
+  --shadow-card: 0 1px 0 rgba(20,83,63,.06), 0 6px 18px -10px rgba(20,83,63,.25);
+  --shadow-pop: 0 2px 4px rgba(20,83,63,.08), 0 16px 32px -12px rgba(20,83,63,.35);
+  --shadow-modal: 0 2px 4px rgba(20,83,63,.08), 0 24px 48px -16px rgba(20,33,28,.5);
+  /* радиусы (имя = базовое значение в теме notebook) */
+  --r8: 8px; --r9: 9px; --r10: 10px; --r11: 11px; --r12: 12px; --r14: 14px; --r18: 18px; --r20: 20px; --r22: 22px;
+  /* шрифты */
+  --font-ui: "Onest", system-ui, sans-serif;
+  --font-display: "Literata", Georgia, serif; --dw: 600;
+  --font-num: "Literata", Georgia, serif; --nw: 600;
+  /* переключатели элементов темы */
+  --show-nb: block; --show-nb-flex: flex; --show-q: none; --show-q-flex: none;
+  --photo-ar: 4 / 3; --sel-lift: 0px; --avatar-ring: #F4EFE6;
+  --counter-bg: transparent; --counter-pad: 0; --counter-shadow: none;
+  --show-sky: none; --show-sky-flex: none; --show-bar: block;
+  --show-clear: none; --show-clear-flex: none; --ov: block; --ov-flex: flex; --ov-block: block;
+  --plus-color: var(--star-text); --success-bg: #E3EEE8; --av-cols: 4; --pod-h1: 112px; --pod-h2: 86px; --pod-h3: 72px;
+  --hero-margin: 0; --hero-radius: 0; --hero-border: 0 solid transparent; --hero-shadow: none;
+  --show-stk: none; --show-stk-flex: none; --bw: 1px; --font-hand: "Caveat", cursive;
+  --sky: none; --sky-size: auto; --balance-fg: currentColor; --glow: none; --on-star: #1B2420; --field-bg: #FFFFFF;
+  --ease: cubic-bezier(.2,.7,.3,1);
+}
+
+[data-theme="quest"] {
+  --bg: #FFF7EA; --bg-deep: #F7E8D0; --surface: #FFFFFF; --surface-2: #FFFBF3; --surface-3: #FBEFDB;
+  --line: #F0E2CC; --line-strong: #E0C9A6; --line-soft: #F6ECDC; --tab-off: #F8EBD5;
+  --rule: transparent;
+  --text: #231F2B; --muted: #6B6475;
+  --primary: #FF7A1A; --primary-hover: #FF8B36; --on-primary: #2B1400;
+  --depth-primary: 0 4px 0 #C9560A; --depth-pressed: 0 1px 0 #C9560A; --press-y: 3px;
+  --accent: #12B5A5; --accent-text: #0B7A6E; --accent-soft: #DDF5F1;
+  --hero-bg: #FFF7EA; --hero-fg: #231F2B; --hero-muted: #6B6475; --hero-line: #F0E2CC;
+  --hero-chip: #EADBC3; --hero-track: #F0E2CC; --hero-tint: #FFFFFF;
+  --chrome-btn: rgba(35,31,43,.07);
+  --inverse-bg: #231F2B; --inverse-fg: #FFFFFF; --inverse-muted: #C9C2D3;
+  --star: #FFC21A; --star-depth: #D79A00; --star-text: #9A5B00; --star-bg: #FFF1C7; --star-line: #F7DC8F; --star-soft: #FFE08A;
+  --success: #157A41; --ok-line: #8FDCCF; --ok-bg: #22A55B; --ok-fg: #04210F;
+  --danger: #B3261E; --danger-bg: #FDE4E4;
+  --podium-1: #FFC21A; --podium-2: #C9D2E0; --podium-3: #F0A36B;
+  --cat-s: #12B5A5; --cat-m: #FF7A1A; --cat-l: #6A4BFF;
+  --scrim: rgba(35,31,43,.5);
+  --shadow-card: 0 4px 0 #EADBC3;
+  --shadow-pop: 0 4px 0 #EADBC3, 0 16px 32px -16px rgba(35,31,43,.28);
+  --shadow-modal: 0 6px 0 #EADBC3, 0 24px 48px -16px rgba(35,31,43,.4);
+  --r8: 10px; --r9: 12px; --r10: 14px; --r11: 14px; --r12: 16px; --r14: 18px; --r18: 22px; --r20: 24px; --r22: 28px;
+  --font-ui: "Nunito", system-ui, sans-serif;
+  --font-display: "Nunito", system-ui, sans-serif; --dw: 800;
+  --font-num: "Unbounded", system-ui, sans-serif; --nw: 700;
+  --show-nb: none; --show-nb-flex: none; --show-q: block; --show-q-flex: flex;
+  --photo-ar: 1 / 1; --sel-lift: -4px; --avatar-ring: #12B5A5;
+  --counter-bg: #FFFFFF; --counter-pad: 6px 18px 6px 10px; --counter-shadow: 0 4px 0 #EADBC3;
+  --on-star: #231F2B; --field-bg: #FFFFFF;
+  --ease: cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ── «Стикербук» ── */
+[data-theme="sticker"] {
+  --bg: #FFFDF5; --bg-deep: #F5F1E3; --surface: #FFFFFF; --surface-2: #FAF8F0; --surface-3: #F3F0E6;
+  --line: #121212; --line-strong: #121212; --line-soft: #E6ECF5; --tab-off: #F3F0E6;
+  --rule: #E6ECF5; --bw: 2px;
+  --text: #121212; --muted: #4B4B4B;
+  --primary: #4DA8FF; --primary-hover: #6BB8FF; --on-primary: #121212;
+  --depth-primary: 0 0 0 2px #121212, 4px 4px 0 2px #121212; --depth-pressed: 0 0 0 2px #121212, 1px 1px 0 2px #121212; --press-y: 3px;
+  --accent: #121212; --accent-text: #121212; --accent-soft: #B69CFF;
+  --hero-bg: #FFD23F; --hero-fg: #121212; --hero-muted: #3D3A33; --hero-line: rgba(18,18,18,.35);
+  --hero-chip: #121212; --hero-track: #FFFFFF; --hero-tint: #FFFFFF; --chrome-btn: rgba(18,18,18,.1);
+  --hero-img: none;
+  --inverse-bg: #121212; --inverse-fg: #FFFFFF; --inverse-muted: #D9DEE7;
+  --star: #FFD23F; --star-depth: #121212; --star-text: #121212; --star-bg: #FFD23F; --star-line: #121212; --star-soft: #FFE58A;
+  --success: #0E7A4B; --success-bg: #3DD598; --ok-line: #121212; --ok-bg: #3DD598; --ok-fg: #121212;
+  --danger: #B3261E; --danger-bg: #FFD9D4;
+  --podium-1: #FFD23F; --podium-2: #D9DEE7; --podium-3: #E8A66F;
+  --cat-s: #3DD598; --cat-m: #4DA8FF; --cat-l: #B69CFF;
+  --scrim: rgba(18,18,18,.5);
+  --shadow-card: 3px 3px 0 #121212; --shadow-pop: 4px 4px 0 #121212; --shadow-modal: 6px 6px 0 #121212;
+  --r8: 10px; --r9: 10px; --r10: 12px; --r11: 12px; --r12: 14px; --r14: 14px; --r18: 20px; --r20: 20px; --r22: 20px;
+  --font-ui: "Rubik", system-ui, sans-serif;
+  --font-display: "Rubik", system-ui, sans-serif; --dw: 800;
+  --font-num: "Rubik", system-ui, sans-serif; --nw: 800;
+  --show-nb: none; --show-nb-flex: none; --show-q: none; --show-q-flex: none; --show-sky: none; --show-sky-flex: none; --show-bar: block;
+  --show-clear: none; --show-clear-flex: none; --ov: block; --ov-flex: flex; --ov-block: block;
+  --show-stk: block; --show-stk-flex: flex;
+  --photo-ar: 1 / 1; --sel-lift: -3px; --avatar-ring: #121212;
+  --photo-w: calc(100% - 16px); --photo-m: 8px 8px 0; --photo-b: 2px solid #121212; --photo-r: 10px;
+  --counter-bg: #FFFFFF; --counter-pad: 4px 18px 4px 10px; --counter-shadow: 0 0 0 2px #121212, 3px 3px 0 2px #121212;
+  --sky: linear-gradient(#E6ECF5 1px, transparent 1px), linear-gradient(90deg, #E6ECF5 1px, transparent 1px); --sky-size: 24px 24px, 24px 24px;
+  --head-grid: linear-gradient(#E6ECF5 1px, transparent 1px), linear-gradient(90deg, #E6ECF5 1px, transparent 1px);
+  --balance-fg: currentColor; --glow: none; --on-star: #121212; --field-bg: #FFFFFF; --plus-color: #121212;
+  --board-bg: #E9C79B; --board-border: 2px solid #121212; --board-r: 20px; --board-pad: 18px 12px 0;
+  --me-font: "Caveat", cursive; --me-size: 20px;
+  --ok-plate-bg: #3DD598; --ok-plate-pad: 6px 8px; --ok-plate-border: 2px solid #121212;
+  --finish-bg: #3DD598; --finish-fg: #121212;
+  --mini-pill: #FFFFFF; --mini-pill-shadow: 0 0 0 2px #121212, 2px 2px 0 2px #121212;
+  --cls-a-bg: #4DA8FF; --cls-b-bg: #3DD598; --cls-c-bg: #FF8FC7;
+  --ease: cubic-bezier(.34,1.56,.64,1);
+}
+[data-theme="sticker"] [data-light] { --accent: #121212; }
+
+/* ── «Ясно и быстро» · светлая ── */
+[data-theme="clear"], [data-theme="clear"] [data-light] {
+  --bg: #F6F6F4; --bg-deep: #EEEEEA; --surface: #FFFFFF; --surface-2: #F0F0ED; --surface-3: #EBEBE7;
+  --line: #E6E5E1; --line-strong: #CFCEC8; --line-soft: #EFEEEB; --tab-off: #EEEEEA; --rule: transparent;
+  --text: #17181C; --muted: #64656C;
+  --primary: #1E2230; --primary-hover: #2D3243; --on-primary: #FFFFFF;
+  --depth-primary: none; --depth-pressed: none; --press-y: 0px;
+  --accent: #1E2230; --accent-text: #1E2230; --accent-soft: #FEF3DC;
+  --hero-bg: #FFFFFF; --hero-fg: #17181C; --hero-muted: #64656C; --hero-line: #E6E5E1;
+  --hero-chip: #E6E5E1; --hero-track: #F0F0ED; --hero-tint: #FFFFFF; --chrome-btn: rgba(23,24,28,.06);
+  --inverse-bg: #17181C; --inverse-fg: #FFFFFF; --inverse-muted: #A0A1AA;
+  --star: #F5A524; --star-depth: #F5A524; --star-text: #8F5A00; --star-bg: #FEF3DC; --star-line: #F6DDA6; --star-soft: #F9CB7A;
+  --success: #146C38; --success-bg: #E7F6EC; --ok-line: #CDE9D6; --ok-bg: #146C38; --ok-fg: #FFFFFF;
+  --danger: #C8322B; --danger-bg: #FBE8E7;
+  --podium-1: #F5A524; --podium-2: #A7ABB5; --podium-3: #C98A52;
+  --cat-s: #1E2230; --cat-m: #8F5A00; --cat-l: #17181C;
+  --scrim: rgba(16,17,20,.45);
+  --shadow-card: 0 1px 2px rgba(16,17,20,.06);
+  --shadow-pop: 0 1px 2px rgba(16,17,20,.06), 0 8px 24px -12px rgba(16,17,20,.22);
+  --shadow-modal: 0 8px 24px -12px rgba(16,17,20,.3), 0 24px 48px -20px rgba(16,17,20,.3);
+  --r8: 8px; --r9: 8px; --r10: 10px; --r11: 10px; --r12: 12px; --r14: 12px; --r18: 16px; --r20: 16px; --r22: 16px;
+  --font-ui: "Golos Text", system-ui, sans-serif;
+  --font-display: "Golos Text", system-ui, sans-serif; --dw: 650;
+  --font-num: "Golos Text", system-ui, sans-serif; --nw: 700;
+  --show-nb: none; --show-nb-flex: flex; --show-q: none; --show-q-flex: none; --show-sky: none; --show-sky-flex: none; --show-bar: block;
+  --show-clear: block; --show-clear-flex: flex; --ov: none; --ov-flex: none; --ov-block: none;
+  --photo-ar: 4 / 3; --sel-lift: 0px; --avatar-ring: #E6E5E1;
+  --counter-bg: transparent; --counter-pad: 0; --counter-shadow: none;
+  --sky: none; --sky-size: auto; --balance-fg: currentColor; --glow: none; --on-star: #17181C; --field-bg: #FFFFFF;
+  --plus-color: #146C38; --av-cols: 5; --pod-h1: 84px; --pod-h2: 84px; --pod-h3: 84px;
+  --hero-margin: 12px 16px 0; --hero-radius: 16px; --hero-border: 1px solid #E6E5E1; --hero-shadow: 0 1px 2px rgba(16,17,20,.06);
+  --ease: cubic-bezier(.2,.7,.3,1);
+  color-scheme: light;
+}
+[data-theme="clear"] [data-light] { color: var(--text); }
+/* ── «Ясно и быстро» · тёмная ── */
+[data-theme="clear"][data-mode="dark"] {
+  --bg: #0F1013; --bg-deep: #0A0B0D; --surface: #18191D; --surface-2: #212228; --surface-3: #26272E;
+  --line: #2A2C33; --line-strong: #3A3C45; --line-soft: #222329; --tab-off: #18191D;
+  --text: #F2F2F4; --muted: #A0A1AA;
+  --primary: #F2F2F4; --primary-hover: #FFFFFF; --on-primary: #0F1013;
+  --accent: #F2F2F4; --accent-text: #F2F2F4; --accent-soft: #2E2614;
+  --hero-bg: #18191D; --hero-fg: #F2F2F4; --hero-muted: #A0A1AA; --hero-line: #2A2C33;
+  --hero-chip: #2A2C33; --hero-track: #212228; --hero-tint: #18191D; --chrome-btn: rgba(255,255,255,.08);
+  --inverse-bg: #F2F2F4; --inverse-fg: #0F1013; --inverse-muted: #3A3C45;
+  --star: #FFB938; --star-depth: #FFB938; --star-text: #FFB938; --star-bg: #2E2614; --star-line: #4A3B1A; --star-soft: #7A5A20;
+  --success: #4ADE80; --success-bg: #10261A; --ok-line: #1F4A30; --ok-bg: #4ADE80; --ok-fg: #0F1013;
+  --danger: #FF6B63; --danger-bg: #2E1514;
+  --podium-2: #8E929C;
+  --scrim: rgba(0,0,0,.6);
+  --shadow-card: none; --shadow-pop: 0 12px 32px -12px rgba(0,0,0,.6); --shadow-modal: 0 24px 48px -16px rgba(0,0,0,.7);
+  --avatar-ring: #2A2C33; --on-star: #0F1013; --field-bg: #0F1013; --plus-color: #4ADE80;
+  --hero-border: 1px solid #2A2C33; --hero-shadow: none;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="clear"][data-mode="auto"] {
+    --bg: #0F1013; --bg-deep: #0A0B0D; --surface: #18191D; --surface-2: #212228; --surface-3: #26272E;
+    --line: #2A2C33; --line-strong: #3A3C45; --line-soft: #222329; --tab-off: #18191D;
+    --text: #F2F2F4; --muted: #A0A1AA;
+    --primary: #F2F2F4; --primary-hover: #FFFFFF; --on-primary: #0F1013;
+    --accent: #F2F2F4; --accent-text: #F2F2F4; --accent-soft: #2E2614;
+    --hero-bg: #18191D; --hero-fg: #F2F2F4; --hero-muted: #A0A1AA; --hero-line: #2A2C33;
+    --hero-chip: #2A2C33; --hero-track: #212228; --hero-tint: #18191D; --chrome-btn: rgba(255,255,255,.08);
+    --inverse-bg: #F2F2F4; --inverse-fg: #0F1013; --inverse-muted: #3A3C45;
+    --star: #FFB938; --star-depth: #FFB938; --star-text: #FFB938; --star-bg: #2E2614; --star-line: #4A3B1A; --star-soft: #7A5A20;
+    --success: #4ADE80; --success-bg: #10261A; --ok-line: #1F4A30; --ok-bg: #4ADE80; --ok-fg: #0F1013;
+    --danger: #FF6B63; --danger-bg: #2E1514;
+    --podium-2: #8E929C;
+    --scrim: rgba(0,0,0,.6);
+    --shadow-card: none; --shadow-pop: 0 12px 32px -12px rgba(0,0,0,.6); --shadow-modal: 0 24px 48px -16px rgba(0,0,0,.7);
+    --avatar-ring: #2A2C33; --on-star: #0F1013; --field-bg: #0F1013; --plus-color: #4ADE80;
+    --hero-border: 1px solid #2A2C33; --hero-shadow: none;
+    color-scheme: dark;
+  }
+}
+
+/* ── «Созвездие» · день: панель учителя, печать ── */
+[data-theme="sky"], [data-theme="sky"] [data-day] {
+  --bg: #F3F5FB; --bg-deep: #E8ECF6; --surface: #FFFFFF; --surface-2: #F7F8FC; --surface-3: #EEF1F8;
+  --line: #E1E5F0; --line-strong: #C3CADB; --line-soft: #EBEEF6; --tab-off: #E8ECF6;
+  --rule: transparent;
+  --text: #0E1430; --muted: #5A6385;
+  --primary: #24307A; --primary-hover: #2F3D93; --on-primary: #FFFFFF;
+  --depth-primary: none; --depth-pressed: none; --press-y: 0px;
+  --accent: #24307A; --accent-text: #24307A; --accent-soft: #E6E9F8;
+  --hero-bg: #24307A; --hero-fg: #FFFFFF; --hero-muted: #C7CCEB; --hero-line: rgba(255,255,255,.16);
+  --hero-chip: rgba(255,255,255,.28); --hero-track: rgba(0,0,0,.24); --hero-tint: rgba(255,255,255,.06);
+  --chrome-btn: rgba(255,255,255,.14);
+  --inverse-bg: #0E1430; --inverse-fg: #FFFFFF; --inverse-muted: #C7CCEB;
+  --star: #F2B705; --star-depth: #F2B705; --star-text: #8C6A00; --star-bg: #FFF4CC; --star-line: #F3DE94; --star-soft: #F8D766;
+  --success: #15803D; --ok-line: #F2B705; --ok-bg: #24307A; --ok-fg: #FFFFFF;
+  --danger: #C2362B; --danger-bg: #FBE7E5;
+  --podium-1: #F2B705; --podium-2: #B7C0E0; --podium-3: #D9864F;
+  --cat-s: #24307A; --cat-m: #8C6A00; --cat-l: #0E1430;
+  --scrim: rgba(10,15,36,.55);
+  --shadow-card: 0 1px 2px rgba(14,20,48,.06), 0 8px 20px -12px rgba(14,20,48,.18);
+  --shadow-pop: 0 2px 4px rgba(14,20,48,.08), 0 16px 32px -12px rgba(14,20,48,.3);
+  --shadow-modal: 0 2px 4px rgba(14,20,48,.08), 0 24px 48px -16px rgba(10,15,36,.45);
+  --r8: 10px; --r9: 10px; --r10: 12px; --r11: 12px; --r12: 14px; --r14: 14px; --r18: 20px; --r20: 20px; --r22: 24px;
+  --font-ui: "Geologica", system-ui, sans-serif;
+  --font-display: "Geologica", system-ui, sans-serif; --dw: 650;
+  --font-num: "Geologica", system-ui, sans-serif; --nw: 700;
+  --show-nb: none; --show-nb-flex: none; --show-q: none; --show-q-flex: none;
+  --show-sky: block; --show-sky-flex: flex; --show-bar: none;
+  --photo-ar: 4 / 3; --sel-lift: 0px; --avatar-ring: #8E7BFF;
+  --counter-bg: transparent; --counter-pad: 0; --counter-shadow: none;
+  --sky: none; --sky-size: auto; --balance-fg: currentColor; --glow: none; --on-star: #0A0F24; --field-bg: #FFFFFF;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}
+[data-theme="sky"] [data-day] { color: var(--text); }
+
+/* ── «Созвездие» · ночь: кабинет ученика ── */
+[data-theme="sky"] [data-night] {
+  --bg: #0A0F24; --bg-deep: #070B1C; --surface: #131A38; --surface-2: #1B2450; --surface-3: #202A5A;
+  --line: rgba(255,255,255,.09); --line-strong: rgba(255,255,255,.24); --line-soft: rgba(255,255,255,.07); --tab-off: #131A38;
+  --text: #EEF1FF; --muted: #A3ACD0;
+  --primary: #5CE1E6; --primary-hover: #7DE8EC; --on-primary: #04212A;
+  --accent: #8E7BFF; --accent-text: #FFD166; --accent-soft: #232B5E;
+  --hero-bg: #0A0F24; --hero-fg: #EEF1FF; --hero-muted: #A3ACD0; --hero-line: rgba(255,255,255,.1);
+  --hero-chip: rgba(255,255,255,.18); --hero-track: rgba(255,255,255,.1); --hero-tint: rgba(255,255,255,.04);
+  --chrome-btn: rgba(255,255,255,.1);
+  --inverse-bg: #EEF1FF; --inverse-fg: #0A0F24; --inverse-muted: #3A4270;
+  --star: #FFD166; --star-depth: #FFD166; --star-text: #FFD166; --star-bg: rgba(255,209,102,.12); --star-line: rgba(255,209,102,.4); --star-soft: rgba(255,209,102,.45);
+  --success: #4ADE80; --ok-line: #FFD166; --ok-bg: #FFD166; --ok-fg: #0A0F24;
+  --danger: #FF7A7A; --danger-bg: rgba(255,122,122,.12);
+  --podium-1: #FFD166; --podium-2: #C7D2FE; --podium-3: #F4A774;
+  --cat-s: #5CE1E6; --cat-m: #FFD166; --cat-l: #8E7BFF;
+  --scrim: rgba(3,5,15,.72);
+  --shadow-card: none; --shadow-pop: 0 16px 40px -12px rgba(0,0,0,.6); --shadow-modal: 0 24px 60px -16px rgba(0,0,0,.7);
+  --photo-ar: 1 / 1;
+  --sky: radial-gradient(circle at 30% 40%, rgba(255,255,255,.75) 0 1px, transparent 1.6px),
+         radial-gradient(circle at 70% 20%, rgba(200,210,255,.55) 0 .8px, transparent 1.4px),
+         radial-gradient(circle at 50% 80%, rgba(255,255,255,.38) 0 1.2px, transparent 2px);
+  --sky-size: 97px 113px, 151px 131px, 233px 199px;
+  --balance-fg: #FFD166; --glow: 0 0 12px rgba(255,209,102,.45); --plus-color: #FFD166; --success-bg: rgba(74,222,128,.12); --field-bg: #0E1430;
+  color: var(--text);
+}
+
+[data-theme="quest"] body { font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}

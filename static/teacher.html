@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="{{THEME}}" data-mode="{{MODE}}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light dark">
 <title>Журнал звёзд — панель учителя</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
 </head>
@@ -14,204 +14,350 @@
 {{ICONS}}
 
 <header class="topbar">
-  <div class="brand">
-    <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
-    <span class="brand-text">Журнал звёзд<small id="brandSub"></small></span>
-  </div>
+  <div class="topbar-in">
+    <div class="brand">
+      <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
+      <span class="brand-text">
+        <span class="brand-title">Журнал звёзд</span>
+        <span class="brand-sub" id="brandSub"></span>
+      </span>
+    </div>
 
-  <nav class="nav">
-    <button class="active" data-page="journal" onclick="switchPage('journal')">
-      <svg class="ic ic-sm"><use href="#i-users"></use></svg> Журнал
-    </button>
-    <button data-page="prizes" onclick="switchPage('prizes')">
-      <svg class="ic ic-sm"><use href="#i-gift"></use></svg> Призы
-    </button>
-    <button data-page="lessons" onclick="switchPage('lessons')">
-      <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Уроки
-    </button>
-    <button data-page="users" class="admin-only" onclick="switchPage('users')">
-      <svg class="ic ic-sm"><use href="#i-user"></use></svg> Учителя
-    </button>
-  </nav>
+    <nav class="nav" aria-label="Разделы">
+      <button data-page="journal" aria-current="page" onclick="switchPage('journal')">
+        <svg class="ic"><use href="#i-book"></use></svg>Журнал
+      </button>
+      <button data-page="prizes" onclick="switchPage('prizes')">
+        <svg class="ic"><use href="#i-gift"></use></svg>Призы
+      </button>
+      <button data-page="lessons" onclick="switchPage('lessons')">
+        <svg class="ic"><use href="#i-calendar"></use></svg>Уроки
+      </button>
+      <button data-page="users" class="admin-only" onclick="switchPage('users')">
+        <svg class="ic"><use href="#i-users"></use></svg>Учителя
+      </button>
+    </nav>
 
-  <div class="row">
-    <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль">
-      <svg class="ic ic-sm"><use href="#i-key"></use></svg> Пароль
-    </button>
-    <button class="btn btn-ghost btn-sm" onclick="logout()">
-      <svg class="ic ic-sm"><use href="#i-logout"></use></svg> Выйти
-    </button>
+    <div class="topbar-end">
+      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль">
+        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Пароль
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">
+        <svg class="ic ic-sm"><use href="#i-logout"></use></svg>Выйти
+      </button>
+    </div>
   </div>
 </header>
 
-<div class="layout">
+<!-- ── Журнал (T1) ─────────────────────────────────────────── -->
+<main class="page active" id="page-journal">
 
-  <!-- ── Журнал ──────────────────────────────────────────── -->
-  <section class="page active" id="page-journal">
+  <div class="toolbar card">
+    <div class="menu-wrap tool" id="schoolMenu">
+      <span class="caps">Школа</span>
+      <button class="chip-btn" onclick="toggleMenu('schoolMenu', event)" aria-haspopup="menu" aria-expanded="false">
+        <span class="chip-main" id="schoolLabel">—</span><span class="chip-dim" id="schoolCount"></span>
+        <svg class="ic ic-sm"><use href="#i-chevron-down"></use></svg>
+      </button>
+      <div class="menu" role="menu" id="schoolMenuList"></div>
+    </div>
 
-    <div class="toolbar">
-      <div class="row">
-        <label for="lessonDate" class="scope-label">
-          <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Дата урока
+    <span class="vrule"></span>
+
+    <label class="tool">
+      <span class="caps">Дата урока</span>
+      <span class="chip-btn date-chip">
+        <svg class="ic ic-sm"><use href="#i-calendar"></use></svg>
+        <span id="lessonDateText">—</span><span class="chip-dim" id="lessonWeekday"></span>
+        <input type="date" id="lessonDate" onchange="onLessonDateChange()" aria-label="Дата урока">
+      </span>
+    </label>
+
+    <span class="vrule"></span>
+
+    <div class="bank" id="bank">
+      <span class="caps">Банк дня</span>
+      <span class="bank-num" id="bankNum">0 / 10</span>
+      <span class="bank-dots" id="bankDots" aria-hidden="true"></span>
+      <span class="bank-text" id="bankText"></span>
+    </div>
+
+    <span class="grow"></span>
+
+    <div class="menu-wrap" id="excelMenu">
+      <button class="btn btn-ghost btn-md" onclick="toggleMenu('excelMenu', event)" aria-haspopup="menu" aria-expanded="false">
+        <svg class="ic ic-sm"><use href="#i-export"></use></svg>Excel
+        <svg class="ic ic-sm"><use href="#i-chevron-down"></use></svg>
+      </button>
+      <div class="menu right wide" role="menu">
+        <button role="menuitem" class="rich" onclick="downloadTemplate()">
+          <svg class="ic ic-sm"><use href="#i-export"></use></svg>
+          <span><b>Скачать шаблон</b><small>пустая таблица для списка учеников</small></span>
+        </button>
+        <label role="menuitem" class="rich">
+          <svg class="ic ic-sm"><use href="#i-import"></use></svg>
+          <span><b>Загрузить заполненный</b><small>ученики добавятся в выбранную школу</small></span>
+          <input type="file" id="excelFile" hidden
+                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                 onchange="uploadExcel(event)">
         </label>
-        <input type="date" id="lessonDate" onchange="onLessonDateChange()">
-        <div class="bank" id="bank">
-          <svg class="ic ic-sm"><use href="#i-star"></use></svg>
-          <span id="bankText">Банк дня: 10</span>
-          <span class="bank-dots" id="bankDots"></span>
-        </div>
-      </div>
-      <div class="row">
-        <div class="menu-wrap" id="excelMenu">
-          <button class="btn btn-ghost btn-sm" onclick="toggleMenu('excelMenu', event)"
-                  aria-haspopup="true" aria-expanded="false">
-            <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg> Excel
-            <svg class="ic ic-sm menu-caret"><use href="#i-chevron-down"></use></svg>
-          </button>
-          <div class="menu" role="menu">
-            <button role="menuitem" onclick="downloadTemplate()">
-              <svg class="ic ic-sm"><use href="#i-export"></use></svg>
-              <span>Скачать шаблон<small>пустая таблица для списка учеников</small></span>
-            </button>
-            <label role="menuitem">
-              <svg class="ic ic-sm"><use href="#i-import"></use></svg>
-              <span>Загрузить заполненный<small>ученики добавятся в выбранную школу</small></span>
-              <input type="file" id="excelFile" hidden
-                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                     onchange="uploadExcel(event)">
-            </label>
-            <button role="menuitem" onclick="openPaste()">
-              <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg>
-              <span>Вставить строки<small>скопировать из открытой таблицы</small></span>
-            </button>
-            <div class="menu-sep"></div>
-            <button role="menuitem" onclick="exportExcel()">
-              <svg class="ic ic-sm"><use href="#i-export"></use></svg>
-              <span>Выгрузить журнал<small>звёзды, логины и коды карточек</small></span>
-            </button>
-          </div>
-        </div>
+        <button role="menuitem" class="rich" onclick="openPaste()">
+          <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg>
+          <span><b>Вставить строки</b><small>скопировать из открытой таблицы</small></span>
+        </button>
+        <div class="menu-sep"></div>
+        <button role="menuitem" class="rich" onclick="exportExcel()">
+          <svg class="ic ic-sm"><use href="#i-export"></use></svg>
+          <span><b>Выгрузить журнал</b><small>звёзды, логины и коды карточек</small></span>
+        </button>
       </div>
     </div>
+  </div>
 
-    <div class="panel">
-      <!-- Школа и класс -->
-      <div class="scope-bar">
-        <span class="scope-label">
-          <svg class="ic ic-sm"><use href="#i-school"></use></svg> Школа
-        </span>
-        <select id="schoolSelect" onchange="selectSchool(parseInt(this.value))"></select>
-        <button class="icon-btn admin-only" title="Добавить школу" onclick="openSchool()">
-          <svg class="ic"><use href="#i-plus"></use></svg>
-        </button>
-        <button class="icon-btn admin-only" title="Переименовать школу" onclick="openSchool(activeSchool)">
-          <svg class="ic"><use href="#i-pencil"></use></svg>
-        </button>
-        <button class="icon-btn danger admin-only" title="Удалить школу" onclick="removeSchool()">
-          <svg class="ic"><use href="#i-trash"></use></svg>
-        </button>
+  <div class="class-tabs" id="classTabs" role="tablist" aria-label="Классы"></div>
 
-        <span class="scope-divider"></span>
+  <section class="sheet" id="journalSheet">
+    <div class="sheet-head">
+      <h2 class="caps sheet-title" id="studentsTitle">Ученики</h2>
+      <span class="sheet-rule"></span>
+      <span class="kbd-hints">
+        <kbd>0–5</kbd>звёзды <kbd>↑↓</kbd>соседний ученик
+        <span class="only-clear-flex kbd-more"><kbd>Enter</kbd>дальше <kbd>Space</kbd>карточка <kbd>Ctrl+Enter</kbd>завершить</span>
+      </span>
+      <button class="btn btn-ghost btn-sm not-clear-flex" id="passwordsToggle" onclick="togglePasswords()"
+              title="Пароли скрыты, чтобы их не увидел класс, если экран выведен на доску">
+        <svg class="ic ic-sm"><use href="#i-eye"></use></svg><span>Показать пароли</span>
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="openCards()">
+        <svg class="ic ic-sm"><use href="#i-printer"></use></svg>Карточки класса
+      </button>
+    </div>
 
-        <span class="scope-label">
-          <svg class="ic ic-sm"><use href="#i-users"></use></svg> Класс
-        </span>
-        <select id="classSelect" onchange="onClassSelect(this.value)"></select>
-        <button class="icon-btn" title="Добавить классы" onclick="openClassGrid()">
-          <svg class="ic"><use href="#i-plus"></use></svg>
-        </button>
-        <button class="icon-btn" title="Переименовать класс" onclick="renameClass()">
-          <svg class="ic"><use href="#i-pencil"></use></svg>
-        </button>
-        <button class="icon-btn danger" title="Удалить класс" onclick="removeClass()">
-          <svg class="ic"><use href="#i-trash"></use></svg>
-        </button>
-      </div>
+    <div id="tableHost"></div>
 
-      <div class="between" style="margin-bottom:12px;">
-        <div class="eyebrow" style="margin:0; flex:1;">Ученики</div>
-        <button class="btn btn-ghost btn-sm" id="passwordsToggle" onclick="togglePasswords()"
-                title="Пароли скрыты, чтобы их не увидел класс, если экран выведен на доску">
-          <svg class="ic ic-sm"><use href="#i-eye"></use></svg> <span>Показать пароли</span>
-        </button>
-        <button class="btn btn-ghost btn-sm" onclick="openCards()">
-          <svg class="ic ic-sm"><use href="#i-printer"></use></svg> Карточки класса
-        </button>
-      </div>
-
-      <div id="tableHost"></div>
-
-      <div class="between" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--line);">
-        <div class="row">
-          <input type="text" id="newStudentName" placeholder="Фамилия и Имя ученика" style="width:230px;">
-          <input type="number" id="newStudentStars" value="0" min="0" style="width:84px;" title="Стартовые звёзды">
-          <button class="btn btn-sm" onclick="addStudent()">
-            <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить ученика
-          </button>
-        </div>
-        <button class="btn" onclick="submitLesson()">
-          <svg class="ic ic-sm"><use href="#i-check"></use></svg> Завершить урок и начислить
-        </button>
-      </div>
+    <div class="add-row" id="addRow">
+      <span class="add-ring"><svg class="ic ic-sm"><use href="#i-plus"></use></svg></span>
+      <input type="text" id="newStudentName" class="input-sm" placeholder="Фамилия и имя нового ученика" aria-label="Фамилия и имя">
+      <label class="add-stars">Стартовый баланс
+        <input type="number" id="newStudentStars" class="input-sm" value="0" min="0" inputmode="numeric" aria-label="Стартовый баланс">
+      </label>
+      <button class="btn btn-outline btn-md" onclick="addStudent()">Добавить ученика</button>
     </div>
   </section>
 
-  <!-- ── Призы ───────────────────────────────────────────── -->
-  <section class="page" id="page-prizes">
-    <div class="panel">
-      <div class="between" style="margin-bottom:14px;">
-        <div>
-          <div class="eyebrow" style="margin-bottom:4px;">Витрина призов</div>
-          <p class="hint-text admin-only" style="margin:0;">
-            Эти призы видят дети. Наведите на карточку, чтобы заменить фотографию.
-          </p>
-          <p class="hint-text teacher-only" style="margin:0;">
-            Эти призы видят дети. Выдать приз — кнопка с подарком в строке ученика.
-          </p>
-        </div>
-        <button class="btn btn-sm admin-only" onclick="openPrize()">
-          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить приз
-        </button>
-      </div>
-      <div class="prize-admin-grid" id="prizeGrid"></div>
+  <div class="lesson-bar" id="lessonBar">
+    <div class="lesson-bar-in">
+      <span class="caps">Итог урока</span>
+      <span class="lesson-sum"><span id="sumStars">0</span><svg class="ic ic-lg ic-star"><use href="#i-star"></use></svg></span>
+      <span class="lesson-who" id="sumText">пока никому не поставлено</span>
+      <span class="grow"></span>
+      <button class="btn btn-quiet" id="resetLessonBtn" onclick="resetLesson()" hidden>Сбросить</button>
+      <button class="btn finish-btn" id="finishBtn" onclick="openFinish()" disabled>
+        <svg class="ic"><use href="#i-check"></use></svg>Завершить урок и начислить
+      </button>
     </div>
-  </section>
+  </div>
+</main>
 
-  <!-- ── Учителя (только администратор) ──────────────────── -->
-  <section class="page" id="page-users">
-    <div class="panel">
-      <div class="between" style="margin-bottom:14px;">
-        <div>
-          <div class="eyebrow" style="margin-bottom:4px;">Учителя и доступ</div>
-          <p class="hint-text" style="margin:0;">Учитель видит только отмеченные школы.</p>
-        </div>
-        <button class="btn btn-sm" onclick="openUser()">
-          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить учителя
-        </button>
-      </div>
-      <div id="userList"></div>
+<!-- ── Призы (T2) ──────────────────────────────────────────── -->
+<main class="page" id="page-prizes">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Витрина призов</h1>
+      <p class="page-sub admin-only">Эти призы видят дети в своём кабинете. Скрытые — видите только вы.</p>
+      <p class="page-sub teacher-only">Эти призы видят дети. Выдать приз — кнопка с подарком в строке ученика.</p>
     </div>
-  </section>
+    <button class="btn admin-only" onclick="openPrize()">
+      <svg class="ic"><use href="#i-plus"></use></svg>Добавить приз
+    </button>
+  </div>
+  <div class="prize-grid" id="prizeGrid"></div>
+</main>
 
-  <!-- ── Уроки ───────────────────────────────────────────── -->
-  <section class="page" id="page-lessons">
-    <div class="panel">
-      <div class="eyebrow">История проведённых уроков</div>
-      <div id="lessonList"></div>
+<!-- ── Уроки (T3) ──────────────────────────────────────────── -->
+<main class="page narrow" id="page-lessons">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Уроки</h1>
+      <p class="page-sub">Все начисления по датам. Ошибку можно отменить — звёзды вернутся с баланса ученика.</p>
     </div>
-  </section>
+    <div class="seg class-seg" id="lessonClasses" role="tablist" aria-label="Класс"></div>
+  </div>
+  <div class="lesson-list" id="lessonList"></div>
+</main>
 
+<!-- ── Учителя (только администратор) ──────────────────────── -->
+<main class="page narrow" id="page-users">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Учителя</h1>
+      <p class="page-sub">Учитель входит по своему логину и видит только отмеченные школы.</p>
+    </div>
+    <button class="btn" onclick="openUser()">
+      <svg class="ic"><use href="#i-plus"></use></svg>Добавить учителя
+    </button>
+  </div>
+  <div class="card users" id="userList"></div>
+</main>
+
+<!-- ── Боковая панель ученика (sky, clear, sticker) ────────── -->
+<aside class="side-panel" id="sidePanel" role="dialog" aria-label="Карточка ученика" hidden></aside>
+
+<!-- ── Окна ────────────────────────────────────────────────── -->
+
+<div class="backdrop" id="modalFinish" onclick="if(event.target===this) closeModal('modalFinish')">
+  <div class="modal finish" role="dialog" aria-labelledby="finishTitle">
+    <div class="finish-head">
+      <div class="caps" id="finishCaps">Итог урока</div>
+      <div class="modal-title" id="finishTitle">Начислить?</div>
+    </div>
+    <div class="finish-list" id="finishList"></div>
+    <div class="finish-note">
+      <svg class="ic"><use href="#i-info"></use></svg>
+      <span id="finishNote"></span>
+    </div>
+    <div class="modal-actions finish-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalFinish')">Отмена</button>
+      <button class="btn" id="finishConfirm" onclick="submitLesson()">Начислить</button>
+    </div>
+  </div>
 </div>
 
-<!-- ── Модальные окна ───────────────────────────────────── -->
+<div class="backdrop" id="modalGive" onclick="if(event.target===this) closeModal('modalGive')">
+  <div class="modal give" role="dialog" aria-label="Выдать приз">
+    <div class="give-head">
+      <img id="giveAvatar" alt="">
+      <div class="give-who">
+        <div class="caps">Выдать приз</div>
+        <div class="give-name" id="giveName">—</div>
+      </div>
+      <span class="pill-star big"><svg class="ic"><use href="#i-star"></use></svg><b id="giveBal">0</b></span>
+    </div>
+    <div class="give-list" role="radiogroup" aria-label="Приз" id="giveList"></div>
+    <div class="give-sum">
+      <span class="muted">Баланс</span>
+      <span class="give-num" id="giveFrom">0 ★</span>
+      <svg class="ic ic-sm muted"><use href="#i-arrow-right"></use></svg>
+      <span class="give-num accent" id="giveTo">0 ★</span>
+      <span class="grow"></span>
+      <span class="muted">запишется в историю ученика</span>
+    </div>
+    <div class="modal-actions give-actions">
+      <button class="btn btn-link btn-md" onclick="openDeductFromGive()">Списать вручную…</button>
+      <span class="grow"></span>
+      <button class="btn btn-ghost" onclick="closeModal('modalGive')">Отмена</button>
+      <button class="btn" id="giveConfirm" onclick="confirmGive()" disabled>
+        <svg class="ic"><use href="#i-gift"></use></svg><span id="giveBtnText">Выберите приз</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalDeduct" onclick="if(event.target===this) closeModal('modalDeduct')">
+  <div class="modal" style="max-width:440px;">
+    <div>
+      <div class="modal-title">Списать звёзды</div>
+      <p class="modal-sub"><span id="deductName"></span> · на балансе <b id="deductMax">0</b> ★</p>
+    </div>
+    <div class="field">
+      <label for="deductAmount">Сколько звёзд</label>
+      <input type="number" id="deductAmount" min="1" value="1" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label for="deductReason">Причина</label>
+      <input type="text" id="deductReason" placeholder="Например: обмен на наклейку">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalDeduct')">Отмена</button>
+      <button class="btn" onclick="confirmDeduct()">Списать</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalPrize" onclick="if(event.target===this) closeModal('modalPrize')">
+  <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="prizeModalTitle">
+    <div>
+      <div class="modal-title" id="prizeModalTitle">Новый приз</div>
+      <p class="modal-sub">Эти призы видят дети в своём кабинете.</p>
+    </div>
+    <div class="prize-form-row">
+      <div class="field">
+        <label for="prizeName">Название</label>
+        <input type="text" id="prizeName" placeholder="Набор «Знаток»">
+      </div>
+      <div class="field">
+        <label for="prizeCost">Цена</label>
+        <span class="with-star"><input type="number" id="prizeCost" min="1" value="30" inputmode="numeric">
+          <svg class="ic ic-star"><use href="#i-star"></use></svg></span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="prizeDesc" class="split">Короткое описание<span class="muted" id="prizeDescLen">0 / 60</span></label>
+      <input type="text" id="prizeDesc" maxlength="60" placeholder="320 электронных схем" oninput="updateDescLen()">
+    </div>
+    <div class="field">
+      <span class="field-label">Категория</span>
+      <div class="seg seg-fill" role="radiogroup" aria-label="Категория" id="prizeCategory">
+        <button type="button" role="radio" data-cat="small" onclick="pickCategory('small')">Небольшой</button>
+        <button type="button" role="radio" data-cat="medium" onclick="pickCategory('medium')">Средний</button>
+        <button type="button" role="radio" data-cat="large" onclick="pickCategory('large')">Большой</button>
+      </div>
+    </div>
+    <div class="field">
+      <span class="field-label">Фотография</span>
+      <div class="photo-field">
+        <div class="photo-preview" id="prizePhotoPreview"></div>
+        <div class="photo-side">
+          <div class="row">
+            <label class="btn btn-ghost btn-md">
+              <svg class="ic ic-sm"><use href="#i-camera"></use></svg>Выбрать файл
+              <input type="file" id="prizePhotoPick" accept="image/jpeg,image/png,image/webp" hidden onchange="stagePrizePhoto(event)">
+            </label>
+            <button type="button" class="btn btn-quiet btn-md" id="prizePhotoClear" onclick="clearPrizePhoto()">
+              <svg class="ic ic-sm"><use href="#i-close"></use></svg>Убрать
+            </button>
+          </div>
+          <p class="field-hint">JPG, PNG или WEBP, до 5 МБ.<br>Лучше всего — снимок реального приза.</p>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions ruled">
+      <button class="btn btn-ghost" onclick="closeModal('modalPrize')">Отмена</button>
+      <button class="btn" onclick="savePrize()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalTheme" onclick="if(event.target===this) closeModal('modalTheme')">
+  <div class="modal" style="max-width:760px;" role="dialog" aria-labelledby="themeTitle">
+    <div>
+      <div class="modal-title" id="themeTitle">Оформление школы</div>
+      <p class="modal-sub">Тему увидят ученики школы <b id="themeSchool">—</b> в своём кабинете, учителя — в журнале, а также печатные карточки.</p>
+    </div>
+    <div class="theme-grid" id="themeGrid" role="radiogroup" aria-label="Тема"></div>
+    <div class="theme-mode only-clear-flex">
+      <span class="field-label">На этом компьютере</span>
+      <div class="seg" role="radiogroup" aria-label="Светлая или тёмная" id="modeSeg">
+        <button type="button" role="radio" data-mode="auto" onclick="pickMode('auto')">Как в системе</button>
+        <button type="button" role="radio" data-mode="light" onclick="pickMode('light')">Светлая</button>
+        <button type="button" role="radio" data-mode="dark" onclick="pickMode('dark')">Тёмная</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalTheme')">Готово</button>
+    </div>
+  </div>
+</div>
 
 <div class="backdrop" id="modalSchool" onclick="if(event.target===this) closeModal('modalSchool')">
-  <div class="modal" style="max-width:420px;">
-    <h3 id="schoolModalTitle">Новая школа</h3>
-    <p class="modal-sub">Название печатается на карточках с QR-кодами и видно детям в кабинете.</p>
+  <div class="modal" style="max-width:440px;">
+    <div>
+      <div class="modal-title" id="schoolModalTitle">Новая школа</div>
+      <p class="modal-sub">Название печатается на карточках с QR-кодами и видно детям в кабинете.</p>
+    </div>
     <div class="field">
-      <label>Название школы</label>
-      <input type="text" id="schoolName" placeholder="Школа № 1, г. Москва">
+      <label for="schoolName">Название школы</label>
+      <input type="text" id="schoolName" placeholder="Школа № 1">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalSchool')">Отмена</button>
@@ -221,11 +367,13 @@
 </div>
 
 <div class="backdrop" id="modalClass" onclick="if(event.target===this) closeModal('modalClass')">
-  <div class="modal" style="max-width:420px;">
-    <h3>Переименовать класс</h3>
-    <p class="modal-sub">Звёзды и ученики останутся на месте.</p>
+  <div class="modal" style="max-width:440px;">
+    <div>
+      <div class="modal-title">Переименовать класс</div>
+      <p class="modal-sub">Звёзды и ученики останутся на месте.</p>
+    </div>
     <div class="field">
-      <label>Название класса</label>
+      <label for="classNameInput">Название класса</label>
       <input type="text" id="classNameInput" placeholder="5-А">
     </div>
     <div class="modal-actions">
@@ -236,14 +384,15 @@
 </div>
 
 <div class="backdrop" id="modalClasses" onclick="if(event.target===this) closeModal('modalClasses')">
-  <div class="modal" style="max-width:440px;">
-    <h3>Добавить классы</h3>
-    <p class="modal-sub">Отметьте нужные. Серые уже есть в школе <b id="classGridSchool">—</b>.</p>
+  <div class="modal" style="max-width:460px;">
+    <div>
+      <div class="modal-title">Добавить классы</div>
+      <p class="modal-sub">Отметьте нужные. Серые уже есть в школе <b id="classGridSchool">—</b>.</p>
+    </div>
     <div class="class-grid" id="classGrid"></div>
-    <div class="field" style="margin-top:14px;">
+    <div class="field">
       <label for="classOther">Другие названия</label>
-      <input type="text" id="classOther" placeholder="Робототехника, 10-Ф1 — через запятую"
-             oninput="updateClassGridButton()">
+      <input type="text" id="classOther" placeholder="Робототехника, 10-Ф1 — через запятую" oninput="updateClassGridButton()">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalClasses')">Отмена</button>
@@ -253,23 +402,25 @@
 </div>
 
 <div class="backdrop" id="modalUser" onclick="if(event.target===this) closeModal('modalUser')">
-  <div class="modal" style="max-width:440px;">
-    <h3 id="userModalTitle">Новый учитель</h3>
-    <p class="modal-sub">Учитель войдёт на сайт по логину и паролю и увидит только отмеченные школы.</p>
+  <div class="modal" style="max-width:460px;">
+    <div>
+      <div class="modal-title" id="userModalTitle">Новый учитель</div>
+      <p class="modal-sub">Учитель войдёт на сайт по логину и паролю и увидит только отмеченные школы.</p>
+    </div>
     <div class="field">
       <label for="userName">Имя</label>
       <input type="text" id="userName" placeholder="Иванова Марина Сергеевна">
     </div>
     <div class="field">
       <label for="userLogin">Логин</label>
-      <input type="text" id="userLogin" placeholder="ivanova" autocapitalize="none" spellcheck="false">
+      <input type="text" id="userLogin" class="input-mono" placeholder="ivanova" autocapitalize="none" spellcheck="false">
     </div>
     <div class="field" id="userPasswordField">
       <label for="userPassword">Пароль</label>
-      <input type="text" id="userPassword" placeholder="пусто — придумаем сами" autocomplete="off">
+      <input type="text" id="userPassword" class="input-mono" placeholder="пусто — придумаем сами" autocomplete="off">
     </div>
-    <div class="field">
-      <label>Школы</label>
+    <div class="field" id="userSchoolsField">
+      <span class="field-label">Школы</span>
       <div class="check-list" id="userSchools"></div>
     </div>
     <div class="modal-actions">
@@ -280,9 +431,11 @@
 </div>
 
 <div class="backdrop" id="modalMyPassword" onclick="if(event.target===this) closeModal('modalMyPassword')">
-  <div class="modal" style="max-width:400px;">
-    <h3>Сменить пароль</h3>
-    <p class="modal-sub">Другие входы под вашим логином завершатся.</p>
+  <div class="modal" style="max-width:420px;">
+    <div>
+      <div class="modal-title">Сменить пароль</div>
+      <p class="modal-sub">Другие входы под вашим логином завершатся.</p>
+    </div>
     <div class="field">
       <label for="myCurrent">Текущий пароль</label>
       <input type="password" id="myCurrent" autocomplete="current-password">
@@ -303,8 +456,8 @@
 </div>
 
 <div class="backdrop" id="modalInfo" onclick="if(event.target===this) closeModal('modalInfo')">
-  <div class="modal" style="max-width:440px;">
-    <h3 id="infoTitle"></h3>
+  <div class="modal" style="max-width:460px;">
+    <div class="modal-title" id="infoTitle"></div>
     <div class="info-body" id="infoBody"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modalInfo')">Понятно</button>
@@ -313,15 +466,16 @@
 </div>
 
 <div class="backdrop" id="modalPaste" onclick="if(event.target===this) closeModal('modalPaste')">
-  <div class="modal">
-    <h3>Вставить строки из таблицы</h3>
-    <p class="modal-sub">
-      Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой формат:<br>
-      <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.<br>
-      Ученики добавятся в школу <b id="pasteSchoolName">—</b>.
-    </p>
-    <textarea id="pasteArea" rows="9" style="width:100%;"
-              placeholder="5-А&#9;Иванов Иван&#9;12&#10;5-А&#9;Петрова Анна&#9;15"></textarea>
+  <div class="modal" style="max-width:560px;">
+    <div>
+      <div class="modal-title">Вставить строки из таблицы</div>
+      <p class="modal-sub">
+        Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой формат:
+        <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.
+        Ученики добавятся в школу <b id="pasteSchoolName">—</b>.
+      </p>
+    </div>
+    <textarea id="pasteArea" rows="9" placeholder="5-А&#9;Иванов Иван&#9;12&#10;5-А&#9;Петрова Анна&#9;15"></textarea>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalPaste')">Отмена</button>
       <button class="btn" onclick="processPaste()">Добавить в журнал</button>
@@ -329,82 +483,10 @@
   </div>
 </div>
 
-<div class="backdrop" id="modalDeduct" onclick="if(event.target===this) closeModal('modalDeduct')">
-  <div class="modal">
-    <h3>Выдача приза или списание</h3>
-    <p class="modal-sub"><span id="deductName"></span> · на балансе <b id="deductMax">0</b> звёзд</p>
-    <div class="field">
-      <label>Приз с витрины</label>
-      <select id="deductPreset" onchange="applyPreset()"></select>
-    </div>
-    <div class="field">
-      <label>Сколько звёзд списать</label>
-      <input type="number" id="deductAmount" min="1" value="10">
-    </div>
-    <div class="field">
-      <label>Причина</label>
-      <input type="text" id="deductReason" placeholder="Выдача приза">
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modalDeduct')">Отмена</button>
-      <button class="btn btn-gold" onclick="confirmDeduct()">Списать звёзды</button>
-    </div>
-  </div>
-</div>
-
-<div class="backdrop" id="modalPrize" onclick="if(event.target===this) closeModal('modalPrize')">
-  <div class="modal">
-    <h3 id="prizeModalTitle">Новый приз</h3>
-    <p class="modal-sub">Эти призы видят дети в своём кабинете.</p>
-    <div class="field">
-      <label>Название</label>
-      <input type="text" id="prizeName" placeholder="Набор «Знаток»">
-    </div>
-    <div class="field">
-      <label>Цена в звёздах</label>
-      <input type="number" id="prizeCost" min="1" value="30">
-    </div>
-    <div class="field">
-      <label>Короткое описание</label>
-      <input type="text" id="prizeDesc" placeholder="320 электронных схем">
-    </div>
-    <div class="field">
-      <label>Категория</label>
-      <select id="prizeCategory">
-        <option value="electronics">Электроника</option>
-        <option value="gadgets">Гаджеты</option>
-        <option value="small">Небольшой приз</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Фотография</label>
-      <div class="photo-field">
-        <div class="photo-preview" id="prizePhotoPreview"></div>
-        <div class="photo-field-side">
-          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
-            <svg class="ic ic-sm"><use href="#i-camera"></use></svg> Выбрать файл
-            <input type="file" id="prizePhotoPick" accept="image/jpeg,image/png,image/webp"
-                   hidden onchange="stagePrizePhoto(event)">
-          </label>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="clearPrizePhoto()">
-            <svg class="ic ic-sm"><use href="#i-close"></use></svg> Убрать
-          </button>
-          <p class="hint-text" style="margin:0;">JPG, PNG или WEBP, до 5 МБ.<br>
-            Лучше всего — снимок реального приза.</p>
-        </div>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modalPrize')">Отмена</button>
-      <button class="btn" onclick="savePrize()">Сохранить</button>
-    </div>
-  </div>
-</div>
-
 <div class="backdrop" id="modalConfirm" onclick="if(event.target===this) closeModal('modalConfirm')">
-  <div class="modal" style="max-width:410px;">
-    <h3 id="confirmTitle">Подтвердите действие</h3>
-    <p class="modal-sub" id="confirmText"></p>
+  <div class="modal danger" style="max-width:440px;" role="alertdialog" aria-labelledby="confirmTitle">
+    <div class="modal-title" id="confirmTitle">Подтвердите действие</div>
+    <p class="confirm-text" id="confirmText"></p>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">Отмена</button>
       <button class="btn btn-danger" id="confirmBtn">Да, продолжить</button>
@@ -413,46 +495,44 @@
 </div>
 
 <div class="backdrop" id="modalQr" onclick="if(event.target===this) closeModal('modalQr')">
-  <div class="modal" style="max-width:420px;">
-    <h3 id="qrName">Данные для входа</h3>
-    <p class="modal-sub" id="qrSub"></p>
-
+  <div class="modal" style="max-width:460px;">
+    <div>
+      <div class="modal-title" id="qrName">Данные для входа</div>
+      <p class="modal-sub" id="qrSub"></p>
+    </div>
     <div class="access-qr">
-      <img id="qrImage" alt="QR-код">
+      <img id="qrImage" alt="QR-код для входа">
       <div class="access-qr-note">
-        Через Telegram: навести камеру на QR.<br>
-        Код карточки — <b id="qrCode">—</b>
+        <span class="caps">Через Telegram</span>
+        <span>Навести камеру на QR-код или отправить боту код</span>
+        <span class="code-chip" id="qrCode">—</span>
       </div>
     </div>
-
-    <div class="eyebrow" style="margin-top:18px;">Без Telegram — через сайт</div>
-    <div class="access-site" id="accessSite">—</div>
-
-    <div class="field">
-      <label for="accessLogin">Логин</label>
-      <div class="access-row">
-        <input type="text" id="accessLogin" autocapitalize="off" spellcheck="false">
+    <div class="caps">Без Telegram — через сайт</div>
+    <div class="access-grid">
+      <span class="muted">Адрес</span><span class="mono" id="accessSite">—</span>
+      <span class="muted">Логин</span>
+      <span class="access-edit">
+        <input type="text" id="accessLogin" class="input-sm input-mono" autocapitalize="off" spellcheck="false" aria-label="Логин">
         <button class="btn btn-ghost btn-sm" onclick="saveLogin()">Сохранить</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Пароль</label>
-      <div class="access-row">
-        <div class="access-password" id="accessPassword">—</div>
+      </span>
+      <span class="muted">Пароль</span>
+      <span class="access-edit">
+        <span class="mono access-password" id="accessPassword">—</span>
         <button class="btn btn-ghost btn-sm" onclick="resetPassword()">Новый пароль</button>
-      </div>
-      <p class="access-note" id="accessNote"></p>
+      </span>
     </div>
-
+    <p class="field-hint" id="accessNote"></p>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="resetTokenFromAccess()">Новый код карточки</button>
+      <button class="btn btn-link btn-md" onclick="resetTokenFromAccess()">
+        <svg class="ic ic-sm"><use href="#i-refresh"></use></svg>Новый код карточки
+      </button>
+      <span class="grow"></span>
       <button class="btn" onclick="closeModal('modalQr')">Закрыть</button>
     </div>
   </div>
 </div>
 
-<input type="file" id="prizePhotoInput" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPrizePhoto(event)">
 
 <div class="toast-host" id="toastHost"></div>
 

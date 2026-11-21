@@ -1,75 +1,105 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="{{THEME}}" data-mode="{{MODE}}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light dark">
-<title>Вход в кабинет ученика</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Вход в кабинет ученика — Звёзды</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/auth.css">
 </head>
-<body>
+<body class="auth" data-night>
 
 {{ICONS}}
 
-<form class="box for-student" onsubmit="submitLogin(event)">
-  <a class="back-link" href="{{BASE}}/"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg> Выбор входа</a>
-  <div class="mark"><svg class="ic"><use href="#i-star"></use></svg></div>
-  <h1>Вход в кабинет</h1>
-  <p class="sub">Логин и пароль — на твоей карточке</p>
+<div class="auth-col">
+  <form class="auth-card student" onsubmit="submitLogin(event)" novalidate>
+    <a class="back-link" href="{{BASE}}/"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>Выбор входа</a>
+    <span class="stamp"><span><svg class="ic"><use href="#i-star"></use></svg></span></span>
+    <div>
+      <h1 class="auth-title">Привет! Это твои «Звёзды»</h1>
+      <p class="auth-lead">Здесь видно, сколько звёзд накоплено и какие призы уже можно забрать.</p>
+    </div>
 
-  <div class="field">
-    <label for="login">Логин</label>
-    <input type="text" id="login" autocomplete="username" autocapitalize="off"
-           spellcheck="false" placeholder="ivanov.artem" autofocus required>
-  </div>
+    <a class="btn btn-lg btn-block" id="tgButton" href="#" hidden>
+      <svg class="ic"><use href="#i-send"></use></svg>Открыть в Telegram
+    </a>
+    <p class="or-camera" id="tgHint" hidden>Или наведи камеру на QR-код с карточки</p>
+    <div class="divider" id="tgDivider" hidden>или войди по логину</div>
 
-  <div class="field">
-    <label for="password">Пароль</label>
-    <input type="password" id="password" autocomplete="current-password" required>
-  </div>
+    <div class="field">
+      <label for="login">Логин</label>
+      <input type="text" id="login" autocomplete="username" autocapitalize="off"
+             spellcheck="false" placeholder="ivanov.artem" autofocus required>
+    </div>
 
-  <button class="btn btn-block" type="submit" id="submitBtn">Войти</button>
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input type="password" id="password" autocomplete="current-password"
+             placeholder="с карточки, например kvant3432" required oninput="clearError()">
+      <span class="form-error" id="error" role="alert" hidden>
+        <svg class="ic"><use href="#i-warning"></use></svg><span id="errorText"></span>
+      </span>
+    </div>
 
-  <div class="error" id="error">
-    <svg class="ic ic-sm"><use href="#i-warning"></use></svg><span id="errorText"></span>
-  </div>
+    <button class="btn btn-outline btn-lg btn-block" type="submit" id="submitBtn">Войти</button>
+  </form>
 
-  <p class="hint">
-    Есть Telegram? Проще зайти по QR-коду с карточки — тогда логин и пароль не нужны.<br>
-    Потерял карточку или забыл пароль — подойди к учителю, он выдаст новый.
+  <p class="auth-help">
+    <svg class="ic"><use href="#i-help"></use></svg>
+    <span>Нет карточки со входом? Спроси её у учителя — на ней QR-код, логин и пароль.</span>
   </p>
-</form>
+</div>
 
 <script>
 const BASE = "{{BASE}}";
 
+// Кнопка «Открыть в Telegram» — только если бот подключён
+fetch(BASE + "/healthz").then((r) => r.json()).then((info) => {
+  if (!info.bot_username) return;
+  const link = document.getElementById("tgButton");
+  link.href = `https://t.me/${encodeURIComponent(info.bot_username)}`;
+  ["tgButton", "tgHint", "tgDivider"].forEach((id) => { document.getElementById(id).hidden = false; });
+}).catch(() => {});
+
+function clearError() {
+  document.getElementById("error").hidden = true;
+  document.getElementById("password").classList.remove("invalid");
+}
+
+function showError(text) {
+  document.getElementById("errorText").textContent = text;
+  document.getElementById("error").hidden = false;
+  document.getElementById("password").classList.add("invalid");
+}
+
 async function submitLogin(event) {
   event.preventDefault();
   const button = document.getElementById("submitBtn");
-  const errorBox = document.getElementById("error");
+  const login = document.getElementById("login").value.trim();
+  const password = document.getElementById("password").value;
+  clearError();
+  if (!password) return showError("Введи пароль с карточки.");
   button.disabled = true;
-  errorBox.classList.remove("show");
 
   try {
     const response = await fetch(BASE + "/api/auth/student", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        login: document.getElementById("login").value,
-        password: document.getElementById("password").value,
-      }),
+      body: JSON.stringify({ login, password }),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.detail || "Не удалось войти");
-
+    if (!response.ok) {
+      throw new Error(response.status === 401
+        ? "Неверный логин или пароль. Они напечатаны на карточке — проверь буквы и цифры."
+        : payload.detail || "Не удалось войти");
+    }
     // Кабинет читает сессию отсюда же — отдельного входа ему не нужно.
     sessionStorage.setItem("stars_token", payload.token);
-    location.href = BASE + "/app";
+    location.href = BASE + "/app" + (payload.theme ? "?theme=" + encodeURIComponent(payload.theme) : "");
   } catch (error) {
-    document.getElementById("errorText").textContent = error.message;
-    errorBox.classList.add("show");
+    showError(error.message);
     button.disabled = false;
   }
 }

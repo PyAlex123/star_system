@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>Звёзды — кабинет ученика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,500;7..72,600&amp;family=Onest:wght@400;500;600;700&amp;family=Unbounded:wght@600;700;800&amp;family=Nunito:wght@500;600;700;800&amp;family=Geologica:wght@400..700&amp;family=Golos+Text:wght@400..700&amp;family=Rubik:wght@400..800&amp;family=Caveat:wght@700&amp;family=JetBrains+Mono:wght@500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+html,body{margin:0;background:var(--bg-deep);color:var(--text);font-family:var(--font-ui);-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}
+a{color:var(--accent-text)}a:hover{color:var(--primary-hover)}
+button{font-family:inherit}
+:focus-visible{outline:3px solid var(--star);outline-offset:2px}
+@keyframes stkIn{0%{transform:scale(0) rotate(-8deg)}70%{transform:scale(1.08) rotate(-3deg)}100%{transform:scale(1) rotate(-2deg)}}
+@keyframes stampK{from{transform:rotate(-7deg) scale(1.6);opacity:0}to{transform:rotate(-7deg) scale(1);opacity:1}}
+@keyframes flash{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}40%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}}
+@keyframes drawLine{to{stroke-dashoffset:0}}
+@keyframes starOn{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+@keyframes twinkle{from{opacity:.35}to{opacity:1}}
+@keyframes coinFly{0%{transform:translate(-50%,-50%) scale(.2);opacity:0}20%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) rotate(var(--rot)) scale(1);opacity:1}}
+@keyframes stampIn{from{transform:rotate(-10deg) scale(1.4);opacity:0}to{transform:rotate(-10deg) scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important;transition-duration:1ms!important}}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:40px;padding:32px 24px 48px">
+
+<aside style="width:300px;flex:none;display:flex;flex-direction:column;gap:22px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:var(--r9);background:var(--primary);display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></div>
+      <div style="font:var(--dw) 22px/28px var(--font-display);white-space:nowrap">Кабинет ученика</div>
+    </div>
+    <div style="font-size:14px;line-height:20px;color:var(--muted);text-wrap:pretty">«{{ themeName }}» · 390×844 · всё кликается: вкладки, фильтр, аватар, карточки «Хватает».</div>
+  </div>
+  <div role="radiogroup" aria-label="Тема оформления" style="display:inline-flex;flex-wrap:wrap;max-width:100%;padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface);flex:none"><button role="radio" aria-checked="{{ themeNb.sel }}" onClick="{{ setNb }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeNb.bg }};color:{{ themeNb.fg }}">Тетрадь отличника</button><button role="radio" aria-checked="{{ themeQ.sel }}" onClick="{{ setQ }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeQ.bg }};color:{{ themeQ.fg }}">Звёздный квест</button><button role="radio" aria-checked="{{ themeS.sel }}" onClick="{{ setS }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeS.bg }};color:{{ themeS.fg }}">Созвездие</button><button role="radio" aria-checked="{{ themeC.sel }}" onClick="{{ setC }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeC.bg }};color:{{ themeC.fg }}">Ясно и быстро</button><button role="radio" aria-checked="{{ themeK.sel }}" onClick="{{ setK }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ themeK.bg }};color:{{ themeK.fg }}">Стикербук</button></div><div role="radiogroup" aria-label="Светлая или тёмная" style="display:var(--show-clear-flex);padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface);flex:none"><button role="radio" aria-checked="{{ modeL.sel }}" onClick="{{ setModeL }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeL.bg }};color:{{ modeL.fg }}">Светлая</button><button role="radio" aria-checked="{{ modeD.sel }}" onClick="{{ setModeD }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeD.bg }};color:{{ modeD.fg }}">Тёмная</button><button role="radio" aria-checked="{{ modeA.sel }}" onClick="{{ setModeA }}" style="height:32px;padding:0 12px;border:0;border-radius:var(--r9);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;background:{{ modeA.bg }};color:{{ modeA.fg }}">Авто</button></div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 10px 4px">Экраны</div>
+    <sc-for list="{{ presetsScreens }}" as="p" hint-placeholder-count="9">
+      <button onClick="{{ p.go }}" style="display:flex;align-items:center;gap:10px;min-height:38px;padding:6px 10px;border:0;border-radius:var(--r10);cursor:pointer;text-align:left;font-size:14px;line-height:18px;font-weight:500;background:{{ p.bg }};color:{{ p.fg }}">
+        <span style="flex:none;min-width:40px;font:600 11px/16px 'JetBrains Mono',ui-monospace,monospace;color:var(--muted)">{{ p.id }}</span>
+        <span style="flex:1;min-width:0">{{ p.label }}</span>
+      </button>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:0 10px 4px">Состояния</div>
+    <sc-for list="{{ presetsStates }}" as="p" hint-placeholder-count="8">
+      <button onClick="{{ p.go }}" style="display:flex;align-items:center;gap:10px;min-height:38px;padding:6px 10px;border:0;border-radius:var(--r10);cursor:pointer;text-align:left;font-size:14px;line-height:18px;font-weight:500;background:{{ p.bg }};color:{{ p.fg }}">
+        <span style="flex:none;min-width:40px;font:600 11px/16px 'JetBrains Mono',ui-monospace,monospace;color:var(--muted)">{{ p.id }}</span>
+        <span style="flex:1;min-width:0">{{ p.label }}</span>
+      </button>
+    </sc-for>
+  </div>
+  <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+    <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r12);padding:14px 16px;font-size:14px;line-height:21px;color:var(--text);text-wrap:pretty">
+      <div style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Что здесь важно</div>
+      {{ note }}
+    </div>
+  </sc-if>
+</aside>
+
+<div data-night="" data-screen-label="Телефон ученика" style="flex:none;width:410px;height:864px;border-radius:56px;background:#121715;padding:10px;box-shadow:0 40px 80px -40px rgba(20,83,63,.55)">
+<div style="position:relative;width:390px;height:844px;border-radius:46px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column">
+
+<sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;min-height:0;display:flex;flex-direction:column;background-color:var(--bg);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--rule) 27px,var(--rule) 28px)">
+    <div style="height:47px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px 0 34px;color:var(--text)">
+      <span style="font-weight:600;font-size:15px">9:41</span>
+      <span style="display:flex;align-items:center;gap:6px"><span style="display:flex;align-items:flex-end;gap:2px;height:11px"><span style="width:3px;height:4px;background:var(--text);border-radius:1px"></span><span style="width:3px;height:6px;background:var(--text);border-radius:1px"></span><span style="width:3px;height:8px;background:var(--text);border-radius:1px"></span><span style="width:3px;height:11px;background:var(--text);border-radius:1px"></span></span><span style="width:24px;height:12px;border:1px solid rgba(27,36,32,.5);border-radius:3px;padding:1.5px"><span style="display:block;width:16px;height:100%;background:var(--text);border-radius:1.5px"></span></span></span>
+    </div>
+    <div style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;padding:16px 16px 40px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:var(--surface);border:var(--bw) solid var(--line);border-top:4px solid var(--accent);border-radius:var(--r18);box-shadow:var(--shadow-card);padding:24px 20px;display:flex;flex-direction:column;gap:18px">
+        <div style="width:56px;height:56px;border-radius:50%;border:2px solid var(--star-text);padding:3px;transform:rotate(-10deg)"><div style="width:100%;height:100%;border-radius:50%;border:1px solid var(--star-text);background:var(--star-bg);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></div></div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font:var(--dw) 28px/34px var(--font-display);text-wrap:balance">Привет! Это твои «Звёзды»</div>
+          <div style="font-size:15px;line-height:22px;color:var(--muted);text-wrap:pretty">Здесь видно, сколько звёзд накоплено и какие призы уже можно забрать.</div>
+        </div>
+        <button onClick="{{ enterApp }}" style="height:52px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-hover="background:var(--primary-hover)" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg>
+          Открыть в Telegram
+        </button>
+        <div style="font-size:13px;line-height:18px;color:var(--muted);text-align:center;margin-top:-8px">Или наведи камеру на QR-код с карточки</div>
+        <div style="display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px"><span style="flex:1;height:1px;background:var(--line)"></span>или войди по логину<span style="flex:1;height:1px;background:var(--line)"></span></div>
+        <label style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:14px;font-weight:600">Логин</span>
+          <input value="{{ login }}" onChange="{{ onLogin }}" autocomplete="username" style="height:48px;border:var(--bw) solid var(--line-strong);border-radius:var(--r12);background:var(--field-bg);padding:0 14px;font:500 16px/20px 'JetBrains Mono',ui-monospace,monospace;color:var(--text);outline:none" style-focus="border-color:var(--accent-text);box-shadow:0 0 0 3px var(--accent-soft)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:14px;font-weight:600">Пароль</span>
+          <input type="password" value="{{ pass }}" onChange="{{ onPass }}" placeholder="с карточки, например kvant3432" autocomplete="current-password" style="height:48px;border:1px solid {{ passBorder }};border-radius:var(--r12);background:var(--field-bg);padding:0 14px;font:500 16px/20px 'JetBrains Mono',ui-monospace,monospace;color:var(--text);outline:none" style-focus="border-color:var(--accent-text);box-shadow:0 0 0 3px var(--accent-soft)">
+          <sc-if value="{{ loginErrorText }}" hint-placeholder-val="{{ false }}">
+            <span role="alert" style="display:flex;gap:8px;align-items:flex-start;color:var(--danger);font-size:14px;line-height:20px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
+              <span>{{ loginErrorText }}</span>
+            </span>
+          </sc-if>
+        </label>
+        <button onClick="{{ submitLogin }}" style="height:52px;border:1.5px solid var(--accent);border-radius:var(--r12);background:var(--surface);color:var(--accent-text);font-size:16px;font-weight:600;cursor:pointer" style-hover="background:var(--accent-soft)">Войти</button>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start;padding:0 8px;font-size:14px;line-height:20px;color:var(--muted)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg>
+        <span style="text-wrap:pretty">Нет карточки со входом? Спроси её у учителя — на ней QR-код, логин и пароль.</span>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+  <div style="height:47px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 28px 0 34px;background:var(--hero-bg);color:var(--hero-fg)">
+    <span style="font-weight:600;font-size:15px">9:41</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="display:flex;align-items:flex-end;gap:2px;height:11px"><span style="width:3px;height:4px;background:var(--hero-fg);border-radius:1px"></span><span style="width:3px;height:6px;background:var(--hero-fg);border-radius:1px"></span><span style="width:3px;height:8px;background:var(--hero-fg);border-radius:1px"></span><span style="width:3px;height:11px;background:var(--hero-fg);border-radius:1px"></span></span><span style="width:24px;height:12px;border:1px solid var(--hero-muted);border-radius:3px;padding:1.5px"><span style="display:block;width:16px;height:100%;background:var(--hero-fg);border-radius:1.5px"></span></span></span>
+  </div>
+  <sc-if value="{{ tg }}" hint-placeholder-val="{{ true }}">
+    <div style="height:52px;flex:none;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:var(--hero-bg);color:var(--hero-fg);border-bottom:1px solid var(--hero-line)">
+      <button onClick="{{ tgBack }}" aria-label="{{ tgBackLabel }}" style="justify-self:start;min-height:44px;padding:0 14px;border:0;background:none;color:var(--hero-fg);font-size:15px;font-weight:500;display:flex;align-items:center;gap:4px;cursor:pointer">
+        <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></sc-if>
+        {{ tgBackLabel }}
+      </button>
+      <div style="text-align:center;display:flex;flex-direction:column"><span style="font-size:16px;line-height:20px;font-weight:600">Звёзды</span><span style="font-size:12px;line-height:16px;color:var(--hero-muted)">мини-приложение</span></div>
+      <button aria-label="Меню Telegram" style="justify-self:end;width:44px;height:44px;margin-right:6px;border:0;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer"><span style="width:28px;height:28px;border-radius:50%;background:var(--chrome-btn);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--hero-fg)" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></span></button>
+    </div>
+  </sc-if>
+
+  <div style="flex:1;min-height:0;position:relative;display:flex;flex-direction:column">
+    <div style="flex:1;min-height:0;position:relative">
+      <div ref="{{ scrollRef }}" onScroll="{{ onScroll }}" style="position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;background-color:var(--bg);background-image:{{ contentBg }};background-size:{{ contentBgSize }}">
+        <div style="min-height:100%;opacity:{{ tabOpacity }};transform:translateY({{ tabShift }}px);transition:{{ tabTransition }}">
+
+        <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+          <div aria-busy="true" aria-label="Загрузка">
+            <div style="background:var(--hero-bg);padding:12px 16px 20px;display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;gap:14px;align-items:center"><div style="width:60px;height:60px;border-radius:50%;background:var(--hero-line)"></div><div style="display:flex;flex-direction:column;gap:8px"><div style="width:170px;height:22px;border-radius:6px;background:var(--chrome-btn)"></div><div style="width:120px;height:20px;border-radius:999px;background:var(--hero-line)"></div></div></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><div style="width:84px;height:12px;border-radius:4px;background:var(--hero-line)"></div><div style="width:150px;height:52px;border-radius:var(--r8);background:var(--chrome-btn)"></div></div>
+              <div style="border-top:1px solid var(--hero-line);padding-top:14px;display:flex;flex-direction:column;gap:10px"><div style="width:240px;height:16px;border-radius:4px;background:var(--hero-line)"></div><div style="height:8px;border-radius:999px;background:var(--hero-line)"></div></div>
+            </div>
+            <div style="padding:20px 16px;display:flex;flex-direction:column;gap:14px">
+              <div style="width:140px;height:14px;border-radius:4px;background:var(--line)"></div>
+              <div style="height:44px;border-radius:var(--r12);background:var(--line-soft)"></div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+                <sc-for list="{{ skeletonCards }}" as="s" hint-placeholder-count="4">
+                  <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden"><div style="aspect-ratio:4/3;background:var(--line-soft)"></div><div style="padding:12px;display:flex;flex-direction:column;gap:8px"><div style="height:16px;width:90%;border-radius:4px;background:var(--line-soft)"></div><div style="height:16px;width:60%;border-radius:4px;background:var(--line-soft)"></div><div style="height:12px;width:80%;border-radius:4px;background:var(--line-soft);margin-top:4px"></div></div></div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:72px 28px 40px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px">
+            <div style="width:72px;height:72px;border-radius:50%;background:var(--surface);border:var(--bw) solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"></path><path d="M8.5 16.43a5 5 0 0 1 7 0"></path><path d="M5 12.86a10 10 0 0 1 5.17-2.69"></path><path d="M19 12.86a10 10 0 0 0-2-1.52"></path><path d="M2 8.82a15 15 0 0 1 4.18-2.64"></path><path d="M22 8.82a15 15 0 0 0-11.29-3.76"></path><path d="m2 2 20 20"></path></svg></div>
+            <div style="font:var(--dw) 24px/30px var(--font-display)">Нет связи</div>
+            <div style="font-size:15px;line-height:22px;color:var(--muted);max-width:290px;text-wrap:pretty">Звёзды никуда не делись — они хранятся у учителя. Проверь интернет и попробуй ещё раз.</div>
+            <button onClick="{{ retry }}" style="margin-top:8px;height:48px;padding:0 28px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+              Повторить
+            </button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isReady }}" hint-placeholder-val="{{ true }}">
+
+          <sc-if value="{{ showMiniSpacer }}" hint-placeholder-val="{{ false }}"><div style="height:60px"></div></sc-if>
+
+          <sc-if value="{{ isPrizes }}" hint-placeholder-val="{{ true }}">
+            <header style="position:relative;isolation:isolate;overflow:hidden;margin:var(--hero-margin);border-radius:var(--hero-radius);border:var(--hero-border);box-shadow:var(--hero-shadow);background:var(--hero-bg);background-image:var(--hero-img, var(--sky));background-size:var(--sky-size);color:var(--hero-fg);padding:12px 16px 20px;display:flex;flex-direction:column;gap:16px">
+              <span aria-hidden="true" style="display:var(--show-sky);position:absolute;inset:0;z-index:-1;pointer-events:none">{{ twinkleEl }}</span>
+              <span aria-hidden="true" style="display:var(--show-q);position:absolute;right:-64px;top:-36px;width:240px;height:240px;opacity:.14;z-index:-1;transform:rotate(14deg);pointer-events:none"><svg viewBox="0 0 24 24" width="240" height="240"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1" stroke-linejoin="round"></polygon></svg></span>
+              <div style="display:flex;gap:14px;align-items:center">
+                <button onClick="{{ openAvatarSheet }}" aria-label="Сменить аватар" style="position:relative;flex:none;width:64px;height:64px;padding:0;border:0;background:none;cursor:pointer">
+                  <sc-if value="{{ me.hasAvatar }}" hint-placeholder-val="{{ true }}"><img src="{{ me.avatarSrc }}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;border:3px solid var(--avatar-ring);box-shadow:0 0 0 1px var(--hero-chip)"></sc-if>
+                  <sc-if value="{{ me.noAvatar }}" hint-placeholder-val="{{ false }}"><span style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent-text);border:3px solid var(--bg);font:var(--dw) 22px/1 var(--font-display)">{{ me.initials }}</span></sc-if>
+                  <span style="position:absolute;right:-4px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:var(--star);border:2px solid var(--hero-bg);display:flex;align-items:center;justify-content:center;color:var(--on-star)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg></span>
+                </button>
+                <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+                  <div style="font:var(--dw) 24px/28px var(--font-display);text-wrap:balance">{{ me.name }}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border:1px solid var(--hero-chip);border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hero-muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>Наша школа</span>
+                    <span style="display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border:1px solid var(--hero-chip);border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--hero-muted)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>5-А</span>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:12px">
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <span style="font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--hero-muted)">Накоплено</span>
+                  <span style="display:flex;align-items:baseline;gap:10px;white-space:nowrap;align-self:flex-start;background:var(--counter-bg);padding:var(--counter-pad);border-radius:999px;box-shadow:var(--counter-shadow)">
+                    <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="align-self:center"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg>
+                    <span style="font:var(--nw) 56px/56px var(--font-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em;color:var(--balance-fg);text-shadow:var(--glow)">{{ me.balanceText }}</span>
+                    <span style="font-size:17px;font-weight:500;color:var(--hero-muted)">{{ me.starWord }}</span>
+                  </span>
+                </div>
+                <sc-if value="{{ me.placeText }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ goRating }}" aria-label="Открыть рейтинг" style="flex:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;margin-bottom:6px;border:1px solid var(--hero-chip);border-radius:999px;background:var(--hero-tint);color:var(--hero-fg);font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--star)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="6"></circle><path d="M15.48 12.89 17 22l-5-3-5 3 1.52-9.11"></path></svg>
+                    {{ me.placeText }}
+                  </button>
+                </sc-if>
+              </div>
+              <sc-if value="{{ hasNext }}" hint-placeholder-val="{{ true }}">
+                <div style="display:var(--show-q-flex);flex-direction:column;gap:8px;border-top:1.5px dashed var(--hero-line);padding-top:14px">
+                  <div style="display:flex;align-items:center;gap:10px;font-size:15px;line-height:20px">
+                    <span style="flex:1;min-width:0;text-wrap:pretty"><span style="color:var(--hero-muted)">{{ next.label }}</span> <b style="font-weight:800">{{ next.name }}</b> — ещё <b style="white-space:nowrap;color:var(--star-text);font-weight:800">{{ next.rem }} ★</b></span>
+                    <button onClick="{{ pinHelp }}" aria-label="{{ next.pinAria }}" title="{{ next.pinAria }}" style="flex:none;width:44px;height:44px;border-radius:var(--r12);border:1.5px solid var(--line);background:{{ next.pinBg }};color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 0 var(--line)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></button>
+                  </div>
+                  <div role="progressbar" aria-label="Квест до приза" aria-valuenow="{{ next.pctNum }}" aria-valuemin="0" aria-valuemax="100" style="position:relative;height:60px">
+                    <span style="position:absolute;left:12px;right:64px;top:50%;border-top:3px dashed var(--line-strong);margin-top:-1.5px"></span>
+                    <span style="position:absolute;left:12px;top:50%;height:6px;margin-top:-3px;border-radius:999px;background:var(--primary);width:{{ next.pathW }}"></span>
+                    <sc-for list="{{ next.checks }}" as="c" hint-placeholder-count="5">
+                      <span style="position:absolute;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;left:{{ c.left }};background:{{ c.bg }};border:3px solid {{ c.border }};box-shadow:0 2px 0 {{ c.depth }}"></span>
+                    </sc-for>
+                    <span style="position:absolute;right:0;top:50%;margin-top:-28px;width:56px;height:56px;border-radius:var(--r14);border:3px solid var(--star);background:var(--surface);box-shadow:0 4px 0 var(--star-depth);overflow:hidden"><img src="{{ next.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></span>
+                  </div>
+                </div>
+                <div style="display:var(--show-stk-flex);flex-direction:column;gap:8px;border-top:2px solid var(--text);padding-top:12px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div role="progressbar" aria-label="Прогресс к призу" aria-valuenow="{{ next.pctNum }}" aria-valuemin="0" aria-valuemax="100" style="flex:1;display:grid;grid-template-columns:repeat(10,1fr);height:26px;border:2px solid var(--text);border-radius:8px;overflow:hidden;background:#FFFFFF">
+                      <sc-for list="{{ next.cells }}" as="c" hint-placeholder-count="10"><span style="border-right:{{ c.br }};background:{{ c.bg }}"></span></sc-for>
+                    </div>
+                    <span style="flex:none;width:52px;height:52px;border-radius:10px;border:2px solid var(--text);box-shadow:0 0 0 3px #FFFFFF,3px 3px 0 3px var(--text);overflow:hidden;transform:rotate(3deg);background:#FFFFFF"><img src="{{ next.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></span>
+                  </div>
+                  <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:14px;line-height:20px">
+                    <span style="text-wrap:pretty">До приза <b style="font-weight:700">{{ next.name }}</b></span>
+                    <span style="flex:none;font:700 22px/24px var(--font-hand);white-space:nowrap;transform:rotate(-2deg)">{{ next.hand }}</span>
+                  </div>
+                </div>
+                <div style="display:var(--show-sky-flex);flex-direction:column;gap:6px;border-top:1px solid var(--hero-line);padding-top:12px">
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div style="flex:1;min-width:0">{{ next.constel }}</div>
+                    <img src="{{ next.img }}" alt="" style="width:52px;height:52px;flex:none;border-radius:var(--r14);object-fit:cover;border:1px solid var(--star-line)">
+                  </div>
+                  <div style="font-size:14px;line-height:20px;color:var(--hero-muted);text-wrap:pretty">{{ next.skyLabel }} <b style="color:var(--hero-fg);font-weight:600">{{ next.name }}</b> — зажги ещё <b style="white-space:nowrap;color:var(--star);font-weight:700">{{ next.rem }} ★</b></div>
+                </div>
+                <div style="border-top:1px solid var(--hero-line);padding-top:14px;display:var(--show-nb-flex);flex-direction:column;gap:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;font-size:14px;line-height:20px">
+                    <span style="color:var(--hero-muted);text-wrap:pretty">До приза <b style="color:var(--hero-fg);font-weight:600">{{ next.name }}</b></span>
+                    <span style="flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;color:var(--hero-muted)">осталось <b style="color:var(--hero-fg);font:var(--nw) 16px/20px var(--font-num);font-variant-numeric:tabular-nums">{{ next.rem }}</b><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div role="progressbar" aria-valuenow="{{ next.pctNum }}" aria-valuemin="0" aria-valuemax="100" style="flex:1;height:8px;border-radius:999px;background:var(--hero-track);overflow:hidden"><div style="height:100%;border-radius:999px;background:var(--star);width:{{ next.pct }}"></div></div>
+                    <img src="{{ next.img }}" alt="" style="width:28px;height:28px;border-radius:var(--r8);object-fit:cover;border:2px solid var(--star);flex:none">
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ allOk }}" hint-placeholder-val="{{ false }}">
+                <div style="border-top:1px solid var(--hero-line);padding-top:14px;display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600">
+                  <span style="width:28px;height:28px;border-radius:50%;background:var(--star);color:var(--on-star);display:flex;align-items:center;justify-content:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span>
+                  Хватает на любой приз из витрины
+                </div>
+              </sc-if>
+            </header>
+
+            <section style="padding:20px 16px 24px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Витрина призов</h2><span style="flex:1;height:1px;background:var(--line)"></span><button onClick="{{ toggleView }}" aria-label="{{ viewAria }}" title="{{ viewAria }}" style="display:var(--show-clear-flex);width:44px;height:44px;margin:-14px -6px -14px 0;border:0;border-radius:var(--r10);background:none;color:var(--text);align-items:center;justify-content:center;cursor:pointer"><span style="width:34px;height:34px;border:var(--bw) solid var(--line);border-radius:var(--r10);background:var(--surface);display:flex;align-items:center;justify-content:center"><sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="3" rx="1"></rect><rect width="7" height="7" x="14" y="14" rx="1"></rect><rect width="7" height="7" x="3" y="14" rx="1"></rect></svg></sc-if><sc-if value="{{ isGrid }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h.01"></path><path d="M3 12h.01"></path><path d="M3 18h.01"></path><path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path></svg></sc-if></span></button></div>
+              <div role="tablist" aria-label="Фильтр призов" style="display:grid;grid-template-columns:1fr 1fr;padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface);margin-bottom:14px">
+                <button role="tab" aria-selected="{{ fAll.sel }}" onClick="{{ setAll }}" style="height:40px;border:0;border-radius:var(--r9);font-size:15px;font-weight:600;cursor:pointer;background:{{ fAll.bg }};color:{{ fAll.fg }};transition:background 150ms ease-out">Все</button>
+                <button role="tab" aria-selected="{{ fOk.sel }}" onClick="{{ setOk }}" style="height:40px;border:0;border-radius:var(--r9);font-size:15px;font-weight:600;cursor:pointer;background:{{ fOk.bg }};color:{{ fOk.fg }};transition:background 150ms ease-out;white-space:nowrap">Уже доступны ({{ okCount }})</button>
+              </div>
+
+              <sc-if value="{{ noCards }}" hint-placeholder-val="{{ false }}">
+                <div style="background-color:var(--surface);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--rule) 27px,var(--rule) 28px);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:28px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px">
+                  <div style="width:56px;height:56px;border-radius:50%;border:1.5px dashed var(--line-strong);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.75" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
+                  <div style="font:var(--dw) 19px/24px var(--font-display)">Пока не хватает ни на один приз</div>
+                  <div style="font-size:14px;line-height:20px;color:var(--muted);text-wrap:pretty">Ближайший — {{ next.name }}: ещё <span style="white-space:nowrap;color:var(--star-text);font-weight:600">{{ next.rem }} ★</span>. Звёзды ставят на уроке, до 5 за раз.</div>
+                  <button onClick="{{ setAll }}" style="margin-top:4px;min-height:44px;padding:0 18px;border:1.5px solid var(--accent);border-radius:var(--r12);background:none;color:var(--accent-text);font-size:15px;font-weight:600;cursor:pointer">Смотреть все призы</button>
+                </div>
+              </sc-if>
+
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+                <sc-for list="{{ cardsGrid }}" as="p" hint-placeholder-count="4">
+                  <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="padding:0;text-align:left;cursor:pointer;background:var(--surface);border:1px solid {{ p.border }};border-radius:var(--r18);overflow:hidden;box-shadow:var(--shadow-card);display:flex;flex-direction:column;color:var(--text)">
+                    <span aria-hidden="true" style="display:var(--show-stk);position:relative;height:0;z-index:2"><span style="position:absolute;left:50%;top:1px;width:54px;height:16px;margin-left:-27px;background:rgba(255,210,63,.65);border-left:2px dotted rgba(255,253,245,.9);border-right:2px dotted rgba(255,253,245,.9);transform:rotate({{ p.tapeRot }})"></span></span>
+                    <span aria-hidden="true" style="display:var(--show-q);height:6px;background:{{ p.cat }}"></span>
+                    <span style="position:relative;display:block;width:var(--photo-w,100%);margin:var(--photo-m,0);border:var(--photo-b,0 solid transparent);border-radius:var(--photo-r,0);overflow:hidden;transform:rotate({{ p.tilt }});aspect-ratio:var(--photo-ar);background:var(--surface-2)">
+                      <sc-if value="{{ p.notOk }}" hint-placeholder-val="{{ false }}"><span role="button" tabindex="0" onClick="{{ p.pin }}" aria-label="{{ p.pinAria }}" title="{{ p.pinAria }}" style="position:absolute;right:6px;top:6px;z-index:1;width:40px;height:40px;border-radius:50%;background:{{ p.pinBg }};color:{{ p.pinFg }};display:var(--show-q-flex);align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(27,36,32,.25)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></span></sc-if>
+                      <img src="{{ p.img }}" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block">
+                      <span style="position:absolute;top:8px;left:8px;display:var(--ov-flex);align-items:center;gap:4px;height:26px;padding:0 9px 0 7px;background:var(--surface);border-radius:999px;white-space:nowrap;box-shadow:0 1px 3px rgba(27,36,32,.2)"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg><span style="font:var(--nw) 15px/1 var(--font-num);color:var(--star-text);font-variant-numeric:tabular-nums">{{ p.price }}</span></span>
+                      <sc-if value="{{ p.ribbon }}" hint-placeholder-val="{{ false }}">
+                        <span style="position:absolute;top:0;right:10px;width:44px;padding:7px 0 13px;background:var(--ok-bg);color:var(--ok-fg);clip-path:polygon(0 0,100% 0,100% 100%,50% calc(100% - 7px),0 100%);display:var(--ov-flex);flex-direction:column;align-items:center;gap:2px;box-shadow:0 2px 6px rgba(0,0,0,.2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg><span style="font-size:9px;line-height:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase">Хватает</span></span>
+                      </sc-if>
+                      <sc-if value="{{ p.pill }}" hint-placeholder-val="{{ false }}">
+                        <span style="position:absolute;top:8px;right:8px;display:var(--ov-flex);align-items:center;gap:4px;height:26px;padding:0 9px 0 7px;background:var(--primary);color:var(--on-primary);border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Хватает</span>
+                      </sc-if>
+                    </span>
+                    <span style="display:var(--show-clear-flex);align-items:center;justify-content:space-between;gap:8px;padding:10px 12px 0"><span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg><span style="font:var(--nw) 16px/1 var(--font-num);color:var(--star-text);font-variant-numeric:tabular-nums">{{ p.price }}</span></span><sc-if value="{{ p.ok }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:999px;background:var(--success-bg);color:var(--success);font-size:12px;font-weight:600;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Хватает</span></sc-if></span>
+                    <span style="padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px;flex:1">
+                      <span style="font:var(--dw) 16px/21px var(--font-display);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ p.name }}</span>
+                      <span style="font-size:13px;line-height:18px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ p.desc }}</span>
+                      <span style="margin-top:auto;padding-top:8px;display:block">
+                        <sc-if value="{{ p.ok }}" hint-placeholder-val="{{ false }}">
+                          <span style="display:flex;gap:6px;align-items:flex-start;color:var(--accent-text);font-size:13px;line-height:17px;font-weight:600;background:var(--ok-plate-bg,transparent);padding:var(--ok-plate-pad,0);border:var(--ok-plate-border,0 solid transparent);border-radius:var(--r8)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M20 6 9 17l-5-5"></path></svg><span>Можно забрать — подойди к учителю</span></span>
+                        </sc-if>
+                        <sc-if value="{{ p.notOk }}" hint-placeholder-val="{{ true }}">
+                          <span style="display:flex;flex-direction:column;gap:6px">
+                            <span style="display:var(--show-sky);margin:-2px 0 -4px">{{ p.constel }}</span>
+                            <span style="display:var(--show-bar);height:6px;border-radius:999px;background:var(--line-soft);overflow:hidden"><span style="display:block;height:100%;border-radius:999px;background:var(--star);width:{{ p.pct }}"></span></span>
+                            <span style="display:flex;align-items:center;gap:3px;font-size:13px;line-height:17px;font-weight:600;color:var(--star-text);white-space:nowrap">ещё {{ p.rem }}<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                          </span>
+                        </sc-if>
+                      </span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+              <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden;box-shadow:var(--shadow-card)">
+                  <sc-for list="{{ cardsList }}" as="p" hint-placeholder-count="8">
+                    <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="width:100%;display:flex;align-items:center;gap:12px;min-height:80px;padding:8px 14px 8px 8px;border:0;border-bottom:1px solid var(--line-soft);background:none;text-align:left;cursor:pointer;color:var(--text)">
+                      <img src="{{ p.img }}" alt="" loading="lazy" style="width:64px;height:64px;border-radius:var(--r10);object-fit:cover;flex:none">
+                      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+                        <span style="font-size:15px;line-height:20px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">{{ p.name }}</span>
+                        <sc-if value="{{ p.ok }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:var(--success-bg);color:var(--success);font-size:12px;font-weight:600;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>Можно забрать</span></sc-if>
+                        <sc-if value="{{ p.notOk }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:8px"><span style="flex:1;height:5px;border-radius:999px;background:var(--line-soft);overflow:hidden"><span style="display:block;height:100%;border-radius:999px;background:var(--star);width:{{ p.pct }}"></span></span><span style="font-size:13px;font-weight:600;color:var(--star-text);white-space:nowrap">ещё {{ p.rem }} ★</span></span></sc-if>
+                      </span>
+                      <span style="flex:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg><span style="font:var(--nw) 16px/1 var(--font-num);color:var(--star-text);font-variant-numeric:tabular-nums">{{ p.price }}</span></span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ isRating }}" hint-placeholder-val="{{ false }}">
+            <section style="padding:20px 16px 24px;display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Топ-5 класса · в классе {{ total }}</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-items:end;background:var(--board-bg,transparent);border:var(--board-border,0 solid transparent);border-radius:var(--board-r,0);padding:var(--board-pad,6px 0 0);overflow:hidden">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">
+                  <span style="position:relative"><img src="{{ p2.src }}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;display:block;border:3px solid var(--podium-2)"><span style="position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--podium-2);color:var(--on-star);border:2px solid var(--bg);font:700 11px/18px var(--font-ui);text-align:center">2</span></span>
+                  <span style="margin-top:4px;font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p2.surname }}</span>
+                  <div style="width:100%;height:var(--pod-h2);background:var(--surface);border:var(--bw) solid var(--line);border-top:4px solid var(--podium-2);border-radius:var(--r10) var(--r10) 0 0;box-shadow:0 3px 0 -1px var(--surface),0 3px 0 0 var(--line),0 6px 0 -1px var(--surface-2),0 6px 0 0 var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                    <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font:var(--nw) 24px/28px var(--font-num);font-variant-numeric:tabular-nums">{{ p2.score }}<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                    <span style="font-size:11px;line-height:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap">2-е место</span>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">
+                  <span style="position:relative"><img src="{{ p1.src }}" alt="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;display:block;border:3px solid var(--star)"><span style="position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;background:var(--star);color:var(--on-star);border:2px solid var(--bg);font:700 12px/20px var(--font-ui);text-align:center">1</span></span>
+                  <span style="margin-top:4px;font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p1.surname }}</span>
+                  <div style="width:100%;height:var(--pod-h1);background:var(--star-bg);border:1px solid var(--star-line);border-top:4px solid var(--star);border-radius:var(--r10) var(--r10) 0 0;box-shadow:0 3px 0 -1px var(--star-bg),0 3px 0 0 var(--star-line),0 6px 0 -1px var(--surface-2),0 6px 0 0 var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                    <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font:var(--nw) 28px/32px var(--font-num);font-variant-numeric:tabular-nums">{{ p1.score }}<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                    <span style="font-size:11px;line-height:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--star-text);font-weight:600;white-space:nowrap">1-е место</span>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">
+                  <span style="position:relative"><img src="{{ p3.src }}" alt="" style="width:60px;height:60px;border-radius:50%;object-fit:cover;display:block;border:3px solid var(--podium-3)"><span style="position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;background:var(--podium-3);color:var(--on-star);border:2px solid var(--bg);font:700 11px/18px var(--font-ui);text-align:center">3</span></span>
+                  <span style="margin-top:4px;font-size:14px;font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p3.surname }}</span>
+                  <div style="width:100%;height:var(--pod-h3);background:var(--surface);border:var(--bw) solid var(--line);border-top:4px solid var(--podium-3);border-radius:var(--r10) var(--r10) 0 0;box-shadow:0 3px 0 -1px var(--surface),0 3px 0 0 var(--line),0 6px 0 -1px var(--surface-2),0 6px 0 0 var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+                    <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font:var(--nw) 22px/26px var(--font-num);font-variant-numeric:tabular-nums">{{ p3.score }}<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                    <span style="font-size:11px;line-height:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap">3-е место</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:6px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden">
+                <sc-for list="{{ rows45 }}" as="r" hint-placeholder-count="2">
+                  <div style="display:flex;align-items:center;gap:12px;min-height:60px;padding:8px 16px;border-bottom:1px solid var(--line-soft);background:{{ r.bg }};box-shadow:{{ r.stripe }}">
+                    <span style="width:22px;flex:none;text-align:center;font:var(--nw) 18px/1 var(--font-num);color:var(--muted)">{{ r.num }}</span>
+                    <img src="{{ r.src }}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex:none">
+                    <span style="flex:1;min-width:0;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                    <span style="flex:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font:var(--nw) 18px/1 var(--font-num);font-variant-numeric:tabular-nums">{{ r.score }}<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ showGap }}" hint-placeholder-val="{{ true }}">
+                  <div aria-hidden="true" style="height:32px;display:flex;align-items:center;justify-content:center;gap:6px;border-bottom:1px solid var(--line-soft)"><span style="width:4px;height:4px;border-radius:50%;background:var(--line-strong)"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--line-strong)"></span><span style="width:4px;height:4px;border-radius:50%;background:var(--line-strong)"></span></div>
+                </sc-if>
+                <sc-if value="{{ showMeRow }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;align-items:center;gap:12px;min-height:64px;padding:8px 16px;background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent)">
+                    <span style="width:22px;flex:none;text-align:center;font:var(--nw) 18px/1 var(--font-num);color:var(--accent-text)">{{ meRow.num }}</span>
+                    <sc-if value="{{ me.hasAvatar }}" hint-placeholder-val="{{ true }}"><img src="{{ me.avatarSrc }}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex:none"></sc-if>
+                    <sc-if value="{{ me.noAvatar }}" hint-placeholder-val="{{ false }}"><span style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--accent-text);font:var(--dw) 15px/1 var(--font-display)">{{ me.initials }}</span></sc-if>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ me.name }}</span><span style="font-size:13px;line-height:16px;color:var(--accent-text);font-weight:500;font-family:var(--me-font, inherit);font-size:var(--me-size,13px)">это ты</span></span>
+                    <span style="flex:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font:var(--nw) 18px/1 var(--font-num);font-variant-numeric:tabular-nums">{{ me.balanceText }}<svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span>
+                  </div>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 34px 14px 16px;background:var(--star-bg);clip-path:polygon(0 0,100% 0,calc(100% - 16px) 50%,100% 100%,0 100%);border-radius:var(--r12) 0 0 var(--r12);font-size:15px;line-height:22px;color:var(--text)">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--star-text)" stroke-width="1.75" aria-hidden="true" style="flex:none;margin-top:0"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                <span style="text-wrap:pretty">{{ mot.a }}<b style="color:var(--star-text);white-space:nowrap">{{ mot.b }}</b>{{ mot.c }}<b style="color:var(--star-text);white-space:nowrap">{{ mot.d }}</b>{{ mot.e }}</span>
+              </div>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+            <section style="padding:20px 16px 24px;display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">История звёзд</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+              <sc-if value="{{ hasHistory }}" hint-placeholder-val="{{ true }}"><div style="display:var(--show-clear-flex);gap:8px;margin-bottom:6px"><span style="flex:1;display:flex;flex-direction:column;gap:2px;padding:10px 14px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface)"><span style="font-size:12px;color:var(--muted)">За ноябрь получено</span><span style="font:var(--nw) 20px/24px var(--font-num);color:var(--success);white-space:nowrap">+{{ hist.plus }} ★</span></span><span style="flex:1;display:flex;flex-direction:column;gap:2px;padding:10px 14px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface)"><span style="font-size:12px;color:var(--muted)">Потрачено на призы</span><span style="font:var(--nw) 20px/24px var(--font-num);color:var(--muted);white-space:nowrap">{{ hist.minus }} ★</span></span></div></sc-if>
+              <sc-for list="{{ history }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px">
+                  <div style="font-size:13px;line-height:18px;font-weight:600;color:var(--muted);padding-left:4px">{{ g.date }}</div>
+                  <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);overflow:hidden">
+                    <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="1">
+                      <div style="display:flex;align-items:center;gap:14px;min-height:72px;padding:12px 16px">
+                        <sc-if value="{{ it.plus }}" hint-placeholder-val="{{ true }}">
+                          <span style="flex:none;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--star-text);padding:2.5px;transform:rotate(-10deg)"><span style="width:100%;height:100%;border-radius:50%;border:1px solid var(--star-text);background:var(--star-bg);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span></span>
+                        </sc-if>
+                        <sc-if value="{{ it.minus }}" hint-placeholder-val="{{ false }}">
+                          <span style="flex:none;width:42px;height:42px;border-radius:50%;background:var(--surface-2);border:var(--bw) solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--muted)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg></span>
+                        </sc-if>
+                        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px"><span style="font-size:15px;line-height:20px;font-weight:600">{{ it.title }}</span><span style="font-size:13px;line-height:18px;color:var(--muted)">{{ it.sub }}</span></span>
+                        <span style="flex:none;white-space:nowrap;font:var(--nw) 22px/1 var(--font-num);font-variant-numeric:tabular-nums;color:{{ it.color }}">{{ it.amt }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ historyEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:48px 16px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+                  <div style="width:72px;height:72px;border-radius:50%;border:1.5px dashed var(--line-strong);display:flex;align-items:center;justify-content:center;transform:rotate(-10deg)"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
+                  <div style="font:var(--dw) 21px/26px var(--font-display)">Здесь появятся твои звёзды</div>
+                  <div style="font-size:15px;line-height:22px;color:var(--muted);max-width:290px;text-wrap:pretty">Учитель ставит их на уроке — до 5 за раз. Когда заберёшь приз, здесь будет видно, сколько списано.</div>
+                </div>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+            <section style="padding:20px 16px 24px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:flex;align-items:center;gap:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Мой аватар</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+              <div style="background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r18);padding:18px 16px 16px;display:flex;flex-direction:column;gap:16px">
+                <div style="font-size:15px;line-height:22px;color:var(--muted)">Выбери героя или поставь своё фото.</div>
+                <div role="radiogroup" aria-label="Аватар" style="display:grid;grid-template-columns:repeat(var(--av-cols),minmax(0,1fr));gap:12px">
+                  <sc-for list="{{ avatars }}" as="a" hint-placeholder-count="24">
+                    <button role="radio" aria-checked="{{ a.sel }}" aria-label="{{ a.label }}" onClick="{{ a.pick }}" style="position:relative;padding:0;border:0;background:none;cursor:pointer;aspect-ratio:1;border-radius:50%">
+                      <img src="{{ a.src }}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;box-shadow:{{ a.ring }};transform:translateY({{ a.lift }});transition:transform 220ms var(--ease)">
+                      <sc-if value="{{ a.sel }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;background:var(--primary);border:2px solid var(--surface);color:var(--on-primary);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+                <button style="height:48px;border:var(--bw) solid var(--line-strong);border-radius:var(--r12);background:var(--surface);color:var(--text);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer" style-hover="background:var(--surface-2)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+                  Своё фото
+                </button>
+              </div>
+              <div style="display:var(--show-clear);margin-top:8px">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Тема оформления</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+                <div role="radiogroup" aria-label="Тема" style="display:grid;grid-template-columns:repeat(3,1fr);padding:3px;gap:3px;border:var(--bw) solid var(--line);border-radius:var(--r12);background:var(--surface)">
+                  <button role="radio" aria-checked="{{ modeA.sel }}" onClick="{{ setModeA }}" style="height:40px;border:0;border-radius:var(--r9);font-size:15px;font-weight:600;cursor:pointer;background:{{ modeA.bg }};color:{{ modeA.fg }}">Авто</button>
+                  <button role="radio" aria-checked="{{ modeL.sel }}" onClick="{{ setModeL }}" style="height:40px;border:0;border-radius:var(--r9);font-size:15px;font-weight:600;cursor:pointer;background:{{ modeL.bg }};color:{{ modeL.fg }}">Светлая</button>
+                  <button role="radio" aria-checked="{{ modeD.sel }}" onClick="{{ setModeD }}" style="height:40px;border:0;border-radius:var(--r9);font-size:15px;font-weight:600;cursor:pointer;background:{{ modeD.bg }};color:{{ modeD.fg }}">Тёмная</button>
+                </div>
+                <div style="margin-top:8px;font-size:13px;line-height:18px;color:var(--muted)">«Авто» — как в Telegram или в настройках телефона.</div>
+              </div>
+              <div style="display:var(--show-q);margin-top:8px">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Мои призы · {{ trophyCount }}</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+                  <sc-for list="{{ trophies }}" as="t" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center">
+                      <span style="position:relative;width:100%;aspect-ratio:1;border-radius:var(--r18);overflow:hidden;background:var(--surface);border:2px solid {{ t.border }};box-shadow:var(--shadow-card)"><img src="{{ t.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;filter:{{ t.filter }};opacity:{{ t.op }}"></span>
+                      <span style="font-size:12px;line-height:15px;font-weight:700;color:{{ t.fg }}">{{ t.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </section>
+          </sc-if>
+        </sc-if>
+        </div>
+      </div>
+
+      <sc-if value="{{ showMini }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:0;left:0;right:0;height:60px;background:var(--hero-bg);color:var(--hero-fg);display:flex;align-items:center;gap:12px;padding:0 16px;box-shadow:0 6px 14px -10px rgba(0,0,0,.5);opacity:{{ miniOpacity }};transform:translateY({{ miniShift }}px);pointer-events:{{ miniPE }};transition:opacity 180ms ease-out,transform 180ms ease-out">
+          <button onClick="{{ openAvatarSheet }}" aria-label="Сменить аватар" style="flex:none;width:44px;height:44px;padding:6px;margin-left:-6px;border:0;background:none;cursor:pointer">
+            <sc-if value="{{ me.hasAvatar }}" hint-placeholder-val="{{ true }}"><img src="{{ me.avatarSrc }}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;display:block;border:2px solid var(--bg)"></sc-if>
+            <sc-if value="{{ me.noAvatar }}" hint-placeholder-val="{{ false }}"><span style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent-text);font:var(--dw) 12px/1 var(--font-display)">{{ me.initials }}</span></sc-if>
+          </button>
+          <span style="flex:1;min-width:0;font:var(--dw) 17px/22px var(--font-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ me.name }}</span>
+          <span aria-label="{{ me.balanceAria }}" style="flex:none;display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 12px 0 10px;border-radius:999px;background:var(--mini-pill, var(--star));box-shadow:var(--mini-pill-shadow, none);color:var(--on-star);white-space:nowrap"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--on-star)" stroke="var(--on-star)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg><span style="font:var(--nw) 16px/1 var(--font-num);font-variant-numeric:tabular-nums">{{ me.balanceText }}</span></span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="position:absolute;top:12px;left:12px;right:12px;display:flex;align-items:center;gap:12px;padding:10px 6px 10px 12px;background:var(--surface);border:var(--bw) solid var(--line);border-radius:var(--r14);box-shadow:var(--shadow-pop)">
+          <span style="flex:none;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--star-text);padding:2.5px;transform:rotate(-10deg)"><span style="width:100%;height:100%;border-radius:50%;border:1px solid var(--star-text);background:var(--star-bg);display:flex;align-items:center;justify-content:center"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--star)" stroke="var(--star-depth)" stroke-width="1.5" stroke-linejoin="round"></polygon></svg></span></span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:15px;line-height:20px;font-weight:600"><span style="color:var(--star-text);white-space:nowrap">+5 звёзд</span> за урок 18 ноября</span><span style="font-size:13px;line-height:18px;color:var(--muted)">Теперь у тебя <span style="white-space:nowrap">39 ★</span></span></span>
+          <button onClick="{{ closeToast }}" aria-label="Закрыть уведомление" style="flex:none;width:44px;height:44px;border:0;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+        </div>
+      </sc-if>
+    </div>
+
+    <nav aria-label="Разделы" style="flex:none;background:var(--surface);border-top:1px solid var(--line);padding-bottom:30px;position:relative">
+      <div style="display:flex;height:64px">
+        <button onClick="{{ goPrizes }}" aria-current="{{ nav.prizes.cur }}" style="flex:1;border:0;background:none;padding:6px 0 0;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:12px;line-height:16px;font-weight:600;color:{{ nav.prizes.fg }}">
+          <span style="width:56px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:{{ nav.prizes.bg }};transition:background 180ms ease-out"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg></span>
+          <span>Призы</span>
+        </button>
+        <button onClick="{{ goRating }}" aria-current="{{ nav.rating.cur }}" style="flex:1;border:0;background:none;padding:6px 0 0;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:12px;line-height:16px;font-weight:600;color:{{ nav.rating.fg }}">
+          <span style="width:56px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:{{ nav.rating.bg }};transition:background 180ms ease-out"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></span>
+          <span>Рейтинг</span>
+        </button>
+        <button onClick="{{ goHistory }}" aria-current="{{ nav.history.cur }}" style="flex:1;border:0;background:none;padding:6px 0 0;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:12px;line-height:16px;font-weight:600;color:{{ nav.history.fg }}">
+          <span style="width:56px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:{{ nav.history.bg }};transition:background 180ms ease-out"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg></span>
+          <span>История</span>
+        </button>
+        <button onClick="{{ goProfile }}" aria-current="{{ nav.profile.cur }}" style="flex:1;border:0;background:none;padding:6px 0 0;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;font-size:12px;line-height:16px;font-weight:600;color:{{ nav.profile.fg }}">
+          <span style="width:56px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;background:{{ nav.profile.bg }};transition:background 180ms ease-out"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="5"></circle><path d="M20 21a8 8 0 0 0-16 0"></path></svg></span>
+          <span>Профиль</span>
+        </button>
+      </div>
+      <span aria-hidden="true" style="position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:#121715"></span>
+    </nav>
+
+    <sc-if value="{{ isAvatarSheet }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim)"></div>
+        <div role="dialog" aria-label="Выбери аватар" style="position:relative;max-height:calc(100% - 16px);display:flex;flex-direction:column;background:var(--surface);border-radius:var(--r22) var(--r22) 0 0;border-top:3px solid var(--accent);box-shadow:0 -8px 32px -12px rgba(20,33,28,.35)">
+          <div style="padding:10px 16px 0;flex:none"><div style="width:40px;height:4px;border-radius:2px;background:var(--line-strong);margin:0 auto 14px"></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><h2 style="margin:0;font:600 12px/16px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Выбери аватар</h2><span style="flex:1;height:1px;background:var(--line)"></span></div>
+          </div>
+          <div role="radiogroup" aria-label="Аватар" style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;padding:4px 16px 16px;display:grid;grid-template-columns:repeat(var(--av-cols),minmax(0,1fr));gap:12px">
+            <sc-for list="{{ avatars }}" as="a" hint-placeholder-count="24">
+              <button role="radio" aria-checked="{{ a.sel }}" aria-label="{{ a.label }}" onClick="{{ a.pick }}" style="position:relative;padding:0;border:0;background:none;cursor:pointer;aspect-ratio:1;border-radius:50%">
+                <img src="{{ a.src }}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;box-shadow:{{ a.ring }};transform:translateY({{ a.lift }});transition:transform 220ms var(--ease)">
+                <sc-if value="{{ a.sel }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;background:var(--primary);border:2px solid var(--surface);color:var(--on-primary);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg></span></sc-if>
+              </button>
+            </sc-for>
+          </div>
+          <div style="flex:none;display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px 38px;border-top:1px solid var(--line)">
+            <button style="height:50px;border:var(--bw) solid var(--line-strong);border-radius:var(--r12);background:var(--surface);color:var(--text);font-size:16px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>Своё фото</button>
+            <button onClick="{{ saveAvatar }}" style="height:50px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">Готово</button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCelebrateQ }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Можно забрать приз" style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 20px 40px;background:var(--bg);text-align:center;overflow:hidden">
+        {{ coinsEl }}
+        <div style="position:relative;width:184px;height:184px;border-radius:var(--r22);border:4px solid var(--star);box-shadow:0 6px 0 var(--star-depth);overflow:hidden;background:var(--surface)"><img src="{{ cel.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+        <div style="position:relative;font:800 26px/32px var(--font-num);color:var(--text);white-space:nowrap">Можно забрать!</div>
+        <div style="position:relative;font-size:17px;line-height:24px;font-weight:700;max-width:310px;text-wrap:balance">{{ cel.first }}, тебе хватает на {{ cel.name }}</div>
+        <div style="position:relative;display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <span style="display:inline-block;height:32px;line-height:32px;padding:0 12px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow-card);font-size:14px;font-weight:700;white-space:nowrap">цена <span style="color:var(--star-text)">{{ cel.price }} ★</span></span>
+          <span style="display:inline-block;height:32px;line-height:32px;padding:0 12px;border-radius:999px;background:var(--surface);box-shadow:var(--shadow-card);font-size:14px;font-weight:700;white-space:nowrap">останется <span>{{ cel.after }} ★</span></span>
+        </div>
+        <button onClick="{{ closeSheet }}" style="position:relative;width:100%;max-width:320px;height:56px;margin-top:8px;border:0;border-radius:var(--r14);background:var(--primary);color:var(--on-primary);font-size:17px;font-weight:800;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">Покажу учителю</button>
+        <button onClick="{{ closeSheet }}" style="position:relative;min-height:44px;padding:0 16px;border:0;background:none;color:var(--muted);font-size:15px;font-weight:700;cursor:pointer">Позже</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isCelebrateK }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Можно забрать приз" style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px 22px 40px;background-color:var(--bg);background-image:var(--sky);background-size:var(--sky-size);text-align:center;overflow:hidden">
+        {{ stkCelEl }}
+        <div style="font:800 24px/28px var(--font-display)">{{ cel.first }}, тебе хватает!</div>
+        <div style="font-size:15px;line-height:22px;max-width:300px;text-wrap:balance">{{ cel.name }} — цена <b style="white-space:nowrap">{{ cel.price }} ★</b>, останется <b style="white-space:nowrap">{{ cel.after }} ★</b></div>
+        <button onClick="{{ closeSheet }}" style="width:100%;max-width:320px;height:52px;margin-top:4px;border:0;border-radius:var(--r14);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:700;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">Покажу учителю</button>
+        <button onClick="{{ closeSheet }}" style="min-height:44px;padding:0 16px;border:0;background:none;color:var(--muted);font-size:15px;font-weight:600;cursor:pointer">Позже</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isCelebrateC }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim)"></div>
+        <div role="dialog" aria-label="Тебе хватает на приз" style="position:relative;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 16px 38px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow-modal)">
+          <div style="width:40px;height:4px;border-radius:2px;background:var(--line-strong);margin:0 auto 4px"></div>
+          <div style="position:relative;aspect-ratio:4/3;border-radius:var(--r12);overflow:hidden;background:var(--surface-2)"><img src="{{ cel.img }}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">{{ flashEl }}</div>
+          <div style="display:flex;align-items:center;gap:6px;color:var(--success);font-size:14px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>Хватает на приз</div>
+          <div style="font:var(--dw) 24px/30px var(--font-display)">Тебе хватает!</div>
+          <div style="font-size:15px;line-height:22px;color:var(--muted);text-wrap:pretty">Подойди к учителю — он выдаст <b style="color:var(--text);font-weight:600">{{ cel.name }}</b> и спишет <b style="color:var(--text);white-space:nowrap">{{ cel.price }} ★</b>. Останется <b style="color:var(--text);white-space:nowrap">{{ cel.after }} ★</b>.</div>
+          <button onClick="{{ closeSheet }}" style="height:52px;margin-top:4px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;cursor:pointer">Понятно</button>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isCelebrateS }}" hint-placeholder-val="{{ false }}">
+      <div role="dialog" aria-label="Созвездие собрано" style="position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 22px 40px;background-color:var(--bg);background-image:var(--sky);background-size:var(--sky-size);text-align:center">
+        <div style="width:100%;max-width:330px">{{ celConst }}</div>
+        <div style="font:var(--dw) 26px/32px var(--font-display);white-space:nowrap">Созвездие собрано!</div>
+        <div style="font-size:16px;line-height:23px;color:var(--muted);max-width:310px;text-wrap:balance">{{ cel.first }}, можно забрать приз <b style="color:var(--text);font-weight:600">{{ cel.name }}</b></div>
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 16px 10px 10px;background:var(--surface);border:1px solid var(--star-line);border-radius:var(--r14);text-align:left">
+          <img src="{{ cel.img }}" alt="" style="width:56px;height:56px;border-radius:var(--r10);object-fit:cover;flex:none">
+          <span style="font-size:14px;line-height:20px;color:var(--muted)">цена <b style="color:var(--star);white-space:nowrap">{{ cel.price }} ★</b><br>останется <b style="color:var(--text);white-space:nowrap">{{ cel.after }} ★</b></span>
+        </div>
+        <button onClick="{{ closeSheet }}" style="width:100%;max-width:320px;height:52px;margin-top:6px;border:0;border-radius:var(--r14);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;cursor:pointer">Покажу учителю</button>
+        <button onClick="{{ closeSheet }}" style="min-height:44px;padding:0 16px;border:0;background:none;color:var(--muted);font-size:15px;font-weight:600;cursor:pointer">Позже</button>
+      </div>
+    </sc-if>
+    <sc-if value="{{ isCelebrateNb }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px">
+        <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim)"></div>
+        <div role="dialog" aria-label="Тебе хватает на приз" style="position:relative;width:100%;max-height:100%;overflow-y:auto;scrollbar-width:none;background:var(--surface);border-radius:var(--r20);padding:8px;box-shadow:var(--shadow-modal)">
+          <div style="border:1.5px solid var(--accent);border-radius:var(--r14);padding:3px">
+            <div style="border:1px solid var(--ok-line);border-radius:var(--r11);padding:18px 16px 12px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;background-color:var(--surface);background-image:repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--rule) 27px,var(--rule) 28px)">
+              <span style="font:600 12px/16px var(--font-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--accent-text)">Отметка для учителя</span>
+              {{ stampEl }}
+              <div style="font:var(--dw) 22px/28px var(--font-display);text-wrap:balance">{{ cel.first }}, тебе хватает на {{ cel.name }}!</div>
+              <div style="display:flex;align-items:center;gap:12px;width:100%;padding:10px;background:var(--surface-2);border:var(--bw) solid var(--line);border-radius:var(--r12);text-align:left">
+                <img src="{{ cel.img }}" alt="" style="width:72px;aspect-ratio:4/3;border-radius:var(--r8);object-fit:cover;flex:none">
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:13px;line-height:18px;color:var(--muted)"><span>Приз стоит <b style="color:var(--star-text);white-space:nowrap">{{ cel.price }} ★</b></span><span>У тебя <b style="color:var(--text);white-space:nowrap">{{ cel.balance }} ★</b>, останется <b style="color:var(--text);white-space:nowrap">{{ cel.after }} ★</b></span></span>
+              </div>
+              <div style="font-size:14px;line-height:20px;color:var(--muted);text-wrap:pretty">Покажи этот экран учителю — он выдаст приз и спишет звёзды.</div>
+              <button onClick="{{ closeSheet }}" style="width:100%;height:52px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">Покажу учителю</button>
+              <button onClick="{{ closeSheet }}" style="min-height:44px;padding:0 16px;margin-top:-6px;border:0;background:none;color:var(--muted);font-size:15px;font-weight:600;cursor:pointer">Позже</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isIssued }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end">
+        <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim)"></div>
+        <div role="dialog" aria-label="Приз выдан" style="position:relative;background:var(--surface);border-radius:var(--r22) var(--r22) 0 0;border-top:3px solid var(--accent);padding:10px 16px 38px;display:flex;flex-direction:column;gap:16px;box-shadow:0 -8px 32px -12px rgba(20,33,28,.35)">
+          <div style="width:40px;height:4px;border-radius:2px;background:var(--line-strong);margin:0 auto"></div>
+          <div style="position:relative;border-radius:var(--r14);overflow:hidden;aspect-ratio:16/9;background:var(--surface-2)">
+            <img src="assets/prizes/leds.png" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+            <span style="position:absolute;right:14px;bottom:14px;padding:6px 12px;border:2.5px solid var(--accent);border-radius:var(--r8);background:rgba(255,253,248,.92);color:var(--accent-text);font:700 16px/20px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;transform:rotate(-8deg);box-shadow:inset 0 0 0 2px rgba(255,253,248,.92),inset 0 0 0 3px var(--accent)">Выдано</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font:var(--dw) 22px/28px var(--font-display)">Приз у тебя!</div>
+            <div style="font-size:15px;line-height:22px;color:var(--muted)">«Набор светодиодов / Брелок» выдан 12 ноября.</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;border:var(--bw) solid var(--line);border-radius:var(--r12);overflow:hidden">
+            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line)"><span style="font-size:12px;line-height:16px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Списано</span><span style="font:var(--nw) 22px/28px var(--font-num);color:var(--muted);white-space:nowrap">−12 ★</span></div>
+            <div style="padding:10px 14px;display:flex;flex-direction:column;gap:2px"><span style="font-size:12px;line-height:16px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">Осталось</span><span style="font:var(--nw) 22px/28px var(--font-num);white-space:nowrap">39 ★</span></div>
+          </div>
+          <button onClick="{{ closeSheet }}" style="height:52px;border:0;border-radius:var(--r12);background:var(--primary);color:var(--on-primary);font-size:16px;font-weight:600;cursor:pointer;box-shadow:var(--depth-primary);transition:transform 80ms ease-out,box-shadow 80ms ease-out" style-active="transform:translateY(var(--press-y));box-shadow:var(--depth-pressed)">Отлично</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</sc-if>
+
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;telegram&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;label&quot;:&quot;Обвязка Telegram (шапка мини-приложения)&quot;},&quot;okBadge&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Закладка&quot;,&quot;Пилюля&quot;],&quot;default&quot;:&quot;Закладка&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;label&quot;:&quot;Статус «Хватает»&quot;},&quot;annotations&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;label&quot;:&quot;Пояснения к экранам&quot;}}">
+class Component extends DCLogic {
+  themeInit = (() => { try { const t = localStorage.getItem('zvezdy-theme') || 'notebook'; document.documentElement.dataset.theme = t; return t; } catch (e) { return 'notebook'; } })();
+  setTheme(t) { try { localStorage.setItem('zvezdy-theme', t); } catch (e) {} document.documentElement.dataset.theme = t; this.setState({ theme: t }); }
+  modeInit = (() => { try { const m = localStorage.getItem('zvezdy-mode') || 'light'; document.documentElement.dataset.mode = m; return m; } catch (e) { return 'light'; } })();
+  setMode(m) { try { localStorage.setItem('zvezdy-mode', m); } catch (e) {} document.documentElement.dataset.mode = m; this.setState({ uiMode: m }); }
+  themeVals() {
+    const t = (this.state && this.state.theme) || this.themeInit; const q = t === 'quest';
+    const o = on => ({ sel: on ? 'true' : 'false', bg: on ? 'var(--primary)' : 'transparent', fg: on ? 'var(--on-primary)' : 'var(--text)' });
+    const sk = t === 'sky', cl = t === 'clear', stk = t === 'sticker', nb = !q && !sk && !cl && !stk; const um = (this.state && this.state.uiMode) || this.modeInit;
+    return { theme: t, isQuest: q, isSky: sk, isClear: cl, isSticker: stk, isNotebook: nb, themeK: o(stk), setK: () => this.setTheme('sticker'), themeNb: o(nb), themeQ: o(q), themeS: o(sk), themeC: o(cl), setC: () => this.setTheme('clear'), uiMode: um, modeA: o(um === 'auto'), modeL: o(um === 'light'), modeD: o(um === 'dark'), setModeA: () => this.setMode('auto'), setModeL: () => this.setMode('light'), setModeD: () => this.setMode('dark'), setNb: () => this.setTheme('notebook'), setQ: () => this.setTheme('quest'), setS: () => this.setTheme('sky') };
+  }
+  state = { prizeView: 'grid', goalId: null, screen: 'prizes', filter: 'all', mode: 'normal', sheet: null, toast: false, loginError: null, avatar: 'blob', draft: 'blob', collapsed: false, preset: 'S2', tabIn: false, login: 'ivanov.artem', pass: '', prizeId: 'arduino' };
+  scrollRef = React.createRef();
+  SHAPES = {
+    dipper: { p: [[4,12],[15,16],[26,22],[37,27],[48,30],[52,48],[74,52],[80,34],[64,28],[94,18]], e: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,4],[7,9]] },
+    arrow: { p: [[4,50],[16,44],[28,38],[40,33],[52,28],[64,23],[76,18],[92,10],[78,5],[88,26]], e: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[7,9]] },
+    crown: { p: [[6,52],[10,22],[24,38],[34,12],[46,34],[56,6],[66,34],[78,12],[90,24],[94,52]], e: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,0]] },
+  };
+  constel(price, frac, o) {
+    const el = React.createElement, S = this.SHAPES[price >= 70 ? 'crown' : price >= 50 ? 'dipper' : 'arrow'];
+    const draw = !!o.draw, small = !!o.small;
+    const lit = draw ? 10 : Math.max(0, Math.min(10, Math.round(frac * 10)));
+    const lines = S.e.map(([a, b], i) => { const on = a < lit && b < lit; return el('line', { key: 'l' + i, x1: S.p[a][0], y1: S.p[a][1], x2: S.p[b][0], y2: S.p[b][1], stroke: on ? 'var(--star)' : 'var(--line-strong)', strokeWidth: on ? (small ? 1.1 : 0.7) : (small ? 0.9 : 0.5), strokeOpacity: on ? 0.85 : 1, strokeLinecap: 'round', strokeDasharray: on ? (draw ? 1 : undefined) : (small ? '2.5 2.5' : '1.6 1.6'), pathLength: draw ? 1 : undefined, style: draw ? { strokeDashoffset: 1, animation: 'drawLine 600ms cubic-bezier(.2,.8,.2,1) ' + (250 + i * 55) + 'ms forwards' } : undefined }); });
+    const pts = S.p.map(([x, y], i) => { const on = i < lit; const last = !!o.glowLast && i === lit - 1; return el('circle', { key: 'p' + i, cx: x, cy: y, r: on ? (small ? 3 : 2) : (small ? 2.2 : 1.5), fill: on ? 'var(--star)' : 'var(--bg)', stroke: on ? 'none' : 'var(--muted)', strokeWidth: small ? 0.9 : 0.5, strokeOpacity: 0.7, style: { transformBox: 'fill-box', transformOrigin: 'center', filter: last ? 'drop-shadow(0 0 2.5px rgba(255,209,102,.95))' : undefined, animation: draw ? 'starOn 280ms cubic-bezier(.2,.8,.2,1) ' + (i * 45) + 'ms both' : undefined } }); });
+    return el('svg', { key: o.key, viewBox: '-2 0 104 60', width: '100%', height: o.h, role: 'img', 'aria-label': 'Созвездие: горит ' + lit + ' из 10 звёзд', style: { display: 'block', overflow: 'visible' } }, lines, pts);
+  }
+  avOrder() {
+    if (!this.themeVals().isSky) return this.AVATARS;
+    const first = ['astronaut', 'rocket', 'planet', 'alien', 'robot'];
+    return [...first.map(id => this.AVATARS.find(a => a[0] === id)), ...this.AVATARS.filter(a => !first.includes(a[0]))];
+  }
+
+  AVATARS = [['fox','Лиса'],['cat','Кошка'],['panda','Панда'],['bear','Медведь'],['tiger','Тигр'],['wolf','Волк'],['koala','Коала'],['owl','Сова'],['penguin','Пингвин'],['frog','Лягушка'],['shark','Акула'],['dino','Динозаврик'],['dragon','Дракончик'],['unicorn','Единорог'],['ghost','Привидение'],['blob','Клякса'],['strawberry','Клубничка'],['bolt','Молния'],['robot','Робот'],['cyborg','Киборг'],['astronaut','Космонавт'],['alien','Пришелец'],['rocket','Ракета'],['planet','Планета']];
+  PRIZES = [
+    { id: 'znatok-big', name: 'Большой набор «Знаток»', desc: '999 схем для сборки без пайки', price: 70 },
+    { id: 'keyboard', name: 'Игровая клавиатура с RGB', desc: 'Механический отклик и подсветка', price: 70 },
+    { id: 'znatok-std', name: 'Стандартный набор «Знаток»', desc: '320 увлекательных электронных схем', price: 50 },
+    { id: 'solder', name: 'Набор паяльника', desc: 'Паяльник с регулировкой, припой и подставка', price: 50 },
+    { id: 'mouse', name: 'Игровая мышь (Logitech / Bloody)', desc: 'Точный сенсор и программируемые кнопки', price: 50 },
+    { id: 'arduino', name: 'Набор датчиков для Arduino', desc: 'Модули света, звука, расстояния и температуры', price: 30 },
+    { id: 'headphones', name: 'Игровые наушники / Коврик XXL', desc: 'Полноразмерная гарнитура или большой коврик', price: 30 },
+    { id: 'leds', name: 'Набор светодиодов / Брелок', desc: 'Быстрый приз за активность на уроках', price: 12 },
+  ];
+  CLASS = [['Смирнова','Вероника',68,'panda'],['Абдуллаев','Руслан',61,'unicorn'],['Орлов','Кирилл',57,'bear'],['Петрова','София',57,'dragon'],['Жукова','Полина',45,'penguin'],['Назаров','Даниил',41,'koala'],['Белова','Ксения',29,'wolf'],['Гусев','Матвей',22,'dino'],['Хасанова','Амина',15,'frog']];
+  BASE = { screen: 'prizes', filter: 'all', mode: 'normal', sheet: null, toast: false, loginError: null, collapsed: false, pass: '' };
+  PRESETS = [
+    { id: 'S0', g: 's', label: 'Вход', st: { screen: 'login' }, note: 'Сайт /enter вне Telegram. Главный путь — «Открыть в Telegram», логин и пароль — запасной. Подсказка «спроси карточку» всегда видна.' },
+    { id: 'S0·e', g: 's', label: 'Вход · неверный пароль', st: { screen: 'login', loginError: 'wrong', pass: 'kvant343' }, note: 'Ошибка — иконка, текст и красная рамка, а не только цвет. Подсказывает, где на карточке пароль.' },
+    { id: 'S1–2', g: 's', label: 'Призы · полная шапка', st: {}, note: 'Полная шапка только здесь. Место в классе — кнопка, ведёт в рейтинг. «осталось 11 ★» не переносится; на конце полосы — миниатюра цели. Доступные призы идут первыми.' },
+    { id: 'S2·m', g: 's', label: 'Призы · мини-шапка', st: {}, scroll: 330, note: 'После прокрутки шапка сворачивается в 60 px: аватар, имя, золотая пилюля баланса. Видно 4 карточки.' },
+    { id: 'S2·f', g: 's', label: 'Призы · «Уже доступны»', st: { filter: 'ok' }, note: 'Фильтр показывает число доступных. Статус «Хватает» — лента-закладка: иконка + слово + цвет.' },
+    { id: 'S3', g: 's', label: 'Рейтинг', st: { screen: 'rating' }, note: 'Пьедестал — стопки бумаги с кромкой золото / серебро / бронза. Только топ-5 и сам ученик. Мотивация без стыда: «ещё 3 звезды до 6-го места».' },
+    { id: 'S4', g: 's', label: 'История', st: { screen: 'history' }, note: 'Лента с датами. Начисление — штамп-звезда и «+5» золотом. Списание — подарок и «−12» серым, с названием приза.' },
+    { id: 'S5', g: 's', label: 'Профиль', st: { screen: 'profile' }, note: 'Сетка 4 колонки, 24 героя. Выбор применяется сразу: кольцо чернил + галочка.' },
+    { id: 'S5a', g: 's', label: 'Шторка «Выбери аватар»', st: { sheet: 'avatar' }, note: 'Открывается по аватару в шапке. Кнопка Telegram слева превращается в «Назад» и закрывает шторку.' },
+    { id: 'Load', g: 'x', label: 'Загрузка', st: { mode: 'loading' }, note: 'Скелетоны повторяют форму шапки и карточек, чтобы экран не прыгал.' },
+    { id: '0 ★', g: 'x', label: 'Новый ученик · 0 звёзд', st: { mode: 'empty' }, note: 'Стресс: длинное ФИО, нет аватара (инициалы), баланс 0, места в классе пока нет. Попробуй фильтр «Уже доступны (0)».' },
+    { id: 'Hist', g: 'x', label: 'Пустая история', st: { mode: 'empty', screen: 'history' }, note: 'Пустое состояние на тетрадной линейке объясняет, откуда берутся звёзды.' },
+    { id: 'Net', g: 'x', label: 'Нет сети', st: { mode: 'error' }, note: 'Спокойный тон: звёзды не пропали. Одна главная кнопка «Повторить».' },
+    { id: 'Toast', g: 'x', label: 'Тост «+5 звёзд»', st: { toast: true }, note: 'Появляется после начисления, со штампом-звездой и новым балансом.' },
+    { id: 'Party', g: 'x', label: 'Праздник «Хватает на приз»', st: { sheet: 'celebrate', prizeId: 'arduino' }, note: 'Лист-грамота с двойной рамкой, печать «шлёпается» за 250 мс. Без конфетти. Открывается и по тапу на любую карточку «Хватает».' },
+    { id: 'Given', g: 'x', label: 'Приз выдан', st: { screen: 'history', sheet: 'issued' }, note: 'Штамп «Выдано», сколько списано и сколько осталось. Та же запись появляется в истории.' },
+    { id: '1250', g: 'x', label: 'Стресс · 1 250 звёзд', st: { mode: 'rich' }, note: 'Четырёхзначный баланс с неразрывным пробелом. Хватает на всё — вместо полосы прогресса строка-итог.' },
+  ];
+
+  plural(n, f) { const r = new Intl.PluralRules('ru').select(n); return r === 'one' ? f[0] : r === 'few' ? f[1] : f[2]; }
+  stars(n) { return this.plural(n, ['звезда', 'звезды', 'звёзд']); }
+  fmt(n) { return n.toLocaleString('ru-RU').replace(/\s/g, '\u00A0'); }
+  q(s) { return '«' + s.replace(/«/g, '„').replace(/»/g, '“') + '»'; }
+  av(id) { return 'assets/avatars/' + id + '.png'; }
+  pr(id) { return 'assets/prizes/' + id + '.png'; }
+
+  applyPreset(p) {
+    this.setState({ ...this.BASE, ...p.st, preset: p.id }, () => {
+      const el = this.scrollRef.current;
+      if (el) { el.scrollTop = p.scroll || 0; this.onScroll(); }
+    });
+  }
+  onScroll = () => {
+    const el = this.scrollRef.current; if (!el) return;
+    const c = el.scrollTop > 200;
+    if (c !== this.state.collapsed) this.setState({ collapsed: c });
+  };
+  goTab(t) {
+    this.setState({ screen: t, tabIn: true, collapsed: false, sheet: null, toast: false }, () => {
+      const el = this.scrollRef.current; if (el) el.scrollTop = 0;
+      requestAnimationFrame(() => requestAnimationFrame(() => this.setState({ tabIn: false })));
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const tg = this.props.telegram ?? true;
+    const ribbonMode = (this.props.okBadge ?? 'Закладка') === 'Закладка';
+    const showNotes = this.props.annotations ?? true;
+
+    const meBase = s.mode === 'empty'
+      ? { surname: 'Абдурахмонова-Ибрагимова', first: 'Мадина', balance: 0, avatar: null, initials: 'АМ' }
+      : { surname: 'Иванов', first: 'Артём', balance: s.mode === 'rich' ? 1250 : 39, avatar: s.avatar, initials: 'ИА' };
+    const bal = meBase.balance;
+
+    const all = [...this.CLASS.map(([sn, n, b, a]) => ({ sn, n, b, a })), { sn: meBase.surname, n: meBase.first, b: bal, a: meBase.avatar, me: true }]
+      .sort((x, y) => (y.b - x.b) || ((x.me ? 1 : 0) - (y.me ? 1 : 0)));
+    const place = all.findIndex(r => r.me) + 1;
+    const total = all.length;
+
+    const me = {
+      name: meBase.surname + ' ' + meBase.first, first: meBase.first,
+      balanceText: this.fmt(bal), starWord: this.stars(bal), balanceAria: 'Баланс: ' + bal + ' ' + this.stars(bal),
+      hasAvatar: !!meBase.avatar, noAvatar: !meBase.avatar, avatarSrc: meBase.avatar ? this.av(meBase.avatar) : '', initials: meBase.initials,
+      placeText: bal > 0 ? place + '-е место из ' + total : '',
+    };
+
+    const list = this.PRIZES.map(p => ({ ...p, ok: bal >= p.price, rem: Math.max(0, p.price - bal) }));
+    const okList = list.filter(p => p.ok).sort((a, b) => b.price - a.price);
+    const noList = list.filter(p => !p.ok).sort((a, b) => a.price - b.price);
+    const shown = s.filter === 'ok' ? okList : [...okList, ...noList];
+    const cards = shown.map((p, ci) => ({
+      tilt: this.themeVals().isSticker ? (ci % 2 ? '1.2deg' : '-1.2deg') : '0deg', tapeRot: ci % 2 ? '3deg' : '-4deg',
+      name: p.name, desc: p.desc, img: this.pr(p.id), price: this.fmt(p.price), ok: p.ok, notOk: !p.ok,
+      ribbon: p.ok && ribbonMode, pill: p.ok && !ribbonMode, rem: p.rem, pct: Math.min(100, Math.round(bal / p.price * 100)) + '%',
+      border: p.ok ? 'var(--ok-line)' : (s.goalId === p.id ? 'var(--primary)' : 'var(--line)'),
+      constel: this.constel(p.price, bal / p.price, { h: 34, small: true, key: 'c-' + p.id }),
+      cat: p.price >= 70 ? 'var(--cat-l)' : p.price >= 50 ? 'var(--cat-m)' : 'var(--cat-s)',
+      pinBg: s.goalId === p.id ? 'var(--primary)' : 'var(--surface)', pinFg: s.goalId === p.id ? 'var(--on-primary)' : 'var(--text)',
+      pinAria: s.goalId === p.id ? 'Цель выбрана — нажми, чтобы снять' : 'Сделать целью',
+      pin: e => { e.stopPropagation(); this.setState({ goalId: s.goalId === p.id ? null : p.id }); },
+      aria: p.name + ', ' + p.price + ' ' + this.stars(p.price) + (p.ok ? ', хватает' : ', ещё ' + p.rem + ' ' + this.stars(p.rem)),
+      open: p.ok ? () => this.setState({ sheet: 'celebrate', prizeId: p.id }) : () => {},
+    }));
+    const goal = noList.find(p => p.id === s.goalId);
+    const nx = goal || noList[0];
+    const next = nx ? { name: this.q(nx.name), rem: nx.rem, img: this.pr(nx.id), pctNum: Math.round(bal / nx.price * 100), pct: Math.round(bal / nx.price * 100) + '%' } : { name: '', rem: 0, img: '', pct: '0%', pctNum: 0 };
+
+    if (nx) {
+      const fr = Math.min(1, bal / nx.price);
+      Object.assign(next, {
+        cells: Array.from({ length: 10 }, (_, k) => ({ bg: k < Math.round(fr * 10) ? '#4DA8FF' : 'transparent', br: k < 9 ? '1.5px solid #121212' : '0' })), hand: nx.rem <= 15 ? 'ещё ' + nx.rem + ' — почти!' : 'ещё ' + nx.rem + ' ★',
+        constel: this.constel(nx.price, bal / nx.price, { h: 78, glowLast: true, key: 'hdr-' + nx.id }), skyLabel: goal ? 'Цель — созвездие' : 'Созвездие',
+        label: goal ? 'Цель:' : 'До приза', pinBg: goal ? 'var(--star-bg)' : 'var(--surface)',
+        pinAria: goal ? 'Снять цель — вернуть ближайший приз' : 'Сделать целью другой приз — выбери булавкой в витрине',
+        pathW: 'calc((100% - 76px) * ' + fr.toFixed(3) + ')',
+        checks: [0, 1, 2, 3].map(k => { const on = fr >= k / 4; return { left: 'calc(12px + (100% - 76px) * ' + (k / 4) + ')', bg: on ? 'var(--primary)' : 'var(--surface)', border: on ? 'var(--primary)' : 'var(--line-strong)', depth: on ? '#C9560A' : 'var(--line)' }; }),
+      });
+    }
+    const pod = i => { const r = all[i]; return { src: r.a ? this.av(r.a) : this.av('blob'), surname: r.me ? 'Это ты' : r.sn, score: this.fmt(r.b) }; };
+    const rows45 = all.slice(3, 5).map((r, i) => ({
+      num: i + 4, src: r.a ? this.av(r.a) : this.av('blob'), name: r.me ? 'Это ты' : r.sn + ' ' + r.n, score: this.fmt(r.b),
+      bg: r.me ? 'var(--accent-soft)' : 'transparent', stripe: r.me ? 'inset 3px 0 0 var(--accent)' : 'none',
+    }));
+    let mot = { a: '', b: '', c: '', d: '', e: '' };
+    if (bal === 0) mot.a = 'Заработай первую звезду на уроке — и появишься в рейтинге класса.';
+    else if (place === 1) mot = { a: 'Ты на ', b: '1-м месте', c: ' в классе. Так держать!', d: '', e: '' };
+    else { const need = all[place - 2].b - bal + 1; mot = { a: 'Ещё ', b: need + '\u00A0' + this.stars(need), c: ' — и ты поднимешься на ', d: (place - 1) + '-е место', e: ' в классе!' }; }
+
+    const history = s.mode === 'empty' ? [] : [
+      { date: '18 ноября, среда', items: [{ plus: true, minus: false, title: 'Урок', sub: 'Звёзды за урок в 5-А', amt: '+5', color: 'var(--plus-color)' }] },
+      { date: '12 ноября, четверг', items: [{ plus: false, minus: true, title: 'Приз: набор светодиодов', sub: 'Выдал учитель', amt: '\u221212', color: 'var(--muted)' }] },
+      { date: '10 ноября, вторник', items: [{ plus: true, minus: false, title: 'Активность на уроке', sub: 'Начислил учитель', amt: '+4', color: 'var(--plus-color)' }] },
+    ];
+
+    const curAv = s.sheet === 'avatar' ? s.draft : (meBase.avatar || '');
+    const avatars = this.avOrder().map(([id, label]) => ({
+      src: this.av(id), label, sel: curAv === id,
+      ring: curAv === id ? '0 0 0 3px var(--accent)' : '0 0 0 3px var(--bg), 0 0 0 4px var(--line)',
+      lift: curAv === id ? 'var(--sel-lift)' : '0px',
+      pick: () => s.sheet === 'avatar' ? this.setState({ draft: id }) : this.setState({ avatar: id, draft: id, mode: s.mode === 'empty' ? 'normal' : s.mode }),
+    }));
+
+    const cp = this.PRIZES.find(p => p.id === s.prizeId) || this.PRIZES[5];
+    const cel = { first: meBase.first, name: this.q(cp.name), img: this.pr(cp.id), price: cp.price, balance: this.fmt(bal), after: this.fmt(bal - cp.price) };
+    const h = React.createElement;
+    const stampEl = h('div', { key: 'st-' + s.prizeId, 'aria-hidden': true, style: { width: 88, height: 88, borderRadius: '50%', border: '2.5px solid var(--star-text)', padding: 4, boxSizing: 'border-box', animation: 'stampIn 250ms ease-out both', transform: 'rotate(-10deg)' } },
+      h('div', { style: { width: '100%', height: '100%', borderRadius: '50%', border: '1px solid var(--star-text)', background: 'var(--star-bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 } },
+        h('svg', { width: 40, height: 40, viewBox: '0 0 24 24' }, h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2', fill: 'var(--star)', stroke: 'var(--star-depth)', strokeWidth: 1.5, strokeLinejoin: 'round' })),
+        h('span', { style: { font: '700 10px/12px var(--font-ui)', letterSpacing: '.16em', color: 'var(--star-text)', paddingLeft: '.16em' } }, 'ОТЛИЧНО')));
+
+    const navItem = t => ({ fg: s.screen === t ? 'var(--accent-text)' : 'var(--muted)', bg: s.screen === t ? 'var(--accent-soft)' : 'transparent', cur: s.screen === t ? 'page' : undefined });
+    const seg = on => ({ sel: on ? 'true' : 'false', bg: on ? 'var(--primary)' : 'transparent', fg: on ? 'var(--on-primary)' : 'var(--text)' });
+    const mkPreset = p => ({ id: p.id, label: p.label, go: () => this.applyPreset(p), bg: s.preset === p.id ? 'var(--primary)' : 'transparent', fg: s.preset === p.id ? 'var(--on-primary)' : 'var(--text)' });
+    const cur = this.PRESETS.find(p => p.id === s.preset);
+    const ready = s.mode !== 'loading' && s.mode !== 'error';
+    const isPrizes = s.screen === 'prizes';
+    const ruled = 'repeating-linear-gradient(to bottom,transparent 0,transparent 27px,var(--rule) 27px,var(--rule) 28px)';
+
+    return { ...this.themeVals(),
+      presetsScreens: this.PRESETS.filter(p => p.g === 's').map(mkPreset),
+      presetsStates: this.PRESETS.filter(p => p.g === 'x').map(mkPreset),
+      note: cur ? cur.note : 'Выбери экран или состояние слева — или просто нажимай внутри телефона.',
+      showNotes, tg,
+      isLogin: s.screen === 'login', isApp: s.screen !== 'login',
+      login: s.login, pass: s.pass,
+      onLogin: e => this.setState({ login: e.target.value }),
+      onPass: e => this.setState({ pass: e.target.value, loginError: null }),
+      passBorder: s.loginError ? 'var(--danger)' : 'var(--line-strong)',
+      loginErrorText: s.loginError === 'wrong' ? 'Неверный пароль. Он напечатан на карточке под логином — проверь буквы и цифры.' : s.loginError === 'empty' ? 'Введи пароль с карточки.' : '',
+      submitLogin: () => { if (!s.pass.trim()) this.setState({ loginError: 'empty' }); else if (s.loginError) this.setState({ loginError: 'wrong' }); else this.setState({ ...this.BASE, preset: null }); },
+      enterApp: () => this.setState({ ...this.BASE, preset: null }),
+
+      sheetOpen: !!s.sheet, tgBackLabel: s.sheet ? 'Назад' : 'Закрыть',
+      tgBack: () => s.sheet ? this.setState({ sheet: null }) : this.setState({ ...this.BASE, screen: 'login', preset: 'S0' }),
+      scrollRef: this.scrollRef, onScroll: this.onScroll,
+      contentBg: ((s.screen === 'history' && ready) || s.mode === 'error' ? ruled + ', ' : '') + 'var(--sky)', contentBgSize: ((s.screen === 'history' && ready) || s.mode === 'error' ? 'auto, ' : '') + 'var(--sky-size)',
+      tabOpacity: s.tabIn ? 0 : 1, tabShift: s.tabIn ? 8 : 0, tabTransition: s.tabIn ? 'none' : 'opacity 180ms ease-out, transform 180ms ease-out',
+
+      isLoading: s.mode === 'loading', isError: s.mode === 'error', isReady: ready,
+      retry: () => this.setState({ mode: 'loading', preset: null }, () => setTimeout(() => this.setState({ mode: 'normal' }), 900)),
+      skeletonCards: [1, 2, 3, 4],
+      isPrizes, isRating: s.screen === 'rating', isHistory: s.screen === 'history', isProfile: s.screen === 'profile',
+      showMiniSpacer: !isPrizes,
+      showMini: ready,
+      miniOpacity: !isPrizes || s.collapsed ? 1 : 0, miniShift: !isPrizes || s.collapsed ? 0 : -8, miniPE: !isPrizes || s.collapsed ? 'auto' : 'none',
+
+      me, next, hasNext: !!nx, allOk: !nx,
+      cards, okCount: okList.length, noCards: cards.length === 0,
+      fAll: seg(s.filter === 'all'), fOk: seg(s.filter === 'ok'),
+      setAll: () => this.setState({ filter: 'all' }), setOk: () => this.setState({ filter: 'ok' }),
+
+      total, p1: pod(0), p2: pod(1), p3: pod(2), rows45, showGap: place > 6, showMeRow: place > 5, meRow: { num: bal > 0 ? place : '—' }, mot,
+      history, historyEmpty: history.length === 0,
+      avatars,
+      toast: s.toast && ready, closeToast: () => this.setState({ toast: false }),
+
+      isAvatarSheet: s.sheet === 'avatar', isIssued: s.sheet === 'issued',
+      isCelebrateNb: s.sheet === 'celebrate' && this.themeVals().isNotebook, isCelebrateS: s.sheet === 'celebrate' && this.themeVals().isSky, isCelebrateC: s.sheet === 'celebrate' && this.themeVals().isClear, isCelebrateK: s.sheet === 'celebrate' && this.themeVals().isSticker,
+      stkCelEl: h('div', { key: 'stk-' + s.prizeId, 'aria-hidden': true, style: { position: 'relative', width: 240, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        h('div', { style: { width: 190, height: 190, borderRadius: 18, border: '2px solid #121212', boxShadow: '0 0 0 5px #FFFFFF, 6px 6px 0 5px #121212', overflow: 'hidden', background: '#FFFFFF', animation: 'stkIn 420ms cubic-bezier(.34,1.56,.64,1) both' } }, h('img', { src: cel.img, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } })),
+        h('span', { style: { position: 'absolute', right: -14, bottom: 4, padding: '6px 10px', border: '3px solid #121212', borderRadius: 10, background: '#3DD598', color: '#121212', font: '800 15px/18px Rubik, system-ui, sans-serif', letterSpacing: '.04em', whiteSpace: 'nowrap', boxShadow: '3px 3px 0 #121212', animation: 'stampK 200ms ease-out 380ms both' } }, 'МОЖНО ЗАБРАТЬ!'),
+        ...[[-8, 6], [90, -4], [102, 40], [-14, 52], [-4, 80], [42, -8], [96, 78], [18, 84]].map(([x, y], i) => h('svg', { key: i, width: 26, height: 26, viewBox: '0 0 24 24', style: { position: 'absolute', left: x + '%', top: y + '%', transformBox: 'fill-box', transformOrigin: 'center', animation: 'starOn 260ms cubic-bezier(.34,1.56,.64,1) ' + (420 + i * 40) + 'ms both' } }, h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2', fill: '#FFD23F', stroke: '#121212', strokeWidth: 1.8, strokeLinejoin: 'round' })))),
+      flashEl: h('svg', { key: 'fl-' + s.prizeId, viewBox: '0 0 24 24', width: 140, height: 140, 'aria-hidden': true, style: { position: 'absolute', left: '50%', top: '50%', animation: 'flash 400ms ease-out both', pointerEvents: 'none' } }, h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2', fill: 'var(--star)', stroke: 'var(--star)', strokeWidth: 1.5, strokeLinejoin: 'round' })),
+      isList: this.themeVals().isClear && s.prizeView === 'list', isGrid: !(this.themeVals().isClear && s.prizeView === 'list'),
+      cardsGrid: this.themeVals().isClear && s.prizeView === 'list' ? [] : cards, cardsList: this.themeVals().isClear && s.prizeView === 'list' ? cards : [],
+      toggleView: () => this.setState({ prizeView: s.prizeView === 'list' ? 'grid' : 'list' }), viewAria: s.prizeView === 'list' ? 'Показать плиткой' : 'Показать списком',
+      hasHistory: history.length > 0, hist: { plus: 9, minus: '\u221212' },
+      celConst: this.constel(cp.price, 1, { h: 170, draw: true, key: 'cel-' + s.prizeId }),
+      twinkleEl: h('span', { key: 'tw' }, [[18, 22, 0], [72, 14, 1.3], [88, 58, 2.6]].map(([x, y, d], i) => h('span', { key: i, style: { position: 'absolute', left: x + '%', top: y + '%', width: 2.5, height: 2.5, borderRadius: '50%', background: '#EEF1FF', animation: 'twinkle 4s ease-in-out ' + d + 's infinite alternate' } }))), isCelebrateQ: s.sheet === 'celebrate' && this.themeVals().isQuest,
+      coinsEl: h('div', { key: 'coins-' + s.prizeId + s.sheet, 'aria-hidden': true, style: { position: 'absolute', left: '50%', top: '34%', width: 0, height: 0, pointerEvents: 'none' } },
+        Array.from({ length: 12 }, (_, i) => { const a = (i / 12) * Math.PI * 2 + 0.3; const r = 130 + (i % 3) * 26; return h('svg', { key: i, width: 30, height: 30, viewBox: '0 0 24 24', style: { position: 'absolute', left: 0, top: 0, '--dx': Math.round(Math.cos(a) * r) + 'px', '--dy': Math.round(Math.sin(a) * r * 0.9) + 'px', '--rot': ((i % 2 ? 1 : -1) * (20 + i * 9)) + 'deg', animation: 'coinFly 650ms cubic-bezier(.34,1.56,.64,1) ' + (i * 25) + 'ms both' } }, h('polygon', { points: '12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2', fill: 'var(--star)', stroke: 'var(--star-depth)', strokeWidth: 1.6, strokeLinejoin: 'round' })); })),
+      themeName: this.themeVals().isSticker ? 'Стикербук' : this.themeVals().isClear ? 'Ясно и быстро' : this.themeVals().isSky ? 'Созвездие' : this.themeVals().isQuest ? 'Звёздный квест' : 'Тетрадь отличника',
+      pinHelp: () => { if (s.goalId) this.setState({ goalId: null }); else { const el = this.scrollRef.current; if (el) el.scrollTo({ top: 300, behavior: 'smooth' }); this.setState({ filter: 'all' }); } },
+      trophyCount: '1 из 8',
+      trophies: [['leds', 'Светодиоды', true], ['arduino', 'Arduino', false], ['headphones', 'Наушники', false], ['znatok-std', '«Знаток»', false]].map(([id, label, got]) => ({ img: this.pr(id), label, filter: got ? 'none' : 'grayscale(1)', op: got ? 1 : 0.35, border: got ? 'var(--star)' : 'var(--line)', fg: got ? 'var(--text)' : 'var(--muted)' })),
+      openAvatarSheet: () => this.setState({ sheet: 'avatar', draft: meBase.avatar || 'fox' }),
+      saveAvatar: () => this.setState({ sheet: null, avatar: s.draft, mode: s.mode === 'empty' ? 'normal' : s.mode }),
+      closeSheet: () => this.setState({ sheet: null }),
+      cel, stampEl,
+
+      nav: { prizes: navItem('prizes'), rating: navItem('rating'), history: navItem('history'), profile: navItem('profile') },
+      goPrizes: () => this.goTab('prizes'), goRating: () => this.goTab('rating'), goHistory: () => this.goTab('history'), goProfile: () => this.goTab('profile'),
+    };
+  }
+}
+</script>
+</body>
+</html>
