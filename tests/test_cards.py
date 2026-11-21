@@ -49,3 +49,29 @@ def test_deep_link_points_to_bot():
 def test_deep_link_without_bot_falls_back_to_site(monkeypatch):
     monkeypatch.setattr(config, "BOT_USERNAME", "")
     assert config.deep_link("ABCD2345") == "http://localhost:8000/app?code=ABCD2345"
+
+
+def test_cards_eight_per_a4_sheet(teacher):
+    """Лист А4 — 2×4 карточки; девятый ученик уходит на второй лист."""
+    html = teacher.get("/cards/1").text
+    assert html.count('class="a4"') == 1
+    assert html.count('class="cell blank"') == 6
+    for i in range(7):
+        teacher.post("/api/students", json={"class_id": 1, "name": f"Ученик Номер{i}"})
+    html = teacher.get("/cards/1").text
+    assert html.count('class="card"') == 9
+    assert html.count('class="a4"') == 2
+    assert "2 листа А4" in html
+
+
+def test_cards_long_name_gets_smaller_font(teacher):
+    teacher.post("/api/students", json={"class_id": 1, "name": "Абдурахмонова-Ибрагимова Мадина"})
+    assert 'class="c-name xlong"' in teacher.get("/cards/1").text
+
+
+def test_cards_hide_changed_password(teacher):
+    from conftest import load_db, save_db
+    data = load_db()
+    next(s for s in data["students"] if s["id"] == 101)["password_shown"] = None
+    save_db(data)
+    assert "свой пароль" in teacher.get("/cards/1").text

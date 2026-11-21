@@ -3,210 +3,214 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
-<meta name="color-scheme" content="light dark">
 <title>Мой кабинет — звёзды и призы</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23b07d12%27 d=%27M12 2.8l2.76 5.6 6.18.9-4.47 4.36 1.06 6.15L12 16.9l-5.53 2.91 1.06-6.15L3.06 9.3l6.18-.9z%27/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/app.css">
 <!-- defer: страница рисуется, не дожидаясь telegram.org. Порядок выполнения сохраняется:
      скрипт Telegram, затем common.js и app.js (они тоже defer) — кабинет видит window.Telegram. -->
 <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
 </head>
-<body class="app">
+<body class="app" data-night>
 
 {{ICONS}}
 
-<!-- Загрузка -->
-<div class="screen" id="screenLoading">
-  <div class="spinner"></div>
-  <p>Открываем твой кабинет…</p>
-</div>
-
-<!-- Ошибка входа -->
-<div class="screen" id="screenError" hidden>
-  <svg class="ic ic-xl"><use href="#i-key"></use></svg>
-  <h2 id="errorTitle">Не удалось войти</h2>
-  <p id="errorText"></p>
-  <button class="btn" onclick="location.reload()">Попробовать снова</button>
-  <a class="btn btn-ghost" id="errorEnterLink" href="#">
-    <svg class="ic"><use href="#i-key"></use></svg> Войти по логину и паролю
-  </a>
-</div>
-
-<!-- Выход из аккаунта -->
-<div class="screen" id="screenBye" hidden>
-  <svg class="ic ic-xl"><use href="#i-logout"></use></svg>
-  <h2>Ты вышел из кабинета</h2>
-  <p>Чтобы вернуться — отсканируй QR-код со своей карточки<br>или пришли боту код с неё.</p>
-  <button class="btn" onclick="closeCabinet()">Закрыть</button>
-</div>
-
-<!-- Кабинет -->
-<div id="app" hidden>
-
-  <header class="hero">
-    <div class="hero-inner">
-      <div class="hero-top">
-        <button class="avatar-btn" id="heroAvatar" onclick="openAvatarSheet()" aria-label="Сменить аватар">
-          <img id="heroAvatarImg" alt="">
-          <span class="edit-dot"><svg class="ic"><use href="#i-pencil"></use></svg></span>
-        </button>
-        <div>
-          <div class="hero-name" id="heroName">—</div>
-          <div class="hero-sub">
-            <span class="chip" id="heroSchool" hidden>
-              <svg class="ic"><use href="#i-school"></use></svg><span></span>
-            </span>
-            <span class="chip" id="heroClass">
-              <svg class="ic"><use href="#i-users"></use></svg><span>—</span>
-            </span>
-            <span class="chip" id="heroRank">
-              <svg class="ic"><use href="#i-medal"></use></svg><span>—</span>
-            </span>
-          </div>
-        </div>
-        <button class="hero-close" id="heroClose" hidden
-                onclick="closeCabinet()" aria-label="Закрыть кабинет">
-          <svg class="ic"><use href="#i-close"></use></svg>
-        </button>
-      </div>
-
-      <div class="balance">
-        <div class="balance-label">Накоплено</div>
-        <div class="balance-num">
-          <svg class="ic"><use href="#i-star"></use></svg>
-          <span id="heroStars">0</span>
-          <span class="unit" id="heroStarsWord">звёзд</span>
-        </div>
-      </div>
-
-      <div class="next-goal" id="nextGoal" hidden>
-        <div class="next-goal-head">
-          <span>До приза <b id="goalName">—</b></span>
-          <span id="goalLeft">—</span>
-        </div>
-        <div class="bar"><i id="goalBar" style="width:0%"></i></div>
-      </div>
-    </div>
-  </header>
-
-  <nav class="tabbar">
-    <button class="tab active" data-view="prizes" onclick="switchView('prizes')">
-      <svg class="ic ic-lg"><use href="#i-gift"></use></svg><span class="lbl">Призы</span>
-    </button>
-    <button class="tab" data-view="rating" onclick="switchView('rating')">
-      <svg class="ic ic-lg"><use href="#i-trophy"></use></svg><span class="lbl">Рейтинг</span>
-    </button>
-    <button class="tab" data-view="history" onclick="switchView('history')">
-      <svg class="ic ic-lg"><use href="#i-history"></use></svg><span class="lbl">История</span>
-    </button>
-    <button class="tab" data-view="profile" onclick="switchView('profile')">
-      <svg class="ic ic-lg"><use href="#i-user"></use></svg><span class="lbl">Профиль</span>
-    </button>
-  </nav>
-
-  <main class="content shell">
-
-    <section class="view active" id="view-prizes">
-      <div class="eyebrow">Витрина призов</div>
-      <div class="filter-row">
-        <button class="filter-btn active" id="filterAll" onclick="setFilter('all')">Все</button>
-        <button class="filter-btn" id="filterReady" onclick="setFilter('ready')">Уже доступны</button>
-      </div>
-      <div class="prizes" id="prizesGrid"></div>
-    </section>
-
-    <section class="view" id="view-rating">
-      <div class="eyebrow">Топ-5 класса <span id="ratingCount"></span></div>
-      <div class="podium" id="podium"></div>
-      <div class="rank-list" id="rankList"></div>
-      <div class="goal-note" id="goalNote" hidden></div>
-    </section>
-
-    <section class="view" id="view-history">
-      <div class="eyebrow">История звёзд</div>
-      <div class="timeline" id="timeline"></div>
-    </section>
-
-    <section class="view" id="view-profile">
-      <div class="eyebrow">Мой аватар</div>
-      <div class="panel">
-        <p class="muted" style="margin:0;font-size:13.5px;">Выбери героя или поставь своё фото.</p>
-        <div class="avatar-grid" id="avatarGrid"></div>
-        <div class="upload-row">
-          <label class="btn btn-ghost" style="cursor:pointer;">
-            <svg class="ic"><use href="#i-camera"></use></svg> Загрузить фото
-            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
-          </label>
-          <button class="btn btn-ghost" id="tgPhotoBtn" onclick="useTelegramPhoto()" hidden>
-            <svg class="ic"><use href="#i-user"></use></svg> Фото из Telegram
-          </button>
-        </div>
-        <div class="info-list">
-          <div class="info-item"><span>Школа</span><span id="infoSchool">—</span></div>
-          <div class="info-item"><span>Класс</span><span id="infoClass">—</span></div>
-          <div class="info-item"><span>Место в классе</span><span id="infoRank">—</span></div>
-          <div class="info-item"><span>Всего звёзд</span><span id="infoStars">—</span></div>
-        </div>
-      </div>
-
-      <div id="logoutBlock" style="margin-top:22px;">
-        <div class="eyebrow">Аккаунт</div>
-        <div class="panel">
-          <div class="info-list" style="margin-top:0;border-top:0;">
-            <div class="info-item"><span>Логин для входа с сайта</span><span id="infoLogin">—</span></div>
-          </div>
-
-          <button class="btn btn-ghost" style="margin-top:12px;" onclick="togglePasswordForm()">
-            <svg class="ic"><use href="#i-key"></use></svg> Сменить пароль
-          </button>
-
-          <div id="passwordForm" hidden style="margin-top:12px;">
-            <input type="password" id="passCurrent" style="width:100%;"
-                   placeholder="Текущий пароль" autocomplete="current-password">
-            <input type="password" id="passNew" style="width:100%;margin-top:8px;"
-                   placeholder="Новый пароль, минимум 5 символов" autocomplete="new-password">
-            <button class="btn" style="margin-top:10px;" onclick="savePassword()">
-              <svg class="ic"><use href="#i-check"></use></svg> Сохранить пароль
-            </button>
-          </div>
-
-          <p class="muted" style="margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;">
-            Выход открепит твой Telegram от карточки. Звёзды и аватар останутся —
-            чтобы вернуться, отсканируй QR со своей карточки или пришли код боту.
-          </p>
-          <button class="btn btn-danger" style="margin-top:14px;" onclick="logoutAccount()">
-            <svg class="ic"><use href="#i-logout"></use></svg> Выйти из аккаунта
-          </button>
-
-          <p class="preview-note" id="previewNote" hidden>
-            <svg class="ic ic-sm"><use href="#i-info"></use></svg>
-            <span>Так этот блок видит ученик. В предпросмотре кнопки не работают —
-            сменить пароль ученику можно в журнале, в окне «Данные для входа».</span>
-          </p>
-        </div>
-      </div>
-    </section>
-
-  </main>
-</div>
-
-<!-- Шторка выбора аватара -->
-<div class="sheet-backdrop" id="avatarSheet" onclick="if(event.target===this) closeAvatarSheet()">
-  <div class="sheet">
-    <div class="sheet-grip"></div>
-    <div class="eyebrow">Выбери аватар</div>
-    <div class="avatar-grid" id="avatarGridSheet"></div>
-    <div class="upload-row">
-      <label class="btn btn-ghost" style="cursor:pointer;">
-        <svg class="ic"><use href="#i-camera"></use></svg> Своё фото
-        <input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
-      </label>
-      <button class="btn" onclick="closeAvatarSheet()">Готово</button>
+<!-- Загрузка: скелетон повторяет форму шапки и карточек, чтобы экран не прыгал -->
+<div class="shell" id="screenLoading" aria-busy="true">
+  <span class="sr-only">Открываем твой кабинет…</span>
+  <div class="skel-hero">
+    <div class="row-gap"><span class="sk sk-av"></span><span class="col-gap"><span class="sk" style="width:170px;height:22px"></span><span class="sk round" style="width:120px;height:20px"></span></span></div>
+    <span class="col-gap"><span class="sk" style="width:84px;height:12px"></span><span class="sk" style="width:150px;height:52px"></span></span>
+    <span class="col-gap skel-goal"><span class="sk" style="width:240px;height:16px"></span><span class="sk round" style="height:8px"></span></span>
+  </div>
+  <div class="pad col-gap">
+    <span class="sk-line" style="width:140px;height:14px"></span>
+    <span class="sk-line" style="height:44px;border-radius:var(--r12)"></span>
+    <div class="cards">
+      <div class="sk-card"><span class="sk-photo"></span><span class="sk-line" style="width:90%"></span><span class="sk-line" style="width:60%"></span></div>
+      <div class="sk-card"><span class="sk-photo"></span><span class="sk-line" style="width:90%"></span><span class="sk-line" style="width:60%"></span></div>
+      <div class="sk-card"><span class="sk-photo"></span><span class="sk-line" style="width:90%"></span><span class="sk-line" style="width:60%"></span></div>
+      <div class="sk-card"><span class="sk-photo"></span><span class="sk-line" style="width:90%"></span><span class="sk-line" style="width:60%"></span></div>
     </div>
   </div>
 </div>
 
+<!-- Нет связи: звёзды не пропали, одна главная кнопка -->
+<div class="state-screen ruled-bg" id="screenNet" hidden>
+  <span class="state-ring"><svg class="ic ic-xl"><use href="#i-wifi-off"></use></svg></span>
+  <h2 class="state-title">Нет связи</h2>
+  <p class="state-text">Звёзды никуда не делись — они хранятся у учителя. Проверь интернет и попробуй ещё раз.</p>
+  <button class="btn btn-lg" onclick="location.reload()"><svg class="ic"><use href="#i-refresh"></use></svg>Повторить</button>
+</div>
+
+<!-- Не удалось войти -->
+<div class="state-screen" id="screenError" hidden>
+  <span class="state-ring"><svg class="ic ic-xl"><use href="#i-key"></use></svg></span>
+  <h2 class="state-title" id="errorTitle">Не получилось войти</h2>
+  <p class="state-text" id="errorText"></p>
+  <button class="btn btn-lg" onclick="location.reload()">Попробовать снова</button>
+  <a class="btn btn-outline btn-lg" id="errorEnterLink" href="#"><svg class="ic"><use href="#i-key"></use></svg>Войти по логину и паролю</a>
+</div>
+
+<!-- Вышел из аккаунта -->
+<div class="state-screen" id="screenBye" hidden>
+  <span class="state-ring"><svg class="ic ic-xl"><use href="#i-logout"></use></svg></span>
+  <h2 class="state-title">Ты вышел из кабинета</h2>
+  <p class="state-text">Чтобы вернуться — отсканируй QR-код со своей карточки или пришли боту код с неё.</p>
+  <button class="btn btn-lg" onclick="closeCabinet()">Закрыть</button>
+</div>
+
+<!-- Кабинет -->
+<div id="app" hidden>
+  <div class="preview-ribbon" id="previewRibbon" hidden>
+    <svg class="ic ic-sm"><use href="#i-eye"></use></svg><span id="previewText"></span>
+  </div>
+
+  <!-- Мини-шапка: на «Призах» — после прокрутки, на остальных вкладках — всегда -->
+  <div class="mini" id="mini">
+    <button class="mini-av" onclick="openAvatarSheet()" aria-label="Сменить аватар"><img id="miniAvatar" alt=""></button>
+    <span class="mini-name" id="miniName"></span>
+    <span class="mini-pill" id="miniPill"></span>
+  </div>
+
+  <main class="shell" id="content">
+    <section class="view active" id="view-prizes">
+      <header class="hero" id="hero"></header>
+      <div class="pad">
+        <div class="sec-head">
+          <h2 class="eyebrow">Витрина призов</h2>
+          <button class="view-toggle only-clear-flex" id="viewToggle" onclick="toggleView()" aria-label="Показать списком" title="Показать списком">
+            <span><svg class="ic"><use href="#i-list"></use></svg></span>
+          </button>
+        </div>
+        <div class="seg filter" role="tablist" aria-label="Фильтр призов">
+          <button role="tab" id="filterAll" aria-selected="true" onclick="setFilter('all')">Все</button>
+          <button role="tab" id="filterReady" aria-selected="false" onclick="setFilter('ready')">Уже доступны</button>
+        </div>
+        <div id="prizesHost"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-rating">
+      <div class="pad col-gap16">
+        <h2 class="eyebrow" id="ratingTitle">Топ-5 класса</h2>
+        <div class="podium" id="podium"></div>
+        <div class="rank-list" id="rankList"></div>
+        <div class="motivation" id="motivation" hidden></div>
+      </div>
+    </section>
+
+    <section class="view ruled-bg" id="view-history">
+      <div class="pad col-gap10">
+        <h2 class="eyebrow">История звёзд</h2>
+        <div class="month only-clear-flex" id="monthSummary" hidden></div>
+        <div id="timeline"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-profile">
+      <div class="pad col-gap14">
+        <h2 class="eyebrow">Мой аватар</h2>
+        <div class="card profile-card">
+          <p class="muted">Выбери героя или поставь своё фото.</p>
+          <div class="avatar-grid" id="avatarGrid" role="radiogroup" aria-label="Аватар"></div>
+          <div class="photo-btns">
+            <label class="btn btn-ghost btn-lg btn-block">
+              <svg class="ic"><use href="#i-camera"></use></svg>Своё фото
+              <input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
+            </label>
+            <button class="btn btn-ghost btn-lg btn-block" id="tgPhotoBtn" onclick="useTelegramPhoto()" hidden>
+              <svg class="ic"><use href="#i-send"></use></svg>Фото из Telegram
+            </button>
+          </div>
+        </div>
+
+        <div class="only-clear sub-block">
+          <h2 class="eyebrow">Тема оформления</h2>
+          <div class="seg seg-3" role="radiogroup" aria-label="Тема" id="modeSeg">
+            <button role="radio" data-mode="auto" onclick="pickMode('auto')">Авто</button>
+            <button role="radio" data-mode="light" onclick="pickMode('light')">Светлая</button>
+            <button role="radio" data-mode="dark" onclick="pickMode('dark')">Тёмная</button>
+          </div>
+          <p class="hint">«Авто» — как в Telegram или в настройках телефона.</p>
+        </div>
+
+        <div class="only-q sub-block">
+          <h2 class="eyebrow" id="trophyTitle">Мои призы</h2>
+          <div class="trophies" id="trophies"></div>
+        </div>
+
+        <div class="sub-block" id="logoutBlock">
+          <h2 class="eyebrow">Аккаунт</h2>
+          <div class="card account">
+            <div class="acc-row"><span class="muted">Логин для входа с сайта</span><span class="code-chip" id="infoLogin">—</span></div>
+            <button class="btn btn-ghost btn-block" onclick="togglePasswordForm()">
+              <svg class="ic"><use href="#i-key"></use></svg>Сменить пароль
+            </button>
+            <div class="pass-form" id="passwordForm" hidden>
+              <input type="password" id="passCurrent" placeholder="Текущий пароль" autocomplete="current-password">
+              <input type="password" id="passNew" placeholder="Новый пароль, минимум 5 символов" autocomplete="new-password">
+              <button class="btn btn-block" onclick="savePassword()"><svg class="ic"><use href="#i-check"></use></svg>Сохранить пароль</button>
+            </div>
+            <p class="hint ruled-top">Выход открепит твой Telegram от карточки. Звёзды и аватар останутся —
+              чтобы вернуться, отсканируй QR со своей карточки или пришли код боту.</p>
+            <button class="btn btn-danger-quiet btn-block" onclick="logoutAccount()">
+              <svg class="ic"><use href="#i-logout"></use></svg>Выйти из аккаунта
+            </button>
+            <p class="preview-note" id="previewNote" hidden>
+              <svg class="ic ic-sm"><use href="#i-info"></use></svg>
+              <span>Так этот блок видит ученик. В предпросмотре кнопки не работают —
+              сменить пароль ученику можно в журнале, в окне «Данные для входа».</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="Разделы">
+    <div class="tabbar-in">
+      <button class="tab" data-view="prizes" aria-current="page" onclick="switchView('prizes')">
+        <span class="tab-pill"><svg class="ic ic-lg"><use href="#i-gift"></use></svg></span><span>Призы</span>
+      </button>
+      <button class="tab" data-view="rating" onclick="switchView('rating')">
+        <span class="tab-pill"><svg class="ic ic-lg"><use href="#i-trophy"></use></svg></span><span>Рейтинг</span>
+      </button>
+      <button class="tab" data-view="history" onclick="switchView('history')">
+        <span class="tab-pill"><svg class="ic ic-lg"><use href="#i-history"></use></svg></span><span>История</span>
+      </button>
+      <button class="tab" data-view="profile" onclick="switchView('profile')">
+        <span class="tab-pill"><svg class="ic ic-lg"><use href="#i-user"></use></svg></span><span>Профиль</span>
+      </button>
+    </div>
+  </nav>
+</div>
+
+<!-- Шторка «Выбери аватар» -->
+<div class="sheet-wrap" id="avatarSheet" onclick="if(event.target===this) closeSheets()">
+  <div class="sheet" role="dialog" aria-label="Выбери аватар">
+    <div class="sheet-top"><span class="grip"></span><h2 class="eyebrow">Выбери аватар</h2></div>
+    <div class="avatar-grid sheet-scroll" id="avatarGridSheet" role="radiogroup" aria-label="Аватар"></div>
+    <div class="sheet-actions">
+      <label class="btn btn-ghost btn-lg">
+        <svg class="ic"><use href="#i-camera"></use></svg>Своё фото
+        <input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadPhoto(event)">
+      </label>
+      <button class="btn btn-lg" onclick="saveAvatar()">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- Праздник «Хватает на приз» — свой в каждой теме -->
+<div class="celebrate" id="celebrate" hidden></div>
+
+<!-- Шторка «Приз выдан» -->
+<div class="sheet-wrap" id="issuedSheet" onclick="if(event.target===this) closeSheets()">
+  <div class="sheet issued" role="dialog" aria-label="Приз выдан" id="issuedBody"></div>
+</div>
+
+<div class="top-toast" id="topToast" role="status" hidden></div>
 <div class="toast-host" id="toastHost"></div>
 
 <script>window.APP_BASE = "{{BASE}}";</script>

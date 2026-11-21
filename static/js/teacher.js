@@ -1338,7 +1338,7 @@ function renderPrizes() {
 
 function renderPrizePhotoPreview(src) {
   const box = $("prizePhotoPreview");
-  const ratio = token("--photo-ar").replace(/\s/g, "").replace("/", ":") || "4:3";
+  const ratio = cssToken("--photo-ar").replace(/\s/g, "").replace("/", ":") || "4:3";
   box.innerHTML = src
     ? `<img src="${escapeHtml(src)}" alt="Превью фото приза">`
     : `<span class="no-photo">${icon("image", "ic ic-lg")}нет фото · ${escapeHtml(ratio)}</span>`;

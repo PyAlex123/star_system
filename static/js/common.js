@@ -89,7 +89,7 @@ function applyMode(mode) {
 }
 
 /** Значение токена темы на элементе (по умолчанию — на <body>). */
-function token(name, el = document.body) {
+function cssToken(name, el = document.body) {
   return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
