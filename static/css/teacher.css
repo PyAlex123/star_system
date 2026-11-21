@@ -417,8 +417,8 @@ body:not(.is-teacher) .teacher-only { display: none !important; }
 .act-btn.more[aria-expanded="true"] { border-color: var(--accent); }
 .cell-act .menu { top: calc(100% + 4px); width: 260px; }
 /* У нижнего края экрана окошко раскрывается вверх, иначе его закроет итог урока */
-.cell-act .menu.up { top: auto; bottom: calc(100% + 4px); }
-.pop.up { top: auto; bottom: 30px; }
+/* Меню «⋯» и окошко «Вход» в слое поверх страницы (см. floatRowPop) */
+.row-float { position: fixed; z-index: 55; right: auto; bottom: auto; overflow-y: auto; }
 
 /* ── Новый ученик ──────────────────────────────────────────── */
 

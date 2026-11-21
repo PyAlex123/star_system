@@ -614,12 +614,35 @@ function renderTable() {
       </div>
       ${rows}
     </div>`;
-  if (focused !== null) $("tableHost").querySelector(`.jt-row[data-row="${focused}"]`)?.focus();
-  // Окошко у нижнего края экрана — раскрываем вверх
-  $("tableHost").querySelectorAll(".cell-act .menu, .pop").forEach((el) => {
-    const room = window.innerHeight - el.getBoundingClientRect().bottom;
-    if (room < 96) el.classList.add("up");
-  });
+  if (focused !== null) $("tableHost").querySelector(`.jt-row[data-row="${focused}"]`)?.focus({ preventScroll: true });
+  floatRowPop();
+}
+
+/** Меню «⋯» и окошко «Вход» выносим в слой поверх страницы. Внутри листа журнала
+ *  их перекрывала панель «Школа · Дата · Банк» и обрезал край экрана. Раскрываем
+ *  вниз, а если снизу не хватает места — вверх; по горизонтали не выходим за экран. */
+function floatRowPop() {
+  document.querySelectorAll("body > .row-float").forEach((el) => el.remove());
+  const pop = $("tableHost").querySelector(".cell-act .menu, .cell-login .pop");
+  if (!pop || !rowPop) return;
+  const row = pop.closest(".jt-row");
+  const anchor = row.querySelector(rowPop.kind === "more" ? ".act-btn.more" : ".code-btn");
+  const a = anchor?.getBoundingClientRect();
+  if (!a || !a.width) { pop.remove(); return; }   // кнопка скрыта темой — окошко не к чему привязать
+  document.body.appendChild(pop);
+  pop.classList.add("row-float");
+  const gap = 6;
+  const top0 = document.querySelector(".topbar").getBoundingClientRect().bottom + gap;
+  const h = pop.offsetHeight;
+  const w = pop.offsetWidth;
+  let top = a.bottom + gap;
+  if (top + h > window.innerHeight - gap && a.top - gap - h >= top0) top = a.top - gap - h;
+  top = Math.max(top0, Math.min(top, window.innerHeight - gap - h));
+  let left = rowPop.kind === "more" ? a.right - w : a.left;
+  left = Math.max(gap, Math.min(left, window.innerWidth - gap - w));
+  pop.style.top = `${top}px`;
+  pop.style.left = `${left}px`;
+  pop.style.maxHeight = `${window.innerHeight - top0 - gap}px`;
 }
 
 function rowHtml(student, index, day) {
@@ -1529,6 +1552,7 @@ function closeMenus(withRows = true) {
   const classMenu = $("classMenu");
   if (classMenu) { classMenu.style.display = "none"; classMenu.classList.remove("shown"); }
   if (withRows && rowPop) { rowPop = null; renderTable(); }
+  if (!rowPop) document.querySelectorAll("body > .row-float").forEach((el) => el.remove());
 }
 
 /** Скачивание файла с сервера: cookie сессии уходит сама, как у обычной ссылки. */
@@ -1740,8 +1764,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act")) closeMenus();
+    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float")) closeMenus();
   });
+  // Окошко строки стоит поверх страницы — при прокрутке и смене размера закрываем его
+  window.addEventListener("scroll", () => { if (rowPop) closeMenus(); }, { passive: true });
+  window.addEventListener("resize", () => { if (rowPop) closeMenus(); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const modal = topModal();
