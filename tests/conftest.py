@@ -23,6 +23,9 @@ sys.path.insert(0, str(ROOT))
 
 TEST_BOT_TOKEN = "123456:TEST-token-only-for-tests"
 TEACHER_PASSWORD = "teacher-pass"
+ADMIN_PASSWORD = "admin-pass"
+ADMIN_LOGIN = "admin"
+TEACHER_LOGIN = "teacher"
 STUDENT_PASSWORD = "secret-123"
 
 _DATA_DIR = tempfile.mkdtemp(prefix="stars-tests-")
@@ -37,6 +40,9 @@ os.environ.update({
     "BOT_USERNAME": "test_stars_bot",
     "USE_WEBHOOK": "0",
     "TEACHER_PASSWORD": TEACHER_PASSWORD,
+    "ADMIN_PASSWORD": ADMIN_PASSWORD,
+    "ADMIN_LOGIN": ADMIN_LOGIN,
+    "TEACHER_LOGIN": TEACHER_LOGIN,
     "JWT_SECRET": "jwt-secret-only-for-tests-long-enough-for-hs256",
     "DEV_LOGIN": "0",
     "SCHOOL_NAME": "Тестовая школа",
@@ -79,12 +85,33 @@ def client():
     return TestClient(app)
 
 
+def panel_client(login: str, password: str) -> TestClient:
+    """Клиент, вошедший в панель (cookie хранится внутри клиента)."""
+    c = TestClient(app)
+    r = c.post("/api/auth/teacher", json={"login": login, "password": password})
+    assert r.status_code == 200, r.text
+    return c
+
+
 @pytest.fixture
 def teacher():
-    """Клиент, вошедший в панель учителя (cookie хранится внутри клиента)."""
-    c = TestClient(app)
-    r = c.post("/api/auth/teacher", json={"password": TEACHER_PASSWORD})
-    assert r.status_code == 200, r.text
+    """Панель с полными правами — суперадмин. Большинству тестов важны действия,
+    а не роли; ограничения учителя проверяются отдельно (test_roles.py)."""
+    return panel_client(ADMIN_LOGIN, ADMIN_PASSWORD)
+
+
+@pytest.fixture
+def school_teacher(teacher):
+    """Учитель только школы 1. Вторая школа с классом и учеником для проверки,
+    что чужое ему не видно."""
+    r = teacher.post("/api/schools", json={"name": "Чужая школа"})
+    other_school = r.json()["school"]["id"]
+    r = teacher.post("/api/classes", json={"school_id": other_school, "name": "9-Я"})
+    other_class = r.json()["class"]["id"]
+    r = teacher.post("/api/students", json={"class_id": other_class, "name": "Чужой Ученик"})
+    other_student = r.json()["student"]["id"]
+    c = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
+    c.other = {"school": other_school, "class": other_class, "student": other_student}
     return c
 
 

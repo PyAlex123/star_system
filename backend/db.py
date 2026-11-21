@@ -9,12 +9,15 @@ import os
 import secrets
 import string
 import tempfile
+import logging
 import threading
 from datetime import datetime
 from typing import Any, Callable, Dict, Optional
 
-from . import passwords
+from . import config, passwords
 from .config import DB_FILE
+
+log = logging.getLogger("stars")
 
 _lock = threading.RLock()
 
@@ -25,10 +28,17 @@ _lock = threading.RLock()
 # 4 -> 5: отзываемые сессии. У ученика появился session_key — он зашит в токен,
 #         и смена ключа завершает все выданные ранее сессии. Номера учеников
 #         больше не выдаются повторно (settings.last_student_id).
-DB_VERSION = 5
+# 5 -> 6: пользователи панели. Вместо одного общего пароля — список users:
+#         суперадмин и учителя со своими логинами, паролями и школами.
+DB_VERSION = 6
 
 # Поля ученика, которые не покидают сервер даже в панели учителя
 SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
+# То же для пользователей панели
+SECRET_USER_FIELDS = ("password_hash", "session_key")
+
+ROLE_SUPERADMIN = "superadmin"
+ROLE_TEACHER = "teacher"
 
 # Алфавит кодов без символов, которые дети путают при ручном вводе (O/0, I/1)
 _TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -134,11 +144,93 @@ def public_student(student: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in student.items() if k not in SECRET_STUDENT_FIELDS}
 
 
-def public_state(db: Dict[str, Any]) -> Dict[str, Any]:
-    """База для панели учителя — без хешей паролей и ключей сессий."""
+def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Пользователь панели для ответа API — без хеша пароля и ключа сессии."""
+    return {k: v for k, v in user.items() if k not in SECRET_USER_FIELDS}
+
+
+def is_superadmin(user: Optional[Dict[str, Any]]) -> bool:
+    return bool(user) and user.get("role") == ROLE_SUPERADMIN
+
+
+def allowed_school_ids(db: Dict[str, Any], user: Optional[Dict[str, Any]]) -> set:
+    """Школы, которые видит пользователь. Суперадмину — все."""
+    if user is None or is_superadmin(user):
+        return {s["id"] for s in db.get("schools", [])}
+    return set(user.get("school_ids") or [])
+
+
+def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """База для панели — без хешей паролей и ключей сессий и без чужих школ.
+
+    Учитель получает только свои школы, их классы, учеников и уроки.
+    Суперадмину вдобавок приходит список пользователей панели.
+    """
     copy = json.loads(json.dumps(db))
-    copy["students"] = [public_student(s) for s in copy.get("students", [])]
+    schools = allowed_school_ids(copy, user)
+    copy["schools"] = [s for s in copy.get("schools", []) if s["id"] in schools]
+    copy["classes"] = [c for c in copy.get("classes", []) if c["school_id"] in schools]
+    class_ids = {c["id"] for c in copy["classes"]}
+    copy["students"] = [public_student(s) for s in copy.get("students", [])
+                        if s.get("class_id") in class_ids]
+    copy["lessons"] = [lesson for lesson in copy.get("lessons", [])
+                       if lesson.get("class_id") in class_ids]
+    users = copy.pop("users", [])
+    copy.pop("settings", None)
+    if user is not None:
+        copy["me"] = public_user(user)
+        if is_superadmin(user):
+            copy["users"] = [public_user(u) for u in users]
     return copy
+
+
+# ── Пользователи панели ──────────────────────────────────────────────────────
+
+def find_user(db: Dict[str, Any], user_id: int) -> Optional[Dict[str, Any]]:
+    return next((u for u in db.get("users", []) if u["id"] == user_id), None)
+
+
+def find_user_by_login(db: Dict[str, Any], login: str) -> Optional[Dict[str, Any]]:
+    wanted = passwords.normalize_login(login)
+    if not wanted:
+        return None
+    return next((u for u in db.get("users", []) if u.get("login") == wanted), None)
+
+
+def make_user(db: Dict[str, Any], login: str, name: str, role: str,
+              password: str, school_ids: Optional[list] = None) -> Dict[str, Any]:
+    user = {
+        "id": next_id(db.setdefault("users", [])),
+        "login": passwords.normalize_login(login),
+        "name": name,
+        "role": role,
+        "school_ids": sorted(set(school_ids or [])),
+        "password_hash": passwords.hash_password(password),
+        "session_key": new_session_key(),
+        "created_at": now_iso(),
+    }
+    db["users"].append(user)
+    return user
+
+
+def _bootstrap_users(db: Dict[str, Any]) -> bool:
+    """Первый запуск после обновления: суперадмин и учитель из .env.
+
+    Учитель сразу получает все существующие школы — он работал с ними и раньше.
+    """
+    if db.get("users"):
+        return False
+    db["users"] = []
+    make_user(db, config.ADMIN_LOGIN, "Администратор", ROLE_SUPERADMIN, config.ADMIN_PASSWORD)
+    if config.TEACHER_LOGIN != config.ADMIN_LOGIN:
+        make_user(db, config.TEACHER_LOGIN, "Учитель", ROLE_TEACHER, config.TEACHER_PASSWORD,
+                  [s["id"] for s in db.get("schools", [])])
+    log.warning("Созданы пользователи панели: %s (суперадмин), %s (учитель)",
+                config.ADMIN_LOGIN, config.TEACHER_LOGIN)
+    if config.ADMIN_PASSWORD_IS_FALLBACK:
+        log.warning("ADMIN_PASSWORD не задан: у суперадмина пока пароль учителя. "
+                    "Смените его в панели.")
+    return True
 
 
 def default_avatar(student_id: int) -> Dict[str, str]:
@@ -227,6 +319,9 @@ def migrate(db: Dict[str, Any]) -> bool:
         changed = True
 
     if _migrate_to_schools(db):
+        changed = True
+
+    if _bootstrap_users(db):
         changed = True
 
     for key, default in (("classes", []), ("students", []), ("lessons", []), ("settings", {})):

@@ -35,9 +35,7 @@ async def send_cabinet(message: Message, text: str) -> None:
     keyboard = cabinet_keyboard()
     if keyboard is None:
         await message.answer(
-            f"{text}\n\n⚠️ Кабинет пока не опубликован в интернете: "
-            f"учитель ещё не настроил адрес (сейчас <code>{config.webapp_url()}</code>). "
-            "Загляни чуть позже."
+            f"{text}\n\n⏳ Кабинет временно недоступен. Загляни чуть позже."
         )
         return
     await message.answer(text, reply_markup=keyboard)

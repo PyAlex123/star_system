@@ -11,7 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import assets, config
 from .bot.bot import start_bot, stop_bot
-from .routers import auth, cards, lessons, me, prizes, schools, students, telegram
+from .routers import auth, cards, excel, lessons, me, prizes, schools, students, telegram, users
 from .security import require_teacher_page
 
 logging.basicConfig(
@@ -31,7 +31,7 @@ def _startup_banner() -> None:
                  config.URL_PREFIX)
     if config.TEACHER_PASSWORD_IS_GENERATED:
         log.warning("=" * 62)
-        log.warning("  Пароль учителя не задан в .env. Временный пароль на эту сессию:")
+        log.warning("  Пароль учителя не задан в .env. Временный пароль (только для первого запуска):")
         log.warning("      %s", config.TEACHER_PASSWORD)
         log.warning("  Пропишите TEACHER_PASSWORD в .env, чтобы он не менялся.")
         log.warning("=" * 62)
@@ -40,6 +40,8 @@ def _startup_banner() -> None:
                     "На боевом сервере выключите его!")
     if not config.BOT_TOKEN:
         log.warning("BOT_TOKEN пуст — бот выключен. Заполните .env и перезапустите.")
+    elif not config.BOT_USERNAME:
+        log.warning("BOT_USERNAME пуст — QR-коды на карточках ведут на сайт, а не в бота.")
 
 
 @asynccontextmanager
@@ -202,6 +204,8 @@ app.include_router(lessons.router)
 app.include_router(prizes.router)
 app.include_router(me.router)
 app.include_router(cards.router)
+app.include_router(users.router)
+app.include_router(excel.router)
 app.include_router(telegram.router)
 
 

@@ -74,8 +74,8 @@ def test_prefix_in_login_redirect(client, prefix):
 
 
 def test_prefix_limits_teacher_cookie(client, prefix):
-    from conftest import TEACHER_PASSWORD
-    r = client.post("/api/auth/teacher", json={"password": TEACHER_PASSWORD})
+    from conftest import ADMIN_LOGIN, ADMIN_PASSWORD
+    r = client.post("/api/auth/teacher", json={"login": ADMIN_LOGIN, "password": ADMIN_PASSWORD})
     assert "path=/stars" in r.headers["set-cookie"].lower()
 
 

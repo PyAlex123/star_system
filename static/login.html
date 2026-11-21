@@ -19,19 +19,22 @@
   <h1>Панель учителя</h1>
   <p class="sub">Журнал звёзд и карточки классов</p>
 
-  <label for="password">Пароль</label>
-  <input type="password" id="password" autocomplete="current-password" autofocus required>
+  <div class="field">
+    <label for="login">Логин</label>
+    <input type="text" id="login" autocomplete="username" autocapitalize="none" spellcheck="false"
+           autofocus required>
+  </div>
+
+  <div class="field">
+    <label for="password">Пароль</label>
+    <input type="password" id="password" autocomplete="current-password" required>
+  </div>
 
   <button class="btn btn-block" type="submit" id="submitBtn">Войти</button>
 
   <div class="error" id="error">
     <svg class="ic ic-sm"><use href="#i-warning"></use></svg><span id="errorText"></span>
   </div>
-
-  <p class="hint">
-    Пароль задаётся в файле <code>.env</code> (параметр <code>TEACHER_PASSWORD</code>).
-    Если он не задан, временный пароль печатается в окне сервера при запуске.
-  </p>
 </form>
 
 <script>
@@ -48,7 +51,10 @@ async function submitLogin(event) {
     const response = await fetch(BASE + "/api/auth/teacher", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: document.getElementById("password").value }),
+      body: JSON.stringify({
+        login: document.getElementById("login").value,
+        password: document.getElementById("password").value,
+      }),
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));

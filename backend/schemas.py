@@ -30,6 +30,12 @@ class ClassCreate(BaseModel):
     name: Name
 
 
+class ClassBulkCreate(BaseModel):
+    """Несколько классов сразу — из сетки 1–11 × А–Д."""
+    school_id: int
+    names: List[Name] = Field(max_length=100)
+
+
 class ClassUpdate(BaseModel):
     name: Optional[Name] = None
     school_id: Optional[int] = None
@@ -91,8 +97,26 @@ class PrizeUpdate(BaseModel):
     active: Optional[bool] = None
 
 
+Login = Annotated[str, Field(max_length=64)]
+
+
 class TeacherLogin(BaseModel):
+    """Вход в панель: суперадмин или учитель."""
+    login: Login
     password: Secret
+
+
+class UserCreate(BaseModel):
+    """Новый учитель. Пароль пустой — система придумает сама."""
+    login: Login
+    name: Name
+    school_ids: List[int] = Field(default_factory=list, max_length=200)
+    password: Optional[Secret] = None
+
+
+class UserUpdate(BaseModel):
+    name: Optional[Name] = None
+    school_ids: Optional[List[int]] = Field(default=None, max_length=200)
 
 
 class StudentLogin(BaseModel):

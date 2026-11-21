@@ -1,13 +1,16 @@
-"""Витрина призов: редактирование и загрузка фотографий (только учитель)."""
+"""Витрина призов: редактирование и загрузка фотографий.
+
+Витрина общая для всех школ, поэтому менять её может только суперадмин.
+Учитель видит призы в /api/state и выдаёт их через списание звёзд."""
 import time
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from .. import config, db, images, schemas
-from ..security import require_teacher
+from ..security import require_superadmin
 
-router = APIRouter(prefix="/api/prizes", tags=["prizes"], dependencies=[Depends(require_teacher)])
+router = APIRouter(prefix="/api/prizes", tags=["prizes"], dependencies=[Depends(require_superadmin)])
 
 
 def _find(database: Dict[str, Any], prize_id: int):

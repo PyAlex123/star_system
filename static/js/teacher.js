@@ -1,4 +1,7 @@
-/* Панель учителя: школы, классы, журнал звёзд, карточки с QR, витрина призов. */
+/* Панель учителя: школы, классы, журнал звёзд, карточки с QR, витрина призов.
+   Роли: суперадмин видит всё и управляет школами, учителями и витриной;
+   учитель — только свои школы. Сервер проверяет права сам, панель лишь прячет
+   то, что пользователю всё равно недоступно. */
 
 const MAX_LESSON_BANK = 10;
 const MAX_STUDENT_STARS = 5;
@@ -15,6 +18,9 @@ let showPasswords = false; // пароли в журнале скрыты: эк�
 let schoolTarget = null;   // null = создаём новую школу
 let prizeTarget = null;    // null = создаём новый приз
 let photoTarget = null;
+
+let userTarget = null;     // null = создаём нового учителя
+let pickedClasses = new Set();
 
 let prizePhotoFile = null;
 let prizePhotoCleared = false;
@@ -86,12 +92,28 @@ async function loadState() {
   renderAll();
 }
 
+function isAdmin() { return state.me?.role === "superadmin"; }
+
+/** Кнопки «.admin-only» видит только администратор, «.teacher-only» — только учитель. */
+function applyRole() {
+  document.body.classList.toggle("is-admin", isAdmin());
+  document.body.classList.toggle("is-teacher", !isAdmin());
+  const me = state.me;
+  // «Иванова М. С. · учитель»; если имя и есть роль («Учитель») — без повтора
+  const role = isAdmin() ? "администратор" : "учитель";
+  $("brandSub").textContent = !me ? ""
+    : me.name.trim().toLowerCase() === role ? me.name : `${me.name} · ${role}`;
+  if (!isAdmin() && document.querySelector(".page.active")?.id === "page-users") switchPage("journal");
+}
+
 function renderAll() {
+  applyRole();
   renderSchoolSelect();
-  renderClassTabs();
+  renderClassSelect();
   renderTable();
   renderPrizes();
   renderLessons();
+  if (isAdmin()) renderUsers();
 }
 
 function renderSchoolSelect() {
@@ -110,16 +132,101 @@ function selectSchool(id) {
   renderAll();
 }
 
-function renderClassTabs() {
-  const classes = schoolClasses(activeSchool);
-  if (!classes.length) {
-    $("classTabs").innerHTML = `<span class="hint-text">в этой школе пока нет классов</span>`;
+const ADD_CLASSES = "__add";
+
+function renderClassSelect() {
+  const classes = schoolClasses(activeSchool)
+    .slice().sort((a, b) => a.name.localeCompare(b.name, "ru", { numeric: true }));
+  const options = classes.map((c) => {
+    const count = state.students.filter((s) => s.class_id === c.id).length;
+    return `<option value="${c.id}" ${c.id === activeClass ? "selected" : ""}>` +
+           `${escapeHtml(c.name)} — ${count} ${plural(count, "ученик", "ученика", "учеников")}</option>`;
+  });
+  if (!classes.length) options.push(`<option value="" selected disabled>классов пока нет</option>`);
+  if (activeSchool) options.push(`<option value="${ADD_CLASSES}">＋ Добавить классы…</option>`);
+  $("classSelect").innerHTML = options.join("");
+  $("classSelect").disabled = !activeSchool;
+}
+
+function onClassSelect(value) {
+  if (value === ADD_CLASSES) {
+    renderClassSelect();          // вернуть в списке выбранный класс
+    openClassGrid();
     return;
   }
-  $("classTabs").innerHTML = classes.map((c) => `
-    <button class="class-tab ${c.id === activeClass ? "active" : ""}"
-            onclick="selectClass(${c.id})">${escapeHtml(c.name)}</button>
-  `).join("");
+  selectClass(parseInt(value));
+}
+
+/** «5-А», «5а», «5 А» — один и тот же класс. */
+function classKey(name) { return String(name).toLowerCase().replace(/[\s-]/g, ""); }
+
+const GRID_LETTERS = ["А", "Б", "В", "Г", "Д"];
+
+function openClassGrid() {
+  if (!activeSchool) return toast("Сначала выберите школу", "error");
+  const existing = new Set(schoolClasses(activeSchool).map((c) => classKey(c.name)));
+  pickedClasses = new Set();
+  $("classGridSchool").textContent = schoolById(activeSchool)?.name || "—";
+  $("classOther").value = "";
+
+  let html = `<span></span>` + GRID_LETTERS.map((l) => `<span class="grid-head">${l}</span>`).join("");
+  for (let grade = 1; grade <= 11; grade++) {
+    html += `<span class="grid-head">${grade}</span>`;
+    for (const letter of GRID_LETTERS) {
+      const name = `${grade}-${letter}`;
+      const has = existing.has(classKey(name));
+      html += `<button type="button" class="grid-cell ${has ? "exists" : ""}" ${has ? "disabled" : ""}
+                       data-name="${name}" onclick="toggleGridClass(this)"
+                       title="${has ? "Уже есть" : name}">${name}</button>`;
+    }
+  }
+  $("classGrid").innerHTML = html;
+  updateClassGridButton();
+  openModal("modalClasses");
+}
+
+function toggleGridClass(button) {
+  const name = button.dataset.name;
+  if (pickedClasses.has(name)) pickedClasses.delete(name);
+  else pickedClasses.add(name);
+  button.classList.toggle("picked", pickedClasses.has(name));
+  updateClassGridButton();
+}
+
+function classGridNames() {
+  const other = $("classOther").value.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  return [...pickedClasses, ...other];
+}
+
+function updateClassGridButton() {
+  const count = classGridNames().length;
+  const button = $("classGridSubmit");
+  button.disabled = count === 0;
+  button.textContent = count
+    ? `Создать ${count} ${plural(count, "класс", "класса", "классов")}`
+    : "Создать";
+}
+
+async function submitClassGrid() {
+  const names = classGridNames();
+  if (!names.length) return;
+  try {
+    const result = await api("/api/classes/bulk", {
+      method: "POST", json: { school_id: activeSchool, names },
+    });
+    closeModal("modalClasses");
+    if (result.created.length) {
+      activeClass = result.created[0].id;
+      draft = {};
+    }
+    await loadState();
+    const made = result.created.length;
+    toast(made
+      ? `${plural(made, "Создан", "Создано", "Создано")} ${made} ${plural(made, "класс", "класса", "классов")}`
+      : "Такие классы уже есть", made ? "success" : "", made ? "check" : "");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 function selectClass(id) {
@@ -177,27 +284,6 @@ function removeSchool() {
       await loadState();
       toast("Школа удалена", "success");
     });
-}
-
-async function createClass() {
-  if (!activeSchool) return toast("Сначала добавьте школу", "error");
-  const input = $("newClassName");
-  const name = input.value.trim();
-  if (!name) return toast("Введите название класса", "error");
-
-  try {
-    const created = await api("/api/classes", {
-      method: "POST",
-      json: { school_id: activeSchool, name },
-    });
-    input.value = "";
-    activeClass = created.class.id;
-    draft = {};
-    await loadState();
-    toast(`Класс «${name}» создан`, "success");
-  } catch (error) {
-    toast(error.message, "error");
-  }
 }
 
 function renameClass() {
@@ -339,13 +425,16 @@ function renderTable() {
   const host = $("tableHost");
 
   if (!activeSchool) {
-    host.innerHTML = `<div class="empty-note">Добавьте первую школу — кнопка с плюсом вверху.</div>`;
+    host.innerHTML = isAdmin()
+      ? `<div class="empty-note">Добавьте первую школу — кнопка с плюсом вверху.</div>`
+      : `<div class="empty-note">Вам пока не открыта ни одна школа.<br>Обратитесь к администратору.</div>`;
     return;
   }
   if (!activeClass) {
     host.innerHTML = `<div class="empty-note">
       В школе «${escapeHtml(schoolById(activeSchool)?.name || "")}» пока нет классов.<br>
-      Введите название класса и нажмите «Класс».
+      <button class="btn btn-sm" style="margin-top:10px;" onclick="openClassGrid()">
+        ${icon("plus", "ic ic-sm")} Добавить классы</button>
     </div>`;
     return;
   }
@@ -722,23 +811,23 @@ function renderPrizes() {
       <article class="prize-admin ${hidden ? "hidden-prize" : ""}">
         <div class="prize-admin-photo">
           ${photo}
-          <div class="photo-overlay">
+          ${isAdmin() ? `<div class="photo-overlay">
             <button class="btn btn-sm" onclick="pickPhoto(${prize.id})">
               ${icon("camera", "ic ic-sm")} Фото
             </button>
-          </div>
+          </div>` : ""}
         </div>
         <div class="prize-admin-body">
           <div class="prize-admin-name">${escapeHtml(prize.name)}</div>
           <div class="prize-admin-desc">${escapeHtml(prize.desc || "")}</div>
           <div class="prize-admin-foot">
             <span class="tag tag-gold">${icon("star", "ic ic-sm")} ${prize.cost}</span>
-            <div class="actions">
+            ${isAdmin() ? `<div class="actions">
               <button class="icon-btn" title="Изменить" onclick="openPrize(${prize.id})">${icon("pencil")}</button>
               <button class="icon-btn" title="${hidden ? "Показать детям" : "Скрыть от детей"}"
                       onclick="togglePrize(${prize.id})">${icon(hidden ? "eye-off" : "eye")}</button>
               <button class="icon-btn danger" title="Удалить" onclick="removePrize(${prize.id})">${icon("trash")}</button>
-            </div>
+            </div>` : (hidden ? `<span class="muted" style="font-size:12px;">скрыт</span>` : "")}
           </div>
         </div>
       </article>`;
@@ -962,45 +1051,219 @@ async function processPaste() {
   }
 }
 
-function importCsv(event) {
-  const file = event.target.files?.[0];
-  event.target.value = "";
-  if (!file) return;
-  if (!activeSchool) return toast("Сначала добавьте школу", "error");
+/* ── Excel ────────────────────────────────────────────────── */
 
-  if (/\.(xlsx?|ods)$/i.test(file.name)) {
-    toast("Сохраните таблицу как CSV или используйте «Вставить из Excel»", "error");
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      await sendBulk(parseLines(e.target.result), "Импортировано учеников");
-    } catch (error) {
-      toast(error.message, "error");
-    }
-  };
-  reader.readAsText(file, "UTF-8");
+function toggleMenu(id, event) {
+  event?.stopPropagation();
+  const wrap = $(id);
+  const open = !wrap.classList.contains("open");
+  closeMenus();
+  wrap.classList.toggle("open", open);
+  wrap.querySelector("button")?.setAttribute("aria-expanded", String(open));
 }
 
-function exportCsv() {
-  const header = ["Школа", "Класс", "ФИО", "Всего звёзд", "Код карточки", "Telegram"];
-  const rows = state.students.map((s) => {
-    const cls = classById(s.class_id);
-    const school = cls ? schoolById(cls.school_id) : null;
-    return [school?.name || "", cls?.name || "", s.name, s.total_stars,
-            s.token || "", s.tg_id ? "привязан" : ""];
+function closeMenus() {
+  document.querySelectorAll(".menu-wrap.open").forEach((wrap) => {
+    wrap.classList.remove("open");
+    wrap.querySelector("button")?.setAttribute("aria-expanded", "false");
   });
-  const csv = "﻿" + [header, ...rows].map((row) => row.map(csvCell).join(";")).join("\n") + "\n";
+}
 
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+/** Скачивание файла с сервера: cookie сессии уходит сама, как у обычной ссылки. */
+function downloadFile(path) {
+  closeMenus();
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `stars_report_${$("lessonDate").value || "today"}.csv`;
+  link.href = BASE + path;
+  link.rel = "noopener";
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
-  toast("Файл выгружен", "success");
+  link.remove();
+}
+
+function downloadTemplate() { downloadFile("/api/excel/template"); }
+
+function exportExcel() {
+  if (!activeSchool) return toast("Сначала выберите школу", "error");
+  downloadFile(`/api/excel/export?school_id=${activeSchool}`);
+}
+
+async function uploadExcel(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  closeMenus();
+  if (!file) return;
+  if (!activeSchool) return toast("Сначала выберите школу", "error");
+  if (!/\.xlsx$/i.test(file.name)) {
+    return toast("Нужен файл Excel .xlsx — скачайте шаблон и заполните его", "error");
+  }
+
+  const form = new FormData();
+  form.append("file", file);
+  const className = encodeURIComponent(classById(activeClass)?.name || "");
+  try {
+    const result = await api(`/api/excel/import?school_id=${activeSchool}&class_name=${className}`,
+                             { method: "POST", body: form });
+    await loadState();
+    const added = `${plural(result.added, "Добавлен", "Добавлено", "Добавлено")} ` +
+                  `${result.added} ${plural(result.added, "ученик", "ученика", "учеников")}`;
+    if (result.skipped.length) {
+      showInfo("Список загружен не целиком",
+        `<p>${added}. Эти строки пропущены — исправьте их в файле и загрузите только их:</p>
+         <ul>${result.skipped.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`);
+    } else {
+      toast(added, "success", "check");
+    }
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+/** Окно с сообщением. html собирается только из экранированных частей. */
+function showInfo(title, html) {
+  $("infoTitle").textContent = title;
+  $("infoBody").innerHTML = html;
+  openModal("modalInfo");
+}
+
+/* ── Учителя (только администратор) ──────────────────────── */
+
+function renderUsers() {
+  const host = $("userList");
+  const users = (state.users || []).slice()
+    .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, "ru") : a.role === "superadmin" ? -1 : 1));
+  const rows = users.map((user) => {
+    const admin = user.role === "superadmin";
+    const self = user.id === state.me?.id;
+    const schools = admin
+      ? `<span class="muted">все школы</span>`
+      : (user.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean)
+          .map((name) => `<span class="tag">${escapeHtml(name)}</span>`).join(" ")
+        || `<span class="muted">нет школ</span>`;
+    return `
+      <tr>
+        <td><div class="student-name">${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</div></td>
+        <td><span class="code-chip">${escapeHtml(user.login)}</span></td>
+        <td>${admin ? `<span class="tag tag-gold">администратор</span>` : `<span class="tag">учитель</span>`}</td>
+        <td><div class="tag-row">${schools}</div></td>
+        <td>
+          <div class="actions">
+            <button class="icon-btn" title="${admin ? "Имя" : "Имя и школы"}" onclick="openUser(${user.id})">${icon("pencil")}</button>
+            ${self ? "" : `<button class="icon-btn" title="Выдать новый пароль" onclick="resetUserPassword(${user.id})">${icon("key")}</button>`}
+            ${self ? "" : `<button class="icon-btn danger" title="Удалить" onclick="removeUser(${user.id})">${icon("trash")}</button>`}
+          </div>
+        </td>
+      </tr>`;
+  }).join("");
+  host.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Имя</th><th style="width:170px;">Логин</th><th style="width:140px;">Роль</th>
+                   <th>Школы</th><th style="width:140px;">Действия</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function openUser(id = null) {
+  userTarget = id;
+  const user = id ? (state.users || []).find((u) => u.id === id) : null;
+  $("userModalTitle").textContent = !user ? "Новый учитель"
+    : user.role === "superadmin" ? "Администратор" : "Учитель";
+  $("userName").value = user?.name || "";
+  $("userLogin").value = user?.login || "";
+  $("userLogin").disabled = Boolean(user);
+  $("userPassword").value = "";
+  $("userPasswordField").hidden = Boolean(user);
+  // Администратор видит все школы — галочки ему не нужны
+  $("userSchools").closest(".field").hidden = user?.role === "superadmin";
+  const chosen = new Set(user?.school_ids || (activeSchool ? [activeSchool] : []));
+  $("userSchools").innerHTML = state.schools.map((s) => `
+    <label class="check"><input type="checkbox" value="${s.id}" ${chosen.has(s.id) ? "checked" : ""}>
+      ${escapeHtml(s.name)}</label>`).join("") || `<span class="muted">Сначала добавьте школу</span>`;
+  openModal("modalUser");
+  setTimeout(() => (user ? $("userName") : $("userName")).focus(), 50);
+}
+
+async function saveUser() {
+  const name = $("userName").value.trim();
+  const login = $("userLogin").value.trim().toLowerCase();
+  const school_ids = [...$("userSchools").querySelectorAll("input:checked")].map((i) => parseInt(i.value));
+  if (!name) return toast("Введите имя учителя", "error");
+  try {
+    if (userTarget) {
+      const target = (state.users || []).find((u) => u.id === userTarget);
+      const json = target?.role === "superadmin" ? { name } : { name, school_ids };
+      await api(`/api/users/${userTarget}`, { method: "PATCH", json });
+      closeModal("modalUser");
+      await loadState();
+      toast("Сохранено", "success", "check");
+    } else {
+      if (!login) return toast("Введите логин", "error");
+      const result = await api("/api/users", {
+        method: "POST", json: { name, login, school_ids, password: $("userPassword").value || null },
+      });
+      closeModal("modalUser");
+      await loadState();
+      showCredentials(result.user, result.password);
+    }
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function showCredentials(user, password) {
+  showInfo("Данные для входа", `
+    <p>Передайте учителю. Пароль больше не покажется — если его забудут, выдайте новый.</p>
+    <div class="cred-box">
+      <div><span>сайт</span><b>${escapeHtml(location.host + BASE)}/login</b></div>
+      <div><span>логин</span><b>${escapeHtml(user.login)}</b></div>
+      <div><span>пароль</span><b>${escapeHtml(password)}</b></div>
+    </div>`);
+}
+
+function resetUserPassword(id) {
+  const user = (state.users || []).find((u) => u.id === id);
+  if (!user) return;
+  confirmAction("Выдать новый пароль?",
+    `${user.name}: старый пароль перестанет работать, все входы завершатся.`,
+    async () => {
+      const result = await api(`/api/users/${id}/password`, { method: "POST", json: {} });
+      showCredentials(user, result.password);
+    });
+}
+
+function removeUser(id) {
+  const user = (state.users || []).find((u) => u.id === id);
+  if (!user) return;
+  confirmAction("Удалить учителя?",
+    `${user.name} больше не сможет войти. Классы и ученики останутся.`,
+    async () => {
+      await api(`/api/users/${id}`, { method: "DELETE" });
+      await loadState();
+      toast("Учитель удалён", "success");
+    });
+}
+
+/* ── Свой пароль ──────────────────────────────────────────── */
+
+function openMyPassword() {
+  ["myCurrent", "myNew", "myRepeat"].forEach((id) => { $(id).value = ""; });
+  openModal("modalMyPassword");
+  setTimeout(() => $("myCurrent").focus(), 50);
+}
+
+async function saveMyPassword() {
+  const current = $("myCurrent").value;
+  const fresh = $("myNew").value;
+  if (!current || !fresh) return toast("Заполните все поля", "error");
+  if (fresh !== $("myRepeat").value) return toast("Новые пароли не совпадают", "error");
+  try {
+    await api("/api/auth/teacher/password", { method: "POST", json: { current, new: fresh } });
+    closeModal("modalMyPassword");
+    toast("Пароль изменён", "success", "check");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 /* ── Навигация и старт ────────────────────────────────────── */
@@ -1022,16 +1285,13 @@ async function logout() {
 document.addEventListener("DOMContentLoaded", async () => {
   $("lessonDate").value = localToday();
   $("newStudentName").addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
-  $("newClassName").addEventListener("keydown", (e) => { if (e.key === "Enter") createClass(); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".menu-wrap")) closeMenus(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
 
   try {
     await loadState();
-    const health = await fetch(BASE + "/healthz").then((r) => r.json());
-    $("brandSub").textContent = health.bot_enabled
-      ? `бот @${health.bot_username || "…"}`
-      : "бот не настроен — заполните BOT_TOKEN в .env";
   } catch (error) {
     toast(error.message, "error");
   }

@@ -16,7 +16,7 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
-    <span class="brand-text">Журнал звёзд<small id="brandSub">панель учителя</small></span>
+    <span class="brand-text">Журнал звёзд<small id="brandSub"></small></span>
   </div>
 
   <nav class="nav">
@@ -29,9 +29,15 @@
     <button data-page="lessons" onclick="switchPage('lessons')">
       <svg class="ic ic-sm"><use href="#i-calendar"></use></svg> Уроки
     </button>
+    <button data-page="users" class="admin-only" onclick="switchPage('users')">
+      <svg class="ic ic-sm"><use href="#i-user"></use></svg> Учителя
+    </button>
   </nav>
 
   <div class="row">
+    <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль">
+      <svg class="ic ic-sm"><use href="#i-key"></use></svg> Пароль
+    </button>
     <button class="btn btn-ghost btn-sm" onclick="logout()">
       <svg class="ic ic-sm"><use href="#i-logout"></use></svg> Выйти
     </button>
@@ -56,16 +62,35 @@
         </div>
       </div>
       <div class="row">
-        <button class="btn btn-ghost btn-sm" onclick="openPaste()">
-          <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg> Вставить из Excel
-        </button>
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
-          <svg class="ic ic-sm"><use href="#i-import"></use></svg> Загрузить CSV
-          <input type="file" accept=".csv,.txt" hidden onchange="importCsv(event)">
-        </label>
-        <button class="btn btn-ghost btn-sm" onclick="exportCsv()">
-          <svg class="ic ic-sm"><use href="#i-export"></use></svg> Выгрузить CSV
-        </button>
+        <div class="menu-wrap" id="excelMenu">
+          <button class="btn btn-ghost btn-sm" onclick="toggleMenu('excelMenu', event)"
+                  aria-haspopup="true" aria-expanded="false">
+            <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg> Excel
+            <svg class="ic ic-sm menu-caret"><use href="#i-chevron-down"></use></svg>
+          </button>
+          <div class="menu" role="menu">
+            <button role="menuitem" onclick="downloadTemplate()">
+              <svg class="ic ic-sm"><use href="#i-export"></use></svg>
+              <span>Скачать шаблон<small>пустая таблица для списка учеников</small></span>
+            </button>
+            <label role="menuitem">
+              <svg class="ic ic-sm"><use href="#i-import"></use></svg>
+              <span>Загрузить заполненный<small>ученики добавятся в выбранную школу</small></span>
+              <input type="file" id="excelFile" hidden
+                     accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                     onchange="uploadExcel(event)">
+            </label>
+            <button role="menuitem" onclick="openPaste()">
+              <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg>
+              <span>Вставить строки<small>скопировать из открытой таблицы</small></span>
+            </button>
+            <div class="menu-sep"></div>
+            <button role="menuitem" onclick="exportExcel()">
+              <svg class="ic ic-sm"><use href="#i-export"></use></svg>
+              <span>Выгрузить журнал<small>звёзды, логины и коды карточек</small></span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -76,13 +101,13 @@
           <svg class="ic ic-sm"><use href="#i-school"></use></svg> Школа
         </span>
         <select id="schoolSelect" onchange="selectSchool(parseInt(this.value))"></select>
-        <button class="icon-btn" title="Добавить школу" onclick="openSchool()">
+        <button class="icon-btn admin-only" title="Добавить школу" onclick="openSchool()">
           <svg class="ic"><use href="#i-plus"></use></svg>
         </button>
-        <button class="icon-btn" title="Переименовать школу" onclick="openSchool(activeSchool)">
+        <button class="icon-btn admin-only" title="Переименовать школу" onclick="openSchool(activeSchool)">
           <svg class="ic"><use href="#i-pencil"></use></svg>
         </button>
-        <button class="icon-btn danger" title="Удалить школу" onclick="removeSchool()">
+        <button class="icon-btn danger admin-only" title="Удалить школу" onclick="removeSchool()">
           <svg class="ic"><use href="#i-trash"></use></svg>
         </button>
 
@@ -91,10 +116,9 @@
         <span class="scope-label">
           <svg class="ic ic-sm"><use href="#i-users"></use></svg> Класс
         </span>
-        <div class="class-tabs" id="classTabs"></div>
-        <input type="text" id="newClassName" placeholder="Новый класс" style="width:124px;">
-        <button class="btn btn-sm" onclick="createClass()">
-          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Класс
+        <select id="classSelect" onchange="onClassSelect(this.value)"></select>
+        <button class="icon-btn" title="Добавить классы" onclick="openClassGrid()">
+          <svg class="ic"><use href="#i-plus"></use></svg>
         </button>
         <button class="icon-btn" title="Переименовать класс" onclick="renameClass()">
           <svg class="ic"><use href="#i-pencil"></use></svg>
@@ -138,15 +162,34 @@
       <div class="between" style="margin-bottom:14px;">
         <div>
           <div class="eyebrow" style="margin-bottom:4px;">Витрина призов</div>
-          <p class="hint-text" style="margin:0;">
+          <p class="hint-text admin-only" style="margin:0;">
             Эти призы видят дети. Наведите на карточку, чтобы заменить фотографию.
           </p>
+          <p class="hint-text teacher-only" style="margin:0;">
+            Эти призы видят дети. Выдать приз — кнопка с подарком в строке ученика.
+          </p>
         </div>
-        <button class="btn btn-sm" onclick="openPrize()">
+        <button class="btn btn-sm admin-only" onclick="openPrize()">
           <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить приз
         </button>
       </div>
       <div class="prize-admin-grid" id="prizeGrid"></div>
+    </div>
+  </section>
+
+  <!-- ── Учителя (только администратор) ──────────────────── -->
+  <section class="page" id="page-users">
+    <div class="panel">
+      <div class="between" style="margin-bottom:14px;">
+        <div>
+          <div class="eyebrow" style="margin-bottom:4px;">Учителя и доступ</div>
+          <p class="hint-text" style="margin:0;">Учитель видит только отмеченные школы.</p>
+        </div>
+        <button class="btn btn-sm" onclick="openUser()">
+          <svg class="ic ic-sm"><use href="#i-plus"></use></svg> Добавить учителя
+        </button>
+      </div>
+      <div id="userList"></div>
     </div>
   </section>
 
@@ -192,9 +235,86 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalClasses" onclick="if(event.target===this) closeModal('modalClasses')">
+  <div class="modal" style="max-width:440px;">
+    <h3>Добавить классы</h3>
+    <p class="modal-sub">Отметьте нужные. Серые уже есть в школе <b id="classGridSchool">—</b>.</p>
+    <div class="class-grid" id="classGrid"></div>
+    <div class="field" style="margin-top:14px;">
+      <label for="classOther">Другие названия</label>
+      <input type="text" id="classOther" placeholder="Робототехника, 10-Ф1 — через запятую"
+             oninput="updateClassGridButton()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalClasses')">Отмена</button>
+      <button class="btn" id="classGridSubmit" onclick="submitClassGrid()" disabled>Создать</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalUser" onclick="if(event.target===this) closeModal('modalUser')">
+  <div class="modal" style="max-width:440px;">
+    <h3 id="userModalTitle">Новый учитель</h3>
+    <p class="modal-sub">Учитель войдёт на сайт по логину и паролю и увидит только отмеченные школы.</p>
+    <div class="field">
+      <label for="userName">Имя</label>
+      <input type="text" id="userName" placeholder="Иванова Марина Сергеевна">
+    </div>
+    <div class="field">
+      <label for="userLogin">Логин</label>
+      <input type="text" id="userLogin" placeholder="ivanova" autocapitalize="none" spellcheck="false">
+    </div>
+    <div class="field" id="userPasswordField">
+      <label for="userPassword">Пароль</label>
+      <input type="text" id="userPassword" placeholder="пусто — придумаем сами" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Школы</label>
+      <div class="check-list" id="userSchools"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalUser')">Отмена</button>
+      <button class="btn" onclick="saveUser()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalMyPassword" onclick="if(event.target===this) closeModal('modalMyPassword')">
+  <div class="modal" style="max-width:400px;">
+    <h3>Сменить пароль</h3>
+    <p class="modal-sub">Другие входы под вашим логином завершатся.</p>
+    <div class="field">
+      <label for="myCurrent">Текущий пароль</label>
+      <input type="password" id="myCurrent" autocomplete="current-password">
+    </div>
+    <div class="field">
+      <label for="myNew">Новый пароль</label>
+      <input type="password" id="myNew" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label for="myRepeat">Ещё раз</label>
+      <input type="password" id="myRepeat" autocomplete="new-password">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalMyPassword')">Отмена</button>
+      <button class="btn" onclick="saveMyPassword()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalInfo" onclick="if(event.target===this) closeModal('modalInfo')">
+  <div class="modal" style="max-width:440px;">
+    <h3 id="infoTitle"></h3>
+    <div class="info-body" id="infoBody"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalInfo')">Понятно</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalPaste" onclick="if(event.target===this) closeModal('modalPaste')">
   <div class="modal">
-    <h3>Вставка списка из Excel</h3>
+    <h3>Вставить строки из таблицы</h3>
     <p class="modal-sub">
       Скопируйте строки из таблицы и вставьте сюда. Подойдёт любой формат:<br>
       <code>Класс | ФИО | Звёзды</code>, <code>ФИО | Звёзды</code> или просто <code>ФИО</code>.<br>

@@ -32,7 +32,7 @@ def student_stars_on(student: Dict[str, Any], day: str) -> int:
 
 
 @router.post("/lessons/complete")
-def complete_lesson(payload: schemas.LessonComplete):
+def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depends(require_teacher)):
     """Звёзды за урок. Лимиты считаются на дату, а не на нажатие кнопки:
     классу — не больше MAX_LESSON_BANK за день, ученику — не больше MAX_STUDENT_STARS.
     Иначе «Завершить урок» второй раз за ту же дату давал бы новый полный банк."""
@@ -49,7 +49,7 @@ def complete_lesson(payload: schemas.LessonComplete):
         raise bad_request("Ученик указан в уроке дважды")
 
     def _apply(database: Dict[str, Any]):
-        cls = class_or_404(database, payload.class_id)
+        cls = class_or_404(database, payload.class_id, user)
 
         # Сначала проверяем всех, потом начисляем: урок либо проходит целиком, либо никак
         students = []
@@ -101,13 +101,13 @@ def complete_lesson(payload: schemas.LessonComplete):
 
 
 @router.post("/students/deduct")
-def deduct_stars(payload: schemas.DeductRequest):
+def deduct_stars(payload: schemas.DeductRequest, user: Dict[str, Any] = Depends(require_teacher)):
     """Списание при выдаче приза. Уйти в минус нельзя."""
     if payload.amount <= 0:
         raise bad_request("Количество списания должно быть больше 0")
 
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, payload.student_id)
+        student = student_or_404(database, payload.student_id, user)
         if student["total_stars"] < payload.amount:
             raise bad_request("Недостаточно звёзд на балансе ученика")
         student["total_stars"] -= payload.amount

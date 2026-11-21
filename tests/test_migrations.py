@@ -72,7 +72,7 @@ def test_v4_gets_session_keys_and_id_counter():
     write_raw(data)
 
     migrated = db.load_db()
-    assert migrated["version"] == 5
+    assert migrated["version"] == db.DB_VERSION
     assert all(s["session_key"] for s in migrated["students"])
     assert len({s["session_key"] for s in migrated["students"]}) == 4
     assert migrated["settings"]["last_student_id"] == 104

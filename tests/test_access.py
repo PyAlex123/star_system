@@ -1,7 +1,7 @@
 """Что закрыто, что открыто, как отдаются страницы и статика."""
 import pytest
 
-from conftest import TEACHER_PASSWORD
+from conftest import ADMIN_LOGIN, ADMIN_PASSWORD
 
 
 # ── Закрыто без входа ────────────────────────────────────────────────────────
@@ -48,11 +48,11 @@ def test_preview_requires_teacher(client):
 # ── Вход учителя ─────────────────────────────────────────────────────────────
 
 def test_teacher_wrong_password(client):
-    assert client.post("/api/auth/teacher", json={"password": "nope"}).status_code == 401
+    assert client.post("/api/auth/teacher", json={"login": ADMIN_LOGIN, "password": "nope"}).status_code == 401
 
 
 def test_teacher_login_sets_httponly_cookie(client):
-    r = client.post("/api/auth/teacher", json={"password": TEACHER_PASSWORD})
+    r = client.post("/api/auth/teacher", json={"login": ADMIN_LOGIN, "password": ADMIN_PASSWORD})
     assert r.status_code == 200
     cookie = r.headers["set-cookie"].lower()
     assert "teacher_session=" in cookie

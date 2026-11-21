@@ -14,25 +14,42 @@ def bad_request(message: str) -> HTTPException:
     return HTTPException(status.HTTP_400_BAD_REQUEST, message)
 
 
-def student_or_404(database: Dict[str, Any], student_id: int) -> Dict[str, Any]:
-    student = db.find_student(database, student_id)
-    if not student:
-        raise not_found("Ученик не найден")
-    return student
+# Область видимости. user=None — проверка без учёта прав (бот, служебный код).
+# Учителю чужая школа отвечает тем же 404, что и несуществующая: так по ответам
+# нельзя понять, какие ещё школы и ученики есть в системе.
+
+User = Optional[Dict[str, Any]]
 
 
-def class_or_404(database: Dict[str, Any], class_id: int) -> Dict[str, Any]:
+def _school_visible(database: Dict[str, Any], user: User, school_id: Optional[int]) -> bool:
+    if user is None or db.is_superadmin(user):
+        return True
+    return school_id in db.allowed_school_ids(database, user)
+
+
+def school_or_404(database: Dict[str, Any], school_id: int, user: User = None) -> Dict[str, Any]:
+    school = db.find_school(database, school_id)
+    if not school or not _school_visible(database, user, school_id):
+        raise not_found("Школа не найдена")
+    return school
+
+
+def class_or_404(database: Dict[str, Any], class_id: int, user: User = None) -> Dict[str, Any]:
     cls = db.find_class(database, class_id)
-    if not cls:
+    if not cls or not _school_visible(database, user, cls["school_id"]):
         raise not_found("Класс не найден")
     return cls
 
 
-def school_or_404(database: Dict[str, Any], school_id: int) -> Dict[str, Any]:
-    school = db.find_school(database, school_id)
-    if not school:
-        raise not_found("Школа не найдена")
-    return school
+def student_or_404(database: Dict[str, Any], student_id: int, user: User = None) -> Dict[str, Any]:
+    student = db.find_student(database, student_id)
+    if student and user is not None and not db.is_superadmin(user):
+        cls = db.find_class(database, student.get("class_id"))
+        if not cls or not _school_visible(database, user, cls["school_id"]):
+            student = None
+    if not student:
+        raise not_found("Ученик не найден")
+    return student
 
 
 def clean_name(value: Optional[str], message: str) -> str:

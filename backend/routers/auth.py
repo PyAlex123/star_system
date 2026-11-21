@@ -1,7 +1,10 @@
-"""Вход: ученик через Telegram Web App, учитель по паролю."""
+"""Вход: ученик через Telegram Web App или по логину, панель — суперадмин и учителя."""
+from typing import Any, Dict
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from .. import config, db, passwords, ratelimit, schemas, security
+from .common import student_or_404
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -70,15 +73,10 @@ def login_dev(student_id: int):
     return {"token": security.issue_student_token(student), "dev": True}
 
 
-@router.post("/preview", dependencies=[Depends(security.require_teacher)])
-def login_preview(student_id: int):
-    """Учитель открывает кабинет глазами конкретного ученика.
-
-    Доступно только из панели учителя — у неё и так полный доступ к данным.
-    """
-    student = db.find_student(db.load_db(), student_id)
-    if not student:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+@router.post("/preview")
+def login_preview(student_id: int, user: Dict[str, Any] = Depends(security.require_teacher)):
+    """Учитель открывает кабинет глазами конкретного ученика — только из своих школ."""
+    student = student_or_404(db.load_db(), student_id, user)
     return {"token": security.issue_student_token(student, preview=True), "preview": True}
 
 
@@ -120,22 +118,10 @@ def login_student(payload: schemas.StudentLogin, request: Request):
     return {"token": security.issue_student_token(student)}
 
 
-@router.post("/teacher")
-def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Request):
-    """Вход в панель учителя. Сессия кладётся в httpOnly-cookie."""
-    ip = ratelimit.client_key(request)
-    _guard("teacher", ip)
-
-    if not security.check_teacher_password(payload.password):
-        ratelimit.register_failure("teacher", ip)
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный пароль")
-
-    ratelimit.reset("teacher", ip)
-
-    token = security.issue_teacher_token()
+def _set_panel_cookie(response: Response, user: Dict[str, Any]) -> None:
     response.set_cookie(
         security.TEACHER_COOKIE,
-        token,
+        security.issue_teacher_token(user),
         max_age=config.TEACHER_SESSION_HOURS * 3600,
         httponly=True,
         samesite="lax",
@@ -144,6 +130,55 @@ def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Re
         # На подпути cookie не должна улетать к соседним сайтам того же домена
         path=config.URL_PREFIX or "/",
     )
+
+
+@router.post("/teacher")
+def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Request):
+    """Вход в панель по логину и паролю. Сессия кладётся в httpOnly-cookie.
+
+    Защита та же, что у входа учеников: счётчики неудач по логину и по адресу,
+    одинаковый ответ и одинаковое время для «нет логина» и «неверный пароль».
+    """
+    ip = ratelimit.client_key(request)
+    login = passwords.normalize_login(payload.login)
+    _guard("teacher-ip", ip)
+    _guard("teacher-login", login)
+
+    user = db.find_user_by_login(db.load_db(), login)
+    stored = user.get("password_hash", "") if user else passwords.dummy_hash()
+    password_ok = passwords.verify_password((payload.password or "").strip(), stored)
+
+    if not user or not password_ok:
+        ratelimit.register_failure("teacher-ip", ip)
+        ratelimit.register_failure("teacher-login", login)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Неверный логин или пароль")
+
+    ratelimit.reset("teacher-login", login)
+    _set_panel_cookie(response, user)
+    return {"ok": True, "role": user["role"]}
+
+
+@router.post("/teacher/password")
+def change_panel_password(payload: schemas.PasswordChange, response: Response,
+                          user: Dict[str, Any] = Depends(security.require_teacher)):
+    """Свой пароль: нужен текущий. Остальные входы этого пользователя завершаются,
+    а текущему выдаём новую cookie — чтобы не выкинуло из панели."""
+    if not passwords.verify_password((payload.current or "").strip(), user.get("password_hash", "")):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль указан неверно")
+    try:
+        new = passwords.validate_new(payload.new)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_user(database, user["id"])
+        if not fresh:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен вход в панель учителя")
+        fresh["password_hash"] = passwords.hash_password(new)
+        fresh["session_key"] = db.new_session_key()
+        return fresh
+
+    _set_panel_cookie(response, db.transaction(_apply))
     return {"ok": True}
 
 

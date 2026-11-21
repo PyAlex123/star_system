@@ -1,8 +1,7 @@
-"""Авторизация: Telegram Web App, сессии учеников и вход учителя."""
+"""Авторизация: Telegram Web App, сессии учеников и вход в панель (суперадмин, учителя)."""
 import hashlib
 import hmac
 import json
-import secrets
 import time
 import urllib.parse
 from typing import Any, Dict, Optional
@@ -30,24 +29,26 @@ def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> Dict[str
 
     Возвращает разобранные поля, включая распакованный user.
     """
+    # Тексты ошибок видит ребёнок, поэтому без технических подробностей:
+    # что именно не так с подписью, нужно только в логах.
     if not config.BOT_TOKEN:
-        raise InitDataError("Бот не настроен: в .env не указан BOT_TOKEN")
+        raise InitDataError("Вход через Telegram сейчас недоступен")
     if not init_data:
-        raise InitDataError("Пустая initData")
+        raise InitDataError("Не удалось войти через Telegram, открой кабинет заново")
 
     pairs = urllib.parse.parse_qsl(init_data, keep_blank_values=True)
     data = dict(pairs)
 
     received_hash = data.pop("hash", "")
     if not received_hash:
-        raise InitDataError("В initData нет подписи")
+        raise InitDataError("Не удалось войти через Telegram, открой кабинет заново")
 
     data_check_string = "\n".join(f"{key}={data[key]}" for key in sorted(data))
     secret_key = hmac.new(b"WebAppData", config.BOT_TOKEN.encode(), hashlib.sha256).digest()
     computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(computed, received_hash):
-        raise InitDataError("Подпись initData неверна")
+        raise InitDataError("Не удалось войти через Telegram, открой кабинет заново")
 
     try:
         auth_date = int(data.get("auth_date", "0"))
@@ -92,11 +93,14 @@ def issue_student_token(student: Dict[str, Any], preview: bool = False) -> str:
     return jwt.encode(payload, config.JWT_SECRET, algorithm=ALGORITHM)
 
 
-def issue_teacher_token() -> str:
+def issue_teacher_token(user: Dict[str, Any]) -> str:
+    """Сессия панели. Как у учеников, в токене ключ сессии пользователя:
+    смена пароля или удаление учителя сразу завершает все его входы."""
     now = int(time.time())
     payload = {
-        "sub": "teacher",
-        "role": "teacher",
+        "sub": str(user["id"]),
+        "sk": user.get("session_key") or "",
+        "role": "panel",
         "iat": now,
         "exp": now + config.TEACHER_SESSION_HOURS * 3600,
     }
@@ -105,10 +109,6 @@ def issue_teacher_token() -> str:
 
 def decode_token(token: str) -> Dict[str, Any]:
     return jwt.decode(token, config.JWT_SECRET, algorithms=[ALGORITHM])
-
-
-def check_teacher_password(password: str) -> bool:
-    return secrets.compare_digest((password or "").strip(), config.TEACHER_PASSWORD)
 
 
 # ── Зависимости FastAPI ───────────────────────────────────────────────────────
@@ -150,22 +150,50 @@ def require_student(request: Request) -> Dict[str, Any]:
     return student
 
 
-def _teacher_ok(request: Request) -> bool:
+def panel_user(request: Request) -> Optional[Dict[str, Any]]:
+    """Пользователь панели из cookie или None.
+
+    Роль берём из базы, а не из токена: снятая с учителя школа или удалённый
+    учитель должны действовать сразу, а не после истечения сессии.
+    Старые токены (до появления учётных записей) ключа сессии не содержат
+    и не подходят — нужен один повторный вход.
+    """
     token = request.cookies.get(TEACHER_COOKIE) or _bearer(request)
     if not token:
-        return False
+        return None
     try:
         payload = decode_token(token)
     except jwt.InvalidTokenError:
-        return False
-    return payload.get("role") == "teacher"
+        return None
+    if payload.get("role") != "panel":
+        return None
+    try:
+        user_id = int(payload.get("sub", ""))
+    except ValueError:
+        return None
+    user = db.find_user(db.load_db(), user_id)
+    if not user:
+        return None
+    expected = user.get("session_key") or ""
+    if not expected or not hmac.compare_digest(str(payload.get("sk", "")), expected):
+        return None
+    return user
 
 
-def require_teacher(request: Request) -> bool:
-    """Для API учителя: 401, если не вошёл."""
-    if not _teacher_ok(request):
+def require_teacher(request: Request) -> Dict[str, Any]:
+    """Для API панели (учитель или суперадмин): 401, если не вошёл. Отдаёт пользователя."""
+    user = panel_user(request)
+    if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен вход в панель учителя")
-    return True
+    return user
+
+
+def require_superadmin(request: Request) -> Dict[str, Any]:
+    """Только суперадмин: школы, учителя, витрина призов."""
+    user = require_teacher(request)
+    if not db.is_superadmin(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Это может сделать только администратор")
+    return user
 
 
 def require_teacher_page(request: Request) -> bool:
@@ -174,7 +202,7 @@ def require_teacher_page(request: Request) -> bool:
     Адреса собираем с подпутём: в браузере страница живёт по /stars/..., даже
     если до приложения запрос доходит уже без префикса.
     """
-    if not _teacher_ok(request):
+    if not panel_user(request):
         target = urllib.parse.quote(f"{config.URL_PREFIX}{request.url.path}")
         raise HTTPException(
             status_code=status.HTTP_307_TEMPORARY_REDIRECT,
@@ -185,5 +213,6 @@ def require_teacher_page(request: Request) -> bool:
 
 
 TeacherDep = Depends(require_teacher)
+SuperadminDep = Depends(require_superadmin)
 TeacherPageDep = Depends(require_teacher_page)
 StudentDep = Depends(require_student)

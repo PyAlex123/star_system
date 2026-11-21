@@ -1,6 +1,6 @@
 """Защита от перебора паролей."""
 from backend import ratelimit
-from conftest import STUDENT_PASSWORD, TEACHER_PASSWORD
+from conftest import ADMIN_LOGIN, ADMIN_PASSWORD, STUDENT_PASSWORD
 
 
 def test_student_bruteforce_blocked(teacher, client):
@@ -23,9 +23,10 @@ def test_block_applies_to_correct_password_too(teacher, client):
 
 
 def test_teacher_bruteforce_blocked(client):
-    for i in range(ratelimit.MAX_FAILURES):
-        assert client.post("/api/auth/teacher", json={"password": f"x{i}"}).status_code == 401
-    r = client.post("/api/auth/teacher", json={"password": TEACHER_PASSWORD})
+    for i in range(ratelimit.LIMITS["teacher-login"]):
+        assert client.post("/api/auth/teacher",
+                           json={"login": ADMIN_LOGIN, "password": f"x{i}"}).status_code == 401
+    r = client.post("/api/auth/teacher", json={"login": ADMIN_LOGIN, "password": ADMIN_PASSWORD})
     assert r.status_code == 429
 
 

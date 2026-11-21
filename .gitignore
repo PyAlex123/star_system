@@ -32,3 +32,6 @@ screenshots-*/
 
 # Личные настройки Claude Code — у каждого свои
 .claude/settings.local.json
+
+# Снимки визуальной проверки
+docs/design/qa/

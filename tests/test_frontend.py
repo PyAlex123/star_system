@@ -79,18 +79,6 @@ def test_escape_html():
     assert eval_common("escapeHtml(`<b onclick=\"x\">'&`)") == "&lt;b onclick=&quot;x&quot;&gt;&#39;&amp;"
 
 
-@pytest.mark.parametrize("value,expected", [
-    ("Иванов", '"Иванов"'),
-    ("Школа; №1", '"Школа; №1"'),
-    ('=HYPERLINK("http://x")', '"\'=HYPERLINK(""http://x"")"'),
-    ("+79001234567", '"\'+79001234567"'),
-    ("@cmd", '"\'@cmd"'),
-    (42, '"42"'),
-])
-def test_csv_cell(value, expected):
-    assert eval_common(f"csvCell({json.dumps(value)})") == expected
-
-
 def test_asset_url_respects_prefix():
     assert eval_common('assetUrl("/static/img/avatars/fox.svg")') == "/stars/static/img/avatars/fox.svg"
     assert eval_common('assetUrl("https://t.me/i/userpic/1.jpg")') == "https://t.me/i/userpic/1.jpg"

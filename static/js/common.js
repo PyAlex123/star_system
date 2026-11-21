@@ -37,15 +37,6 @@ function plural(n, one, few, many) {
   return many;
 }
 
-/** Ячейка CSV для Excel.
- *  Кавычки — чтобы точка с запятой в названии не сдвигала колонки.
- *  Апостроф перед = + - @ — иначе Excel выполнит имя ученика как формулу. */
-function csvCell(value) {
-  let text = String(value ?? "");
-  if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
 /** Всплывающее уведомление. Страница задаёт, куда оно уезжает, исчезая:
  *  в кабинете на телефоне — вниз, в панели учителя — вправо. */
 function makeToast({ exit, duration }) {

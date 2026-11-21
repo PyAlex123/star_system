@@ -1,24 +1,29 @@
-"""Панель учителя: снимок журнала, школы и классы."""
-from typing import Any, Dict
+"""Панель: снимок журнала, школы и классы.
+
+Школы заводит и удаляет только суперадмин. Учитель работает с классами
+в своих школах; чужие для него не существуют (404).
+"""
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
 
 from .. import db, images, schemas
-from ..security import require_teacher
+from ..security import require_superadmin, require_teacher
 from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
 
 router = APIRouter(prefix="/api", tags=["schools"], dependencies=[Depends(require_teacher)])
 
 
 @router.get("/state")
-def get_state():
-    """Снимок базы для панели. Хеши паролей и ключи сессий не покидают сервер."""
-    return db.public_state(db.load_db())
+def get_state(user: Dict[str, Any] = Depends(require_teacher)):
+    """Снимок базы для панели: только видимые пользователю школы.
+    Хеши паролей и ключи сессий не покидают сервер."""
+    return db.public_state(db.load_db(), user)
 
 
 # ── Школы ─────────────────────────────────────────────────────────────────────
 
-@router.post("/schools")
+@router.post("/schools", dependencies=[Depends(require_superadmin)])
 def add_school(item: schemas.SchoolCreate):
     name = clean_name(item.name, "Введите название школы")
 
@@ -32,7 +37,7 @@ def add_school(item: schemas.SchoolCreate):
     return {"ok": True, "school": db.transaction(_apply)}
 
 
-@router.patch("/schools/{school_id}")
+@router.patch("/schools/{school_id}", dependencies=[Depends(require_superadmin)])
 def rename_school(school_id: int, item: schemas.SchoolUpdate):
     name = clean_name(item.name, "Введите название школы")
 
@@ -44,7 +49,7 @@ def rename_school(school_id: int, item: schemas.SchoolUpdate):
     return {"ok": True, "school": db.transaction(_apply)}
 
 
-@router.delete("/schools/{school_id}")
+@router.delete("/schools/{school_id}", dependencies=[Depends(require_superadmin)])
 def delete_school(school_id: int):
     """Удаляет школу вместе со всеми её классами, учениками и их фото."""
     removed: Dict[str, list] = {}
@@ -64,6 +69,9 @@ def delete_school(school_id: int):
         database["lessons"] = [lesson for lesson in database["lessons"]
                                if lesson.get("class_id") not in class_ids]
         database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
+        for user in database.get("users", []):
+            if school_id in (user.get("school_ids") or []):
+                user["school_ids"] = [i for i in user["school_ids"] if i != school_id]
         return None
 
     db.transaction(_apply)
@@ -74,11 +82,11 @@ def delete_school(school_id: int):
 # ── Классы ────────────────────────────────────────────────────────────────────
 
 @router.post("/classes")
-def add_class(item: schemas.ClassCreate):
+def add_class(item: schemas.ClassCreate, user: Dict[str, Any] = Depends(require_teacher)):
     name = clean_name(item.name, "Введите название класса")
 
     def _apply(database: Dict[str, Any]):
-        school_or_404(database, item.school_id)
+        school_or_404(database, item.school_id, user)
         if db.find_class_by_name(database, item.school_id, name):
             raise bad_request("В этой школе такой класс уже есть")
         cls = {"id": db.next_id(database["classes"]), "school_id": item.school_id, "name": name}
@@ -88,14 +96,42 @@ def add_class(item: schemas.ClassCreate):
     return {"ok": True, "class": db.transaction(_apply)}
 
 
-@router.patch("/classes/{class_id}")
-def update_class(class_id: int, item: schemas.ClassUpdate):
-    """Переименовать класс или перенести его в другую школу."""
+@router.post("/classes/bulk")
+def add_classes(item: schemas.ClassBulkCreate, user: Dict[str, Any] = Depends(require_teacher)):
+    """Несколько классов за раз — из сетки «5-А, 5-Б, 6-В». Уже существующие пропускаются."""
+    names: List[str] = []
+    for raw in item.names:
+        name = (raw or "").strip()
+        if name and name.lower() not in {n.lower() for n in names}:
+            names.append(name)
+    if not names:
+        raise bad_request("Выберите хотя бы один класс")
+
     def _apply(database: Dict[str, Any]):
-        cls = class_or_404(database, class_id)
+        school_or_404(database, item.school_id, user)
+        created = []
+        for name in names:
+            if db.find_class_by_name(database, item.school_id, name):
+                continue
+            cls = {"id": db.next_id(database["classes"]), "school_id": item.school_id, "name": name}
+            database["classes"].append(cls)
+            created.append(cls)
+        return created if created else db.NO_SAVE
+
+    result = db.transaction(_apply)
+    created = [] if result is db.NO_SAVE else result
+    return {"ok": True, "created": created, "skipped": len(names) - len(created)}
+
+
+@router.patch("/classes/{class_id}")
+def update_class(class_id: int, item: schemas.ClassUpdate,
+                 user: Dict[str, Any] = Depends(require_teacher)):
+    """Переименовать класс или перенести его в другую школу (из своих)."""
+    def _apply(database: Dict[str, Any]):
+        cls = class_or_404(database, class_id, user)
 
         if item.school_id is not None:
-            school_or_404(database, item.school_id)
+            school_or_404(database, item.school_id, user)
             cls["school_id"] = item.school_id
 
         if item.name is not None:
@@ -110,13 +146,14 @@ def update_class(class_id: int, item: schemas.ClassUpdate):
 
 
 @router.delete("/classes/{class_id}")
-def delete_class(class_id: int):
+def delete_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     """Удаляет класс вместе с учениками и их фото."""
     removed: Dict[str, list] = {}
 
     def _apply(database: Dict[str, Any]):
         if not db.find_class(database, class_id):
             return db.NO_SAVE
+        class_or_404(database, class_id, user)
         removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
                              if s.get("class_id") == class_id]
         database["students"] = [s for s in database["students"]

@@ -116,6 +116,18 @@ if not TEACHER_PASSWORD:
     TEACHER_PASSWORD = secrets.token_urlsafe(9)
     TEACHER_PASSWORD_IS_GENERATED = True
 
+# Учётные записи панели. Из .env они берутся ОДИН раз — при первом запуске,
+# когда в базе ещё нет ни одного пользователя. Дальше пароли живут только
+# в базе (хешами) и меняются в самой панели.
+ADMIN_LOGIN = (os.getenv("ADMIN_LOGIN", "admin").strip() or "admin").lower()
+TEACHER_LOGIN = (os.getenv("TEACHER_LOGIN", "teacher").strip() or "teacher").lower()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
+# Забыли добавить ADMIN_PASSWORD — суперадмин получит пароль учителя, а сайт
+# не упадёт. В логе об этом будет предупреждение.
+ADMIN_PASSWORD_IS_FALLBACK = not ADMIN_PASSWORD
+if not ADMIN_PASSWORD:
+    ADMIN_PASSWORD = TEACHER_PASSWORD
+
 # Срок жизни сессий
 STUDENT_SESSION_DAYS = 30
 TEACHER_SESSION_HOURS = 12
