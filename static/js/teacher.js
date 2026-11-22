@@ -185,17 +185,27 @@ function syncSchoolTheme() {
 }
 
 function isAdmin() { return state.me?.role === "superadmin"; }
+/** Администрация школы (директор, завуч) только смотрит: статистика, расписание, уроки. */
+function isSchoolAdmin() { return state.me?.role === "school_admin"; }
+function canEdit() { return !isSchoolAdmin(); }
+const ROLE_NAMES = { superadmin: "администратор", teacher: "учитель", school_admin: "администрация школы" };
+
+/** Имя сотрудника: администратору приходит полный список, остальным — коллеги по школам. */
+function staffList() { return state.users || state.staff || []; }
+function staffName(id) { return staffList().find((u) => u.id === id)?.name || ""; }
 
 /** Кнопки «.admin-only» видит только администратор, «.teacher-only» — только учитель. */
 function applyRole() {
   document.body.classList.toggle("is-admin", isAdmin());
-  document.body.classList.toggle("is-teacher", !isAdmin());
+  document.body.classList.toggle("is-teacher", state.me?.role === "teacher");
+  document.body.classList.toggle("is-sadmin", isSchoolAdmin());
   const me = state.me;
   // «Иванова М. С. · учитель»; если имя и есть роль («Учитель») — без повтора
-  const role = isAdmin() ? "администратор" : "учитель";
+  const role = ROLE_NAMES[me?.role] || "учитель";
   $("brandSub").textContent = !me ? ""
     : me.name.trim().toLowerCase() === role ? me.name : `${me.name} · ${role}`;
-  if (!isAdmin() && currentPage() === "users") switchPage("journal");
+  if (!isAdmin() && currentPage() === "users") switchPage(canEdit() ? "journal" : "stats");
+  if (!canEdit() && ["journal", "prizes"].includes(currentPage())) switchPage("stats");
 }
 
 function renderAll() {
@@ -206,6 +216,9 @@ function renderAll() {
   renderPanel();
   renderPrizes();
   renderLessons();
+  renderTodayStrip();
+  renderSchedule();
+  if (currentPage() === "stats") loadStats();
   if (isAdmin()) renderUsers();
 }
 
@@ -218,7 +231,7 @@ function renderSchoolMenu() {
     <button role="menuitemradio" aria-checked="${s.id === activeSchool}" class="${s.id === activeSchool ? "checked" : ""}"
             onclick="selectSchool(${s.id})"><span>${escapeHtml(s.name)}</span>${s.id === activeSchool ? icon("check", "ic ic-sm") : ""}</button>`);
   if (state.schools.length) items.push(`<div class="menu-sep"></div>`);
-  if (school) items.push(`<button role="menuitem" onclick="openTheme()">${icon("palette", "ic ic-sm")}Оформление школы…</button>`);
+  if (school && canEdit()) items.push(`<button role="menuitem" onclick="openTheme()">${icon("palette", "ic ic-sm")}Оформление школы…</button>`);
   if (isAdmin()) {
     items.push(`<button role="menuitem" onclick="openSchool()">${icon("plus", "ic ic-sm")}Добавить школу</button>`);
     if (school) {
@@ -587,6 +600,22 @@ function credGrid(student, withCode = false) {
 
 function isLoggedIn(student) { return Boolean(student.tg_id || student.last_login); }
 
+/* «Давно без звёзд» — столько уроков класса подряд ученик ничего не получил.
+   Видит только учитель: ребёнку такая метка не показывается. Правило то же,
+   что в backend/stats.py (student_activity). */
+const IDLE_LESSONS = 3;
+function idleSet() {
+  const lessons = (state.lessons || [])
+    .filter((l) => l.class_id === activeClass && l.awards && (Object.keys(l.awards).length || Object.keys(l.undone || {}).length))
+    .sort((a, b) => (a.date === b.date ? (b.id || 0) - (a.id || 0) : a.date < b.date ? 1 : -1));
+  const idle = new Set();
+  if (lessons.length < IDLE_LESSONS) return idle;
+  for (const student of classStudents()) {
+    if (lessons.slice(0, IDLE_LESSONS).every((l) => !(String(student.id) in l.awards))) idle.add(student.id);
+  }
+  return idle;
+}
+
 function togglePassword(studentId) {
   if (flippedPasswords.has(studentId)) flippedPasswords.delete(studentId);
   else flippedPasswords.add(studentId);
@@ -610,6 +639,7 @@ function emptySheet(html) {
 
 function renderTable() {
   renderBank();
+  renderTodayStrip();
   renderLessonBar();
   const addRow = $("addRow");
   addRow.hidden = !activeClass;
@@ -727,6 +757,7 @@ function rowHtml(student, index, day) {
       <button role="menuitem" onclick="showLoginFor(${student.id})">${icon("eye", "ic ic-sm")}Показать логин и пароль</button>
       <button role="menuitem" onclick="showQr(${student.id})">${icon("qr", "ic ic-sm")}QR и данные для входа…</button>
       <button role="menuitem" onclick="resetToken(${student.id})">${icon("refresh", "ic ic-sm")}Перевыпустить вход</button>
+      <button role="menuitem" onclick="openActivity(${student.id})">${icon("chart", "ic ic-sm")}Активность</button>
       <button role="menuitem" onclick="previewCabinet(${student.id})">${icon("user", "ic ic-sm")}Кабинет глазами ученика</button>
       <button role="menuitem" onclick="openDeduct(${student.id})">${icon("minus-circle", "ic ic-sm")}Списать звёзды…</button>
       <button role="menuitem" onclick="resetAvatar(${student.id})">${icon("image", "ic ic-sm")}Сбросить аватар</button>
@@ -744,6 +775,8 @@ function rowHtml(student, index, day) {
         <span class="st-name" title="${name}" onclick="openPanel(${student.id})">${name}</span>
         <span class="st-dot only-clear ${isIn ? "in" : ""}" role="img" aria-label="${status}" title="${status}"></span>
         ${hidden ? `<span class="tag tag-hidden" title="Скрыт из рейтинга">${icon("eye-off")}вне рейтинга</span>` : ""}
+        ${idleSet().has(student.id) ? `<button class="tag tag-idle" onclick="openActivity(${student.id})"
+            title="${IDLE_LESSONS} урока подряд без звёзд — посмотреть активность">давно без звёзд</button>` : ""}
       </span>
       <span class="cell-stars" role="cell">
         <span class="star-row not-clear-flex" role="radiogroup" aria-label="Звёзды за урок: ${name}">${starButtons}</span>
@@ -940,6 +973,7 @@ function renderPanel() {
       <section class="sp-sec">
         <h3 class="caps">Ещё</h3>
         <div class="row">
+          <button class="btn btn-ghost btn-sm" onclick="openActivity(${student.id})">${icon("chart", "ic ic-sm")}Активность</button>
           <button class="btn btn-ghost btn-sm" onclick="previewCabinet(${student.id})">${icon("user", "ic ic-sm")}Кабинет глазами ученика</button>
           <button class="btn btn-ghost btn-sm" onclick="openDeduct(${student.id})">${icon("minus-circle", "ic ic-sm")}Списать звёзды…</button>
           <button class="btn btn-ghost btn-sm" onclick="resetAvatar(${student.id})">${icon("image", "ic ic-sm")}Сбросить аватар</button>
@@ -1029,6 +1063,60 @@ async function toggleRating(id) {
     await loadState();
     toast(hide ? `${student.name} скрыт(а) из рейтинга — звёзды копятся как обычно`
                : `${student.name} снова в рейтинге`, "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+/* ── Активность ученика ───────────────────────────────────── */
+
+/** Столбики по неделям: одна серия — один цвет звезды, без легенды; подпись и
+ *  подсказка у каждого столбика, текстовая версия — для экранного чтеца. */
+function weekBars(weeks, { tall = false } = {}) {
+  const max = Math.max(1, ...weeks.map((w) => w.stars));
+  const label = (w) => {
+    const [y, m, d] = w.week.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", "");
+  };
+  const text = weeks.map((w) => `неделя с ${label(w)}: ${w.stars} ${stars(w.stars)}`).join("; ");
+  return `<div class="bars ${tall ? "tall" : ""}" role="img" aria-label="Звёзды по неделям. ${escapeHtml(text)}">
+    ${weeks.map((w, i) => `<span class="bar-col" title="Неделя с ${escapeHtml(label(w))}: ${w.stars} ${stars(w.stars)}">
+      <span class="bar-val">${w.stars || ""}</span>
+      <span class="bar" style="height:${Math.round((w.stars / max) * 100)}%"></span>
+      <span class="bar-x">${i % 2 === weeks.length % 2 || weeks.length <= 8 ? escapeHtml(label(w)) : ""}</span>
+    </span>`).join("")}
+  </div>`;
+}
+
+function shortDay(iso) { return iso ? formatDay(iso, { year: false }) : "—"; }
+
+async function openActivity(studentId) {
+  rowPop = null;
+  try {
+    const data = await api(`/api/stats/student/${studentId}`);
+    const a = data.activity;
+    const s = data.student;
+    $("activityAvatar").src = avatarUrl(s);
+    $("activityName").textContent = s.name;
+    $("activitySub").textContent = `${s.class_name} · на балансе ${fmt(s.total_stars)} ★ · заработано за всё время ${fmt(a.earned)} ★`;
+    const share = a.lessons_30 ? `${a.lessons_30_with_stars} из ${a.lessons_30}` : "уроков не было";
+    $("activityBody").innerHTML = `
+      <div class="tiles">
+        <div class="tile"><span>За неделю</span><b>${fmt(a.week)} ★</b></div>
+        <div class="tile"><span>За месяц</span><b>${fmt(a.month)} ★</b></div>
+        <div class="tile"><span>Серия уроков</span><b>${a.streak}</b></div>
+        <div class="tile"><span>Призов</span><b>${a.prizes}</b></div>
+      </div>
+      <h3 class="caps act-caps">Звёзды по неделям</h3>
+      ${weekBars(a.weeks)}
+      <div class="act-facts">
+        <div><span>Уроки со звёздами за 30 дней</span><b>${share}</b></div>
+        <div><span>Последняя звезда</span><b>${escapeHtml(shortDay(a.last_star))}</b></div>
+        <div><span>Без звёзд подряд</span><b class="${a.idle ? "warn" : ""}">${a.idle_lessons} ${plural(a.idle_lessons, "урок", "урока", "уроков")}</b></div>
+        <div><span>Заходил в кабинет</span><b>${escapeHtml(a.last_seen ? shortDay(a.last_seen) : "ещё не заходил")}</b></div>
+      </div>`;
+    renderTable();
+    openModal("modalActivity");
   } catch (error) {
     toast(error.message, "error");
   }
@@ -1282,7 +1370,7 @@ function lessonHtml(lesson) {
   const items = entries.map(([id, value, isUndone]) => {
     const student = studentById(parseInt(id));
     const name = student ? escapeHtml(student.name) : "Ученик удалён";
-    const button = !student ? "" : isUndone
+    const button = !student || !canEdit() ? "" : isUndone
       ? `<button class="act-btn" onclick="restoreAward(${lesson.id}, ${id})">${icon("undo", "ic ic-sm")}Вернуть</button>`
       : `<button class="act-btn" onclick="undoAward(${lesson.id}, ${id})">${icon("undo", "ic ic-sm")}Отменить</button>`;
     return `<div class="lesson-item ${isUndone ? "undone" : ""}">
@@ -1294,8 +1382,9 @@ function lessonHtml(lesson) {
     </div>`;
   }).join("");
   const foot = awards
-    ? `<div class="lesson-foot"><span>Отмена списывает звёзды с баланса и убирает запись из истории ученика.</span>
-        ${Object.keys(awards).length ? `<button class="btn btn-danger-quiet btn-sm" onclick="undoLesson(${lesson.id})">${icon("undo", "ic ic-sm")}Отменить весь урок…</button>` : ""}</div>`
+    ? `<div class="lesson-foot"><span>${canEdit() ? "Отмена списывает звёзды с баланса и убирает запись из истории ученика."
+        : `Провёл: ${escapeHtml(staffName(lesson.user_id) || "не указано")}`}</span>
+        ${Object.keys(awards).length && canEdit() ? `<button class="btn btn-danger-quiet btn-sm" onclick="undoLesson(${lesson.id})">${icon("undo", "ic ic-sm")}Отменить весь урок…</button>` : ""}</div>`
     : `<div class="lesson-foot"><span>Урок проведён до обновления: в нём не записано, кому сколько звёзд начислено, поэтому отменить его нельзя.</span></div>`;
   return `
     <section class="lesson">
@@ -1645,9 +1734,28 @@ function showInfo(title, html) {
 
 /* ── Учителя (только администратор) ──────────────────────── */
 
+let shownStaffPasswords = new Set();
+
+function staffPassword(user) {
+  if (user.role === "superadmin") return `<span class="muted">—</span>`;
+  if (!user.password_shown) {
+    return `<span class="muted pw-unknown" title="Сотрудник сменил пароль сам или запись создана до обновления">свой пароль</span>`;
+  }
+  const open = shownStaffPasswords.has(user.id);
+  const label = open ? "Скрыть пароль" : "Показать пароль";
+  return `<span class="pw-cell"><span class="mono ${open ? "" : "masked"}">${open ? escapeHtml(user.password_shown) : "•••••••••"}</span>
+    <button class="icon-btn" title="${label}" aria-label="${label}" onclick="toggleStaffPassword(${user.id})">${icon(open ? "eye-off" : "eye", "ic ic-sm")}</button></span>`;
+}
+
+function toggleStaffPassword(id) {
+  if (shownStaffPasswords.has(id)) shownStaffPasswords.delete(id); else shownStaffPasswords.add(id);
+  renderUsers();
+}
+
 function renderUsers() {
+  const order = { superadmin: 0, school_admin: 1, teacher: 2 };
   const users = (state.users || []).slice()
-    .sort((a, b) => (a.role === b.role ? a.name.localeCompare(b.name, "ru") : a.role === "superadmin" ? -1 : 1));
+    .sort((a, b) => (order[a.role] - order[b.role]) || a.name.localeCompare(b.name, "ru"));
   const rows = users.map((user) => {
     const admin = user.role === "superadmin";
     const self = user.id === state.me?.id;
@@ -1655,34 +1763,53 @@ function renderUsers() {
       ? `<span class="muted">все школы</span>`
       : (user.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean)
           .map((name) => `<span class="tag">${escapeHtml(name)}</span>`).join("") || `<span class="muted">нет школ</span>`;
+    const roleTag = admin ? `<span class="tag tag-star">администратор</span>`
+      : user.role === "school_admin" ? `<span class="tag tag-accent">администрация школы</span>`
+      : `<span class="tag">учитель</span>`;
     return `
       <div class="user-row">
         <span class="n">${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>
         <span><span class="code-chip">${escapeHtml(user.login)}</span></span>
-        <span>${admin ? `<span class="tag tag-star">администратор</span>` : `<span class="tag">учитель</span>`}</span>
+        <span>${staffPassword(user)}</span>
+        <span>${roleTag}</span>
         <span class="tag-row">${schools}</span>
         <span class="acts">
-          <button class="icon-btn boxed" title="${admin ? "Имя" : "Имя и школы"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
+          <button class="icon-btn boxed" title="${admin ? "Имя" : "Имя, роль и школы"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
           ${self ? "" : `<button class="icon-btn boxed" title="Выдать новый пароль" aria-label="Новый пароль" onclick="resetUserPassword(${user.id})">${icon("key", "ic ic-sm")}</button>`}
           ${self ? "" : `<button class="icon-btn boxed danger" title="Удалить" aria-label="Удалить" onclick="removeUser(${user.id})">${icon("trash", "ic ic-sm")}</button>`}
         </span>
       </div>`;
   }).join("");
   $("userList").innerHTML = `
-    <div class="users-head"><span>Имя</span><span>Логин</span><span>Роль</span><span>Школы</span><span></span></div>${rows}`;
+    <div class="users-head"><span>Имя</span><span>Логин</span><span>Пароль</span><span>Роль</span><span>Школы</span><span></span></div>${rows}`;
+}
+
+let userRole = "teacher";
+const ROLE_HINTS = {
+  teacher: "Ведёт журнал, классы, расписание и выдаёт призы в отмеченных школах.",
+  school_admin: "Директор или завуч: видит статистику, рейтинги, расписание и уроки отмеченных школ. Ничего не меняет, паролей учеников не видит.",
+};
+
+function pickUserRole(role) {
+  userRole = role;
+  document.querySelectorAll("#userRole button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.role === role)));
+  $("userRoleHint").textContent = ROLE_HINTS[role];
 }
 
 function openUser(id = null) {
   userTarget = id;
   const user = id ? (state.users || []).find((u) => u.id === id) : null;
-  $("userModalTitle").textContent = !user ? "Новый учитель" : user.role === "superadmin" ? "Администратор" : "Учитель";
+  const admin = user?.role === "superadmin";
+  $("userModalTitle").textContent = !user ? "Новый сотрудник" : admin ? "Администратор" : user.name;
   $("userName").value = user?.name || "";
   $("userLogin").value = user?.login || "";
   $("userLogin").disabled = Boolean(user);
   $("userPassword").value = "";
   $("userPasswordField").hidden = Boolean(user);
+  $("userRoleField").hidden = admin;
+  pickUserRole(user?.role === "school_admin" ? "school_admin" : "teacher");
   // Администратор видит все школы — галочки ему не нужны
-  $("userSchoolsField").hidden = user?.role === "superadmin";
+  $("userSchoolsField").hidden = admin;
   const chosen = new Set(user?.school_ids || (activeSchool ? [activeSchool] : []));
   $("userSchools").innerHTML = state.schools.map((s) => `
     <label class="check"><input type="checkbox" value="${s.id}" ${chosen.has(s.id) ? "checked" : ""}>
@@ -1694,11 +1821,11 @@ async function saveUser() {
   const name = $("userName").value.trim();
   const login = $("userLogin").value.trim().toLowerCase();
   const school_ids = [...$("userSchools").querySelectorAll("input:checked")].map((i) => parseInt(i.value));
-  if (!name) return toast("Введите имя учителя", "error");
+  if (!name) return toast("Введите имя", "error");
   try {
     if (userTarget) {
       const target = (state.users || []).find((u) => u.id === userTarget);
-      const json = target?.role === "superadmin" ? { name } : { name, school_ids };
+      const json = target?.role === "superadmin" ? { name } : { name, school_ids, role: userRole };
       await api(`/api/users/${userTarget}`, { method: "PATCH", json });
       closeModal("modalUser");
       await loadState();
@@ -1706,7 +1833,7 @@ async function saveUser() {
     } else {
       if (!login) return toast("Введите логин", "error");
       const result = await api("/api/users", {
-        method: "POST", json: { name, login, school_ids, password: $("userPassword").value || null },
+        method: "POST", json: { name, login, school_ids, role: userRole, password: $("userPassword").value || null },
       });
       closeModal("modalUser");
       await loadState();
@@ -1719,7 +1846,7 @@ async function saveUser() {
 
 function showCredentials(user, password) {
   showInfo("Данные для входа", `
-    <p>Передайте учителю. Пароль больше не покажется — если его забудут, выдайте новый.</p>
+    <p>Передайте сотруднику. Пароль виден в списке «Сотрудники», пока сотрудник не сменит его сам.</p>
     <div class="cred-box">
       <span>сайт</span><b>${escapeHtml(location.host + BASE)}/login</b>
       <span>логин</span><b>${escapeHtml(user.login)}</b>
@@ -1734,6 +1861,7 @@ function resetUserPassword(id) {
     `${escapeHtml(user.name)}: старый пароль перестанет работать, все входы завершатся.`,
     async () => {
       const result = await api(`/api/users/${id}/password`, { method: "POST", json: {} });
+      await loadState();
       showCredentials(user, result.password);
     }, "Выдать пароль");
 }
@@ -1776,6 +1904,7 @@ async function saveMyPassword() {
 function currentPage() { return document.querySelector(".page.active")?.id.replace("page-", "") || "journal"; }
 
 function switchPage(name) {
+  if (!canEdit() && ["journal", "prizes"].includes(name)) name = "stats";
   closeMenus();
   document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === `page-${name}`));
   document.querySelectorAll(".nav button").forEach((button) => {
@@ -1783,6 +1912,8 @@ function switchPage(name) {
     else button.removeAttribute("aria-current");
   });
   renderPanel();
+  if (name === "stats") loadStats();
+  if (name === "schedule") renderSchedule();
   window.scrollTo(0, 0);
 }
 
