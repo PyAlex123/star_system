@@ -25,7 +25,7 @@ def set_theme(school_id: int, theme: str):
 
 def test_new_base_has_default_theme(teacher):
     assert load_db()["schools"][0]["theme"] == "notebook"
-    assert load_db()["version"] == db.DB_VERSION == 7
+    assert load_db()["version"] == db.DB_VERSION
 
 
 def test_migration_adds_theme_lesson_ids_and_categories(teacher):
@@ -43,7 +43,7 @@ def test_migration_adds_theme_lesson_ids_and_categories(teacher):
         import json
         json.dump(data, fh, ensure_ascii=False)
     fresh = db.load_db()
-    assert fresh["version"] == 7
+    assert fresh["version"] == db.DB_VERSION
     assert all(s["theme"] == "notebook" for s in fresh["schools"])
     assert fresh["prizes"][0]["category"] == "large"
     assert fresh["prizes"][2]["category"] == "medium"

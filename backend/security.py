@@ -180,17 +180,28 @@ def panel_user(request: Request) -> Optional[Dict[str, Any]]:
     return user
 
 
-def require_teacher(request: Request) -> Dict[str, Any]:
-    """Для API панели (учитель или суперадмин): 401, если не вошёл. Отдаёт пользователя."""
+def require_panel(request: Request) -> Dict[str, Any]:
+    """Любой вошедший в панель — для чтения: снимок журнала, статистика, расписание.
+    401, если не вошёл. Отдаёт пользователя."""
     user = panel_user(request)
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен вход в панель учителя")
     return user
 
 
+def require_teacher(request: Request) -> Dict[str, Any]:
+    """Всё, что меняет данные: учитель или суперадмин. Администрация школы только
+    смотрит — ей 403. Защита «закрыто по умолчанию»: новый маршрут на этой зависимости
+    недоступен администрации школы, пока его явно не откроют через require_panel."""
+    user = require_panel(request)
+    if not db.can_edit(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Администрация школы может только смотреть")
+    return user
+
+
 def require_superadmin(request: Request) -> Dict[str, Any]:
     """Только суперадмин: школы, учителя, витрина призов."""
-    user = require_teacher(request)
+    user = require_panel(request)
     if not db.is_superadmin(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Это может сделать только администратор")
     return user
@@ -212,6 +223,15 @@ def require_teacher_page(request: Request) -> bool:
     return True
 
 
+def require_editor_page(request: Request) -> bool:
+    """Страницы с данными для входа учеников (карточки с паролями): без входа — на форму,
+    администрации школы — 403."""
+    require_teacher_page(request)
+    if not db.can_edit(panel_user(request)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Администрация школы может только смотреть")
+    return True
+
+
 def require_superadmin_page(request: Request) -> bool:
     """Служебные страницы администратора: без входа — на форму, учителю — 404."""
     require_teacher_page(request)
@@ -220,6 +240,7 @@ def require_superadmin_page(request: Request) -> bool:
     return True
 
 
+PanelDep = Depends(require_panel)
 TeacherDep = Depends(require_teacher)
 SuperadminDep = Depends(require_superadmin)
 TeacherPageDep = Depends(require_teacher_page)

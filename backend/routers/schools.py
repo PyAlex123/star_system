@@ -15,13 +15,6 @@ from .common import bad_request, class_or_404, clean_name, drop_photos, school_o
 router = APIRouter(prefix="/api", tags=["schools"], dependencies=[Depends(require_teacher)])
 
 
-@router.get("/state")
-def get_state(user: Dict[str, Any] = Depends(require_teacher)):
-    """Снимок базы для панели: только видимые пользователю школы.
-    Хеши паролей и ключи сессий не покидают сервер."""
-    return db.public_state(db.load_db(), user)
-
-
 # ── Школы ─────────────────────────────────────────────────────────────────────
 
 @router.post("/schools", dependencies=[Depends(require_superadmin)])
@@ -86,6 +79,7 @@ def delete_school(school_id: int):
         database["classes"] = [c for c in database["classes"] if c["school_id"] != school_id]
         database["lessons"] = [lesson for lesson in database["lessons"]
                                if lesson.get("class_id") not in class_ids]
+        database["schedule"] = [e for e in database.get("schedule", []) if e.get("class_id") not in class_ids]
         database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
         for user in database.get("users", []):
             if school_id in (user.get("school_ids") or []):
@@ -177,6 +171,7 @@ def delete_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher))
         database["students"] = [s for s in database["students"]
                                 if s.get("class_id") != class_id]
         database["classes"] = [c for c in database["classes"] if c["id"] != class_id]
+        database["schedule"] = [e for e in database.get("schedule", []) if e.get("class_id") != class_id]
         return None
 
     db.transaction(_apply)

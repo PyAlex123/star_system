@@ -175,8 +175,8 @@ def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Re
 
 @router.post("/teacher/password")
 def change_panel_password(payload: schemas.PasswordChange, response: Response,
-                          user: Dict[str, Any] = Depends(security.require_teacher)):
-    """Свой пароль: нужен текущий. Остальные входы этого пользователя завершаются,
+                          user: Dict[str, Any] = Depends(security.require_panel)):
+    """Свой пароль: нужен текущий. Его больше не видит никто, даже администратор. Остальные входы этого пользователя завершаются,
     а текущему выдаём новую cookie — чтобы не выкинуло из панели."""
     if not passwords.verify_password((payload.current or "").strip(), user.get("password_hash", "")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Текущий пароль указан неверно")
@@ -190,6 +190,7 @@ def change_panel_password(payload: schemas.PasswordChange, response: Response,
         if not fresh:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен вход в панель учителя")
         fresh["password_hash"] = passwords.hash_password(new)
+        fresh["password_shown"] = None
         fresh["session_key"] = db.new_session_key()
         return fresh
 

@@ -120,17 +120,43 @@ class TeacherLogin(BaseModel):
     password: Secret
 
 
+StaffRole = Annotated[str, Field(pattern="^(teacher|school_admin)$")]
+
+
 class UserCreate(BaseModel):
-    """Новый учитель. Пароль пустой — система придумает сама."""
+    """Новый сотрудник: учитель или администрация школы. Пароль пустой — система придумает сама."""
     login: Login
     name: Name
     school_ids: List[int] = Field(default_factory=list, max_length=200)
     password: Optional[Secret] = None
+    role: StaffRole = "teacher"
 
 
 class UserUpdate(BaseModel):
     name: Optional[Name] = None
     school_ids: Optional[List[int]] = Field(default=None, max_length=200)
+    role: Optional[StaffRole] = None
+
+
+Clock = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
+
+
+class ScheduleCreate(BaseModel):
+    """Занятие класса — сразу на несколько дней недели (1 — понедельник … 7 — воскресенье)."""
+    class_id: int
+    weekdays: List[Annotated[int, Field(ge=1, le=7)]] = Field(min_length=1, max_length=7)
+    start: Clock
+    end: Clock
+    room: Annotated[str, Field(max_length=40)] = ""
+    user_id: Optional[int] = None
+
+
+class ScheduleUpdate(BaseModel):
+    weekday: Optional[Annotated[int, Field(ge=1, le=7)]] = None
+    start: Optional[Clock] = None
+    end: Optional[Clock] = None
+    room: Optional[Annotated[str, Field(max_length=40)]] = None
+    user_id: Optional[int] = None
 
 
 class StudentLogin(BaseModel):
