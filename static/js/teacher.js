@@ -220,6 +220,7 @@ function renderAll() {
   renderSchedule();
   if (currentPage() === "stats") loadStats();
   if (currentPage() === "monitor") loadMonitor();
+  if (currentPage() === "lessons") loadLessonRuns();
   if (isAdmin()) renderUsers();
 }
 
@@ -1380,9 +1381,10 @@ function lessonHtml(lesson) {
           <span class="lesson-meta">${escapeHtml(weekday)} · ${escapeHtml(lesson.class_name || classById(lesson.class_id)?.name || "")} · ${count} ${kids(count)}</span>
         </span>
         ${lesson.id === justDone ? `<span class="tag tag-accent">только что</span>` : ""}
+        ${lessonRunsTag(lesson)}
         <span class="pill-star plus">${icon("star")}<b>+${lesson.total_stars}</b></span>
       </button>
-      ${open ? `<div class="lesson-items">${items}${foot}</div>` : ""}
+      ${open ? `<div class="lesson-items">${lessonRunsRow(lesson)}${items}${foot}</div>` : ""}
     </section>`;
 }
 
@@ -1900,6 +1902,7 @@ function switchPage(name) {
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
   if (name === "monitor") loadMonitor();
+  if (name === "lessons") loadLessonRuns();
   window.scrollTo(0, 0);
 }
 

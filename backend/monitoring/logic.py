@@ -264,3 +264,52 @@ def summarize(questions: Sequence[Dict[str, Any]],
             item["correct_count"] = sum(1 for a in got if a.get("correct"))
         result.append(item)
     return result
+
+
+# ── Таблица «участник × вопрос» ───────────────────────────────────────────────
+
+HIDDEN = "скрыто"          # настроение без разрешения показывать имена
+
+
+def answer_label(q: Dict[str, Any], value: Optional[Dict[str, Any]]) -> str:
+    """Ответ словами — для таблицы и Excel."""
+    if not value:
+        return ""
+    labels = dict(_labels(q))
+    kind = q.get("type")
+    if kind in ("mood", "light"):
+        return str(labels.get(value.get("v"), ""))
+    if kind == "scale":
+        return str(value.get("v", ""))
+    if kind == "single":
+        return f"Другое: {value.get('t', '')}" if value.get("o") == OTHER else str(labels.get(value.get("o"), ""))
+    if kind == "multi":
+        parts = [f"Другое: {value.get('t', '')}" if key == OTHER else str(labels.get(key, ""))
+                 for key in value.get("o") or []]
+        return ", ".join(p for p in parts if p)
+    return str(value.get("t", ""))
+
+
+def answer_table(questions: Sequence[Dict[str, Any]], people: Iterable[Dict[str, Any]],
+                 answers: Iterable[Dict[str, Any]], show_names: bool) -> List[Dict[str, Any]]:
+    """Строки таблицы: участник и его ответы словами по id вопроса.
+
+    Настроение (лица) по умолчанию не связывается с именем — в строке «скрыто»,
+    видна только общая сводка (ТЗ: «показывать имена в ответах о настроении — нет»).
+    """
+    by_id = {q["id"]: q for q in questions}
+    given: Dict[int, Dict[str, Any]] = {}
+    for a in answers:
+        given.setdefault(a["participant_id"], {})[a["question_id"]] = a
+    rows = []
+    for p in people:
+        cells = {}
+        for qid, a in given.get(p["id"], {}).items():
+            q = by_id.get(qid)
+            if not q:
+                continue
+            hidden = q["type"] == "mood" and not show_names
+            cells[qid] = {"text": HIDDEN if hidden else answer_label(q, a["value"]),
+                          "correct": None if a.get("correct") is None else bool(a["correct"])}
+        rows.append({**p, "answers": cells})
+    return rows
