@@ -46,11 +46,15 @@ os.environ.update({
     "JWT_SECRET": "jwt-secret-only-for-tests-long-enough-for-hs256",
     "DEV_LOGIN": "0",
     "SCHOOL_NAME": "Тестовая школа",
+    "CHECKIN_BOT_TOKEN": "",
+    "CHECKIN_BOT_USERNAME": "test_checkin_bot",
+    "TZ_NAME": "Asia/Tashkent",
 })
 
 from fastapi.testclient import TestClient  # noqa: E402
 
 from backend import config, db, passwords, ratelimit  # noqa: E402
+from backend.checkin import clock as checkin_clock, store as checkin_store  # noqa: E402
 from backend.main import app  # noqa: E402
 
 # Боевые 120 000 итераций делают каждый тест на полсекунды дольше.
@@ -70,7 +74,10 @@ def fresh_state():
     for directory in (config.AVATARS_UPLOAD_DIR, config.PRIZES_UPLOAD_DIR):
         directory.mkdir(parents=True, exist_ok=True)
     ratelimit._failures.clear()
+    checkin_store.reset_for_tests()
+    checkin_clock.freeze(None)
     yield
+    checkin_clock.freeze(None)
 
 
 def pytest_sessionfinish(session, exitstatus):

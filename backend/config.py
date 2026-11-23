@@ -152,6 +152,26 @@ WEBHOOK_SECRET = (hashlib.sha256(f"webhook:{BOT_TOKEN}".encode()).hexdigest()[:4
 WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}" if WEBHOOK_SECRET else ""
 
 
+# ── Отметки преподавателей ───────────────────────────────────────────────────
+# Свой бот: преподаватели не пишут в бот учеников, а дети не видят меню отметок.
+# Токен пустой — модуль работает (панель, расписание, отчёты), бот не запускается.
+
+CHECKIN_BOT_TOKEN = os.getenv("CHECKIN_BOT_TOKEN", "").strip()
+CHECKIN_BOT_USERNAME = os.getenv("CHECKIN_BOT_USERNAME", "").strip().lstrip("@")
+# Один токен на два бота — два опроса getUpdates дерутся, и дети попадают в меню отметок.
+CHECKIN_TOKEN_CLASH = bool(CHECKIN_BOT_TOKEN) and CHECKIN_BOT_TOKEN == BOT_TOKEN
+CHECKIN_BOT_ENABLED = bool(CHECKIN_BOT_TOKEN) and not CHECKIN_TOKEN_CLASH
+# Отметки, журналы и уроки по датам растут без предела — им не место в JSON,
+# который переписывается целиком. Лежат в том же каталоге данных, бэкап — тот же.
+CHECKIN_DB_FILE = DATA_DIR / "checkin.sqlite"
+# Все расчёты отметок — по часам школ. В Узбекистане нет перехода на летнее время.
+TZ_NAME = os.getenv("TZ_NAME", "").strip() or "Asia/Tashkent"
+
+CHECKIN_WEBHOOK_SECRET = (hashlib.sha256(f"checkin-webhook:{CHECKIN_BOT_TOKEN}".encode()).hexdigest()[:40]
+                          if CHECKIN_BOT_TOKEN else "")
+CHECKIN_WEBHOOK_PATH = f"/telegram/checkin/{CHECKIN_WEBHOOK_SECRET}" if CHECKIN_WEBHOOK_SECRET else ""
+
+
 def site_url(path: str = "") -> str:
     """Полный внешний адрес страницы с учётом подпути."""
     base = os.getenv("BASE_URL", BASE_URL).strip().rstrip("/")

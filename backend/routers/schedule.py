@@ -54,9 +54,10 @@ def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(req
             if clash:
                 raise bad_request(f"У класса {cls['name']} в этот день уже есть занятие "
                                   f"{clash['start']}–{clash['end']}")
-            entry = {"id": db.next_id(schedule), "class_id": cls["id"], "weekday": weekday,
+            entry = {"id": db.next_counted_id(database, "schedule"), "class_id": cls["id"], "weekday": weekday,
                      "start": item.start, "end": item.end, "room": item.room.strip(),
-                     "user_id": teacher, "created_at": db.today()}
+                     "user_id": teacher, "created_at": db.today(),
+                     "valid_from": None, "valid_to": None}
             schedule.append(entry)
             created.append(entry)
         return created

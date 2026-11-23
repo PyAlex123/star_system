@@ -36,7 +36,11 @@ _lock = threading.RLock()
 # 7 -> 8: расписание (schedule), роль «администрация школы» (school_admin), открытый
 #         пароль сотрудника до первой смены (password_shown), автор урока (lesson.user_id),
 #         последний заход ученика в кабинет (last_seen).
-DB_VERSION = 8
+# 8 -> 9: отметки преподавателей. У школы координаты и радиус (lat, lon, radius_m, address),
+#         у сотрудника привязка Telegram, приглашение, язык, согласие, ставка и флажок
+#         «ведёт отметки» (checkin_manager), у занятия расписания срок действия
+#         (valid_from, valid_to). Сами отметки живут в data/checkin.sqlite.
+DB_VERSION = 9
 
 # Категории призов как в макетах: небольшой, средний, большой
 PRIZE_CATEGORIES = ("small", "medium", "large")
@@ -54,6 +58,21 @@ def category_by_cost(cost: int) -> str:
 SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
 # То же для пользователей панели
 SECRET_USER_FIELDS = ("password_hash", "session_key")
+# Видно только администратору в списке сотрудников: по коду приглашения можно
+# привязать свой Telegram к чужой карточке преподавателя
+ADMIN_ONLY_USER_FIELDS = ("password_shown", "invite_code")
+
+# Поля сотрудника для отметок (схема 9). Значения по умолчанию — для миграции и новых записей.
+STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
+    "tg_id": None, "tg_username": None, "tg_bound_at": None, "tg_blocked_at": None,
+    "invite_code": None, "lang": "ru", "consent_at": None, "hourly_rate": None,
+    # Отмечается ли сотрудник в боте. Уроки и проверки — только у таких: учитель
+    # занятия по умолчанию тот, кто его внёс, в том числе администратор.
+    "checkin_tracked": False,
+    # Видит раздел «Отметки» и решает спорные уроки (кроме администратора)
+    "checkin_manager": False,
+}
+SCHOOL_CHECKIN_DEFAULTS: Dict[str, Any] = {"address": "", "lat": None, "lon": None, "radius_m": 150}
 
 ROLE_SUPERADMIN = "superadmin"
 ROLE_TEACHER = "teacher"
@@ -171,7 +190,7 @@ def public_student(student: Dict[str, Any]) -> Dict[str, Any]:
 def public_user(user: Dict[str, Any], with_password: bool = False) -> Dict[str, Any]:
     """Пользователь панели для ответа API — без хеша пароля и ключа сессии.
     Открытый пароль (до первой смены) — только в списке сотрудников у администратора."""
-    hidden = SECRET_USER_FIELDS + (() if with_password else ("password_shown",))
+    hidden = SECRET_USER_FIELDS + (() if with_password else ADMIN_ONLY_USER_FIELDS)
     return {k: v for k, v in user.items() if k not in hidden}
 
 
@@ -246,7 +265,7 @@ def make_user(db: Dict[str, Any], login: str, name: str, role: str,
     """Новый пользователь панели. Пароль сотрудника, созданного в панели, виден
     администратору до первой смены; пароли из .env в базу открытым текстом не пишем."""
     user = {
-        "id": next_id(db.setdefault("users", [])),
+        "id": next_counted_id(db, "users"),
         "login": passwords.normalize_login(login),
         "name": name,
         "role": role,
@@ -255,6 +274,7 @@ def make_user(db: Dict[str, Any], login: str, name: str, role: str,
         "password_shown": password if show_password and role != ROLE_SUPERADMIN else None,
         "session_key": new_session_key(),
         "created_at": now_iso(),
+        **json.loads(json.dumps(STAFF_CHECKIN_DEFAULTS)),
     }
     db["users"].append(user)
     return user
@@ -288,6 +308,19 @@ def default_avatar(student_id: int) -> Dict[str, str]:
 
 def next_id(items: Any) -> int:
     return max((int(i.get("id", 0)) for i in items), default=0) + 1
+
+
+# Номера, которые нельзя выдавать повторно: к ним привязаны отметки и уроки
+# в data/checkin.sqlite. Иначе новый сотрудник унаследовал бы чужие опоздания.
+COUNTED_IDS = {"users": "last_user_id", "schools": "last_school_id", "schedule": "last_schedule_id"}
+
+
+def next_counted_id(db: Dict[str, Any], collection: str) -> int:
+    settings = db.setdefault("settings", {})
+    key = COUNTED_IDS[collection]
+    new_id = max(next_id(db.get(collection, [])) - 1, int(settings.get(key, 0))) + 1
+    settings[key] = new_id
+    return new_id
 
 
 def _migrate_to_schools(db: Dict[str, Any]) -> bool:
@@ -398,6 +431,29 @@ def migrate(db: Dict[str, Any]) -> bool:
     for school in db["schools"]:
         if not clean_theme(school.get("theme")):
             school["theme"] = DEFAULT_THEME
+            changed = True
+        for field, default in SCHOOL_CHECKIN_DEFAULTS.items():
+            if field not in school:
+                school[field] = default
+                changed = True
+
+    for user in db.get("users", []):
+        for field, default in STAFF_CHECKIN_DEFAULTS.items():
+            if field not in user:
+                user[field] = default
+                changed = True
+
+    # Срок действия занятия. valid_from = None — «с того дня, как внесли» (created_at)
+    for entry in db["schedule"]:
+        for field in ("valid_from", "valid_to"):
+            if field not in entry:
+                entry[field] = None
+                changed = True
+
+    for collection, key in COUNTED_IDS.items():
+        highest = max((int(i.get("id", 0)) for i in db.get(collection, [])), default=0)
+        if int(db["settings"].get(key, 0)) < highest:
+            db["settings"][key] = highest
             changed = True
 
     # Урокам — постоянный номер: по нему учитель отменяет ошибочное начисление
