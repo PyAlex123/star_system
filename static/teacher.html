@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/monitoring.css">
 </head>
 <body class="teacher">
 
@@ -36,6 +37,9 @@
       <button data-page="lessons" onclick="switchPage('lessons')">
         <svg class="ic"><use href="#i-calendar"></use></svg>Уроки
       </button>
+      <button data-page="monitor" class="editor-only" onclick="switchPage('monitor')">
+        <svg class="ic"><use href="#i-activity"></use></svg>Мониторинг
+      </button>
       <button data-page="stats" onclick="switchPage('stats')">
         <svg class="ic"><use href="#i-chart"></use></svg>Статистика
       </button>
@@ -45,11 +49,11 @@
     </nav>
 
     <div class="topbar-end">
-      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль">
-        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Пароль
+      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль" aria-label="Сменить свой пароль">
+        <svg class="ic ic-sm"><use href="#i-key"></use></svg><span class="tb-label">Пароль</span>
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">
-        <svg class="ic ic-sm"><use href="#i-logout"></use></svg>Выйти
+      <button class="btn btn-ghost btn-sm" onclick="logout()" title="Выйти" aria-label="Выйти">
+        <svg class="ic ic-sm"><use href="#i-logout"></use></svg><span class="tb-label">Выйти</span>
       </button>
     </div>
   </div>
@@ -207,6 +211,19 @@
     </button>
   </div>
   <div class="week-grid" id="weekGrid"></div>
+</main>
+
+<!-- ── Мониторинг ──────────────────────────────────────────── -->
+<main class="page" id="page-monitor">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Мониторинг</h1>
+      <p class="page-sub">Опрос на 1–2 минуты урока: настроение, понимание темы, оценка урока.
+        Ученики отвечают по ссылке школы — без входа и пароля.</p>
+    </div>
+    <div class="mon-link" id="monLink"></div>
+  </div>
+  <div id="monHost"></div>
 </main>
 
 <!-- ── Статистика ──────────────────────────────────────────── -->
@@ -529,6 +546,43 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalLaunch" onclick="if(event.target===this) closeModal('modalLaunch')">
+  <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="launchTitle">
+    <div>
+      <div class="modal-title" id="launchTitle">Запуск опроса</div>
+      <p class="modal-sub" id="launchSub"></p>
+    </div>
+    <div class="field">
+      <span class="field-label">Классы</span>
+      <div class="launch-classes" id="launchClasses" role="group" aria-label="Классы"></div>
+      <p class="field-hint" id="launchClassesHint"></p>
+    </div>
+    <div class="field" id="launchTopicField">
+      <label for="launchTopic">Тема урока</label>
+      <input type="text" id="launchTopic" maxlength="120" placeholder="Например: Закон Ома">
+      <p class="field-hint">Подставится в вопрос «Насколько понятна тема…». Можно не заполнять.</p>
+    </div>
+    <div class="field" id="launchGoalsField">
+      <label for="launchGoals">Цели урока</label>
+      <textarea id="launchGoals" rows="3" placeholder="По одной на строку, например: рассчитать силу тока"></textarea>
+      <p class="field-hint">По каждой цели ученик ответит «Я могу: …» — да, почти или нет. До 5 целей.</p>
+    </div>
+    <div class="field">
+      <span class="field-label">Сколько идёт опрос</span>
+      <div class="seg launch-time" id="launchTime" role="radiogroup" aria-label="Время"></div>
+    </div>
+    <label class="check launch-code"><input type="checkbox" id="launchCode">
+      <span>Код урока: 4 цифры на экране класса — ответят только те, кто на уроке</span></label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalLaunch')">Отмена</button>
+      <button class="btn" id="launchBtn" onclick="launchRun()"><svg class="ic"><use href="#i-play"></use></svg>Запустить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Экран для класса: поверх панели, крупно — для проектора -->
+<div class="live" id="liveScreen" role="dialog" aria-modal="true" aria-labelledby="liveTitle" hidden></div>
+
 <div class="backdrop" id="modalMyPassword" onclick="if(event.target===this) closeModal('modalMyPassword')">
   <div class="modal" style="max-width:420px;">
     <div>
@@ -640,5 +694,7 @@
 <script src="{{BASE}}/static/js/teacher.js"></script>
 <script src="{{BASE}}/static/js/schedule.js"></script>
 <script src="{{BASE}}/static/js/stats.js"></script>
+<script src="{{BASE}}/static/js/m-render.js"></script>
+<script src="{{BASE}}/static/js/monitoring.js"></script>
 </body>
 </html>

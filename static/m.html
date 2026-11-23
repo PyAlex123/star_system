@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="{{THEME}}" data-mode="{{MODE}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Опрос на уроке — Звёзды</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">
+<link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/m.css">
+</head>
+<body class="m" data-night>
+
+{{ICONS}}
+
+<header class="m-top">
+  <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
+  <span class="m-top-text"><b>Опрос на уроке</b><span id="mSchool"></span></span>
+</header>
+
+<main class="m-col" id="mHost" aria-live="polite">
+  <div class="m-card m-center"><span class="sr-only">Загружаем опрос…</span><span class="m-spinner" aria-hidden="true"></span></div>
+</main>
+
+<p class="m-offline" id="mOffline" role="status" hidden>
+  <svg class="ic ic-sm"><use href="#i-wifi-off"></use></svg>Нет связи. Ответы сохранены на устройстве и отправятся сами
+</p>
+
+<div class="toast-host" id="toastHost"></div>
+
+<script>window.APP_BASE = "{{BASE}}";</script>
+<script src="{{BASE}}/static/js/common.js" defer></script>
+<script src="{{BASE}}/static/js/m-render.js" defer></script>
+<script src="{{BASE}}/static/js/m.js" defer></script>
+</body>
+</html>

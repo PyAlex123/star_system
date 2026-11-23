@@ -219,6 +219,7 @@ function renderAll() {
   renderTodayStrip();
   renderSchedule();
   if (currentPage() === "stats") loadStats();
+  if (currentPage() === "monitor") loadMonitor();
   if (isAdmin()) renderUsers();
 }
 
@@ -1898,6 +1899,7 @@ function switchPage(name) {
   renderPanel();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
+  if (name === "monitor") loadMonitor();
   window.scrollTo(0, 0);
 }
 
@@ -1921,6 +1923,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const modal = topModal();
+      if (!modal && liveRunId) return closeLive();
       if (modal) return closeModal(modal.id);
       if (rowPop || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
       if (panelId) return closePanel();
@@ -1944,6 +1947,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     await loadState();
     reportSwitchedLogin();
+    openLiveFromAddress();
   } catch (error) {
     toast(error.message, "error");
   }

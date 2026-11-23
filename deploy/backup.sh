@@ -20,6 +20,20 @@ if [ ! -d "$DATA_DIR" ]; then
 fi
 
 mkdir -p "$BACKUP_DIR"
+
+# Опросы «Мониторинга» лежат в SQLite (data/monitoring.sqlite3) в режиме WAL: копия файла
+# во время записи может оказаться несогласованной. Поэтому сначала — снимок изнутри
+# контейнера средствами SQLite; он попадает в архив рядом с рабочим файлом.
+COMPOSE=(docker compose -f "$PROJECT_DIR/docker-compose.yml")
+if command -v docker >/dev/null 2>&1 && [ -n "$("${COMPOSE[@]}" ps -q stars 2>/dev/null)" ]; then
+    if "${COMPOSE[@]}" exec -T stars python -c \
+        "from backend.monitoring import store; store.backup_to('/app/data/monitoring.backup.sqlite3')"; then
+        echo "снимок опросов: data/monitoring.backup.sqlite3"
+    else
+        echo "снимок опросов сделать не удалось — архив всё равно создаётся"
+    fi
+fi
+
 STAMP="$(date +%Y-%m-%d_%H-%M)"
 ARCHIVE="${BACKUP_DIR}/stars_${STAMP}.tar.gz"
 
