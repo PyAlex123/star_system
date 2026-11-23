@@ -313,3 +313,136 @@ def answer_table(questions: Sequence[Dict[str, Any]], people: Iterable[Dict[str,
                           "correct": None if a.get("correct") is None else bool(a["correct"])}
         rows.append({**p, "answers": cells})
     return rows
+
+
+# ── Свои формы (конструктор) ──────────────────────────────────────────────────
+
+FORM_KINDS = ("survey", "test")
+AFTER_OPTIONS = ("none", "score", "full")     # что ученик видит после отправки
+MAX_OPTIONS = 10
+MAX_TEXT = 300
+MAX_OPTION = 120
+MAX_SPELLINGS = 10
+_ID = re.compile(r"^[a-z0-9-]{1,20}$")
+_OPTION_ID = re.compile(r"^[a-z0-9]{1,4}$")
+DEFAULT_LIGHTS = ["всё понятно", "есть вопросы", "не понял"]
+
+
+def _clip(value: Any, limit: int) -> str:
+    return _SPACES.sub(" ", str(value or "")).strip()[:limit]
+
+
+def _clean_options(raw: Any, n: int) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise ValueError(f"Вопрос {n}: нужно хотя бы два варианта ответа")
+    if len(raw) > MAX_OPTIONS:
+        raise ValueError(f"Вопрос {n}: не больше {MAX_OPTIONS} вариантов")
+    used, result = set(), []
+    for i, item in enumerate(raw):
+        item = item if isinstance(item, dict) else {"text": item}
+        text = _clip(item.get("text"), MAX_OPTION)
+        if not text:
+            raise ValueError(f"Вопрос {n}: у варианта {i + 1} нет текста")
+        oid = str(item.get("id") or "")
+        if not _OPTION_ID.match(oid) or oid in used:
+            oid = next(c for c in "abcdefghijklmnopqrstuvwxyz" if c not in used)
+        used.add(oid)
+        result.append({"id": oid, "text": text, **({"exclusive": True} if item.get("exclusive") else {})})
+    return result
+
+
+def clean_question(raw: Dict[str, Any], n: int, used_ids: set) -> Dict[str, Any]:
+    """Вопрос из конструктора в формат хранения. Ошибка — ValueError с номером вопроса."""
+    from .library import BY_ID, library_question
+    if not isinstance(raw, dict):
+        raise ValueError(f"Вопрос {n} не распознан")
+    std_id = str(raw.get("id") or "")
+    if raw.get("std") and std_id in BY_ID:
+        if std_id in used_ids:
+            raise ValueError(f"Стандартный вопрос {BY_ID[std_id]['std']} уже есть в форме")
+        used_ids.add(std_id)
+        return library_question(std_id)                 # текст стандартного вопроса не меняется
+
+    kind = raw.get("type")
+    if kind not in ("mood", "scale", "light", "single", "multi", "short", "long"):
+        raise ValueError(f"Вопрос {n}: неизвестный тип")
+    text = _clip(raw.get("text"), MAX_TEXT)
+    if not text:
+        raise ValueError(f"Вопрос {n}: напишите текст вопроса")
+    qid = str(raw.get("id") or "")
+    if not _ID.match(qid) or qid in used_ids or qid in BY_ID or qid.split("-")[0] in BY_ID:
+        k = 1
+        while f"q{k}" in used_ids:
+            k += 1
+        qid = f"q{k}"
+    used_ids.add(qid)
+    q: Dict[str, Any] = {"id": qid, "std": None, "type": kind, "text": text, "required": bool(raw.get("required", True))}
+
+    if kind in ("single", "multi"):
+        q["options"] = _clean_options(raw.get("options"), n)
+        if kind == "single":
+            for o in q["options"]:
+                o.pop("exclusive", None)
+        q["other"] = bool(raw.get("other"))
+    elif kind == "scale":
+        scale = raw.get("scale") or {}
+        top = 10 if scale.get("max") == 10 else 5
+        q["scale"] = {"min": 1, "max": top, "left": _clip(scale.get("left"), 40), "right": _clip(scale.get("right"), 40)}
+    elif kind == "light":
+        lights = raw.get("lights") if isinstance(raw.get("lights"), list) else []
+        q["lights"] = [_clip(lights[i] if i < len(lights) else "", 80) or DEFAULT_LIGHTS[i] for i in range(3)]
+
+    correct = raw.get("correct")
+    if correct and kind in ("single", "multi", "short"):
+        if kind == "short":
+            spellings = [_clip(s, 100) for s in (correct if isinstance(correct, list) else [correct])]
+            spellings = [s for s in dict.fromkeys(spellings) if s][:MAX_SPELLINGS]
+            if spellings:
+                q["correct"] = spellings
+        else:
+            ids = {o["id"] for o in q["options"]}
+            chosen = [c for c in (correct if isinstance(correct, list) else [correct]) if c in ids]
+            if kind == "single":
+                chosen = chosen[:1]
+            if chosen:
+                q["correct"] = list(dict.fromkeys(chosen))
+        if q.get("correct"):
+            try:
+                q["points"] = max(1, min(100, int(raw.get("points") or 1)))
+            except (TypeError, ValueError):
+                q["points"] = 1
+    return q
+
+
+def clean_form(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Форма из конструктора: название, тип, настройки, вопросы — проверено и приведено."""
+    kind = raw.get("kind") if raw.get("kind") in FORM_KINDS else "survey"
+    settings_in = raw.get("settings") if isinstance(raw.get("settings"), dict) else {}
+    after = settings_in.get("after")
+    settings = {
+        "after": after if after in AFTER_OPTIONS else ("score" if kind == "test" else "none"),
+        "show_names": bool(settings_in.get("show_names")),
+        "shuffle": bool(settings_in.get("shuffle")),
+    }
+    questions_in = raw.get("questions") if isinstance(raw.get("questions"), list) else []
+    if len(questions_in) > MAX_QUESTIONS:
+        raise ValueError(f"Слишком много вопросов: не больше {MAX_QUESTIONS}")
+    used: set = set()
+    questions = [clean_question(q, i + 1, used) for i, q in enumerate(questions_in)]
+    return {"title": _clip(raw.get("title"), 120) or "Без названия", "kind": kind,
+            "settings": settings, "questions": questions}
+
+
+def shuffled(questions: Sequence[Dict[str, Any]], seed: str) -> List[Dict[str, Any]]:
+    """Свой порядок вопросов и вариантов у каждого участника — постоянный для него.
+    «Другое» и исключающий вариант («ничего») остаются в конце."""
+    import random
+    rng = random.Random(seed)
+    result = [copy.deepcopy(q) for q in questions]
+    rng.shuffle(result)
+    for q in result:
+        if q.get("type") in ("single", "multi") and q.get("options"):
+            plain = [o for o in q["options"] if not o.get("exclusive")]
+            rng.shuffle(plain)
+            q["options"] = plain + [o for o in q["options"] if o.get("exclusive")]
+    return result

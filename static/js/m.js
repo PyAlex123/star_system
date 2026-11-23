@@ -384,7 +384,8 @@ function showDone(me) {
   screen = "done";
   data.me = me;
   const result = me.result
-    ? `<p class="m-score"><span>Твой результат</span><b class="num">${fmt(me.result.score)} из ${fmt(me.result.max)}</b></p>` : "";
+    ? `<p class="m-score"><span>Твой результат</span><b class="num">${fmt(me.result.score)} из ${fmt(me.result.max)}</b></p>
+       ${rightAnswers(me)}` : "";
   $("mHost").innerHTML = `
     <div class="m-card m-center">
       <span class="m-ring ok" aria-hidden="true">${icon("check", "ic ic-xl")}</span>
@@ -392,6 +393,25 @@ function showDone(me) {
       ${result}
       <button class="btn btn-ghost btn-lg btn-block" type="button" onclick="nextStudent()">${icon("users")}Следующий ученик</button>
     </div>`;
+}
+
+/** «Балл и правильные ответы»: что верно, что нет, и как правильно. */
+function rightAnswers(me) {
+  const correct = me.result?.correct;
+  if (!correct) return "";
+  const norm = (s) => String(s || "").trim().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+  const rows = me.questions.filter((q) => correct[q.id]).map((q) => {
+    const right = correct[q.id];
+    const mine = me.answers?.[q.id];
+    const ok = q.type === "single" ? mine?.o === right[0]
+      : q.type === "multi" ? Array.isArray(mine?.o) && mine.o.length === right.length && right.every((id) => mine.o.includes(id))
+      : right.some((r) => norm(r) === norm(mine?.t));
+    const text = q.type === "short" ? right[0]                       // первое написание — основное
+      : right.map((id) => q.options.find((o) => o.id === id)?.text || "").join(", ");
+    return `<li class="${ok ? "ok" : "bad"}">${icon(ok ? "check" : "close", "ic ic-sm")}
+      <span><b>${escapeHtml(q.text)}</b><small>${ok ? "Верно" : `Правильно: ${escapeHtml(text)}`}</small></span></li>`;
+  });
+  return rows.length ? `<ul class="m-answers">${rows.join("")}</ul>` : "";
 }
 
 function showClosed(endedAgo) {

@@ -203,14 +203,32 @@ MonitorText = Annotated[str, Field(max_length=120)]
 
 
 class MonitorRunCreate(BaseModel):
-    """Запуск опроса. class_ids пуст — все классы школы; minutes None — до ручного закрытия."""
+    """Запуск опроса: готовый набор (set_key) или своя форма (form_id).
+    class_ids пуст — все классы школы; minutes None — до ручного закрытия."""
     school_id: int
     set_key: Optional[Annotated[str, Field(max_length=20)]] = None
+    form_id: Optional[int] = None
     class_ids: List[int] = Field(default_factory=list, max_length=60)
     topic: MonitorText = ""
     goals: List[MonitorText] = Field(default_factory=list, max_length=5)
     minutes: Optional[int] = Field(default=None, ge=1, le=90)
     use_code: bool = False
+
+
+class MonitorFormCreate(BaseModel):
+    """Новая форма: пустая, копия готового набора (from_set) или своей формы (from_form)."""
+    school_id: int
+    title: Optional[MonitorText] = None
+    from_set: Optional[Annotated[str, Field(max_length=20)]] = None
+    from_form: Optional[int] = None
+
+
+class MonitorFormSave(BaseModel):
+    """Форма из конструктора. Подробная проверка — monitoring.logic.clean_form."""
+    title: Annotated[str, Field(max_length=200)] = ""
+    kind: Annotated[str, Field(max_length=10)] = "survey"
+    settings: dict = Field(default_factory=dict)
+    questions: List[dict] = Field(default_factory=list, max_length=40)
 
 
 class MonitorExtend(BaseModel):

@@ -82,7 +82,9 @@ def _me(conn, participant) -> Dict[str, Any]:
         "last_name": participant["last_name"], "first_name": participant["first_name"],
         "class_id": participant["class_id"], "class_name": participant["class_name"],
         "title": run["title"],
-        "questions": [logic.public_question(q) for q in run["questions"]],
+        "questions": [logic.public_question(q) for q in
+                      (logic.shuffled(run["questions"], participant["token"]) if run["settings"].get("shuffle")
+                       else run["questions"])],
         "answers": store.answers_of(conn, participant["id"]),
         "ended_ago": None if ended is None else store.now() - ended,
     }

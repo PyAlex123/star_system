@@ -350,3 +350,41 @@ def save_answer(conn: sqlite3.Connection, participant_id: int, question_id: str,
         "value = excluded.value, correct = excluded.correct, points = excluded.points, answered_at = excluded.answered_at",
         (participant_id, question_id, json.dumps(value, ensure_ascii=False),
          None if correct is None else int(correct), points, now()))
+
+
+# ── Свои формы ────────────────────────────────────────────────────────────────
+
+def form_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    form = dict(row)
+    form["settings"] = json.loads(form["settings"])
+    form["questions"] = json.loads(form["questions"])
+    return form
+
+
+def get_form(conn: sqlite3.Connection, form_id: int) -> Optional[Dict[str, Any]]:
+    row = conn.execute("SELECT * FROM forms WHERE id = ?", (form_id,)).fetchone()
+    return form_dict(row) if row else None
+
+
+def list_forms(conn: sqlite3.Connection, school_id: int, owner_id: Optional[int]) -> List[Dict[str, Any]]:
+    sql = "SELECT * FROM forms WHERE school_id = ?"
+    args: List[Any] = [school_id]
+    if owner_id is not None:
+        sql += " AND owner_id = ?"
+        args.append(owner_id)
+    return [form_dict(r) for r in conn.execute(sql + " ORDER BY updated_at DESC, id DESC", args)]
+
+
+def save_form(conn: sqlite3.Connection, form: Dict[str, Any], form_id: Optional[int] = None,
+              owner_id: Optional[int] = None, school_id: Optional[int] = None) -> int:
+    data = (form["title"], form["kind"], json.dumps(form["settings"], ensure_ascii=False),
+            json.dumps(form["questions"], ensure_ascii=False), now())
+    if form_id is None:
+        cursor = conn.execute(
+            "INSERT INTO forms (title, kind, settings, questions, updated_at, owner_id, school_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", data + (owner_id, school_id, now()))
+        return cursor.lastrowid
+    conn.execute("UPDATE forms SET title = ?, kind = ?, settings = ?, questions = ?, updated_at = ? WHERE id = ?",
+                 data + (form_id,))
+    return form_id
+
