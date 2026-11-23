@@ -10,7 +10,8 @@ SA_LOGIN, SA_PASSWORD = "director", "direktor-2026"
 
 # Не панель: вход, кабинет ученика, вебхук бота. Смена своего пароля и выход — всем ролям.
 ALLOWED_FOR_ALL = {"/api/auth/teacher", "/api/auth/teacher/password", "/api/auth/teacher/logout"}
-NOT_PANEL = re.compile(r"^/api/(me|telegram|auth/(twa|dev|student))(/|$)")
+# /api/m/… — страница опроса ученика: без входа, по ссылке школы.
+NOT_PANEL = re.compile(r"^/api/(me|m|telegram|auth/(twa|dev|student))(/|$)")
 
 
 @pytest.fixture

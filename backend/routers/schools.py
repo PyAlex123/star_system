@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 
 from .. import db, images, schemas
 from .. import themes
+from ..monitoring import store as monitoring_store
 from ..security import require_superadmin, require_teacher
 from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
 
@@ -88,6 +89,7 @@ def delete_school(school_id: int):
 
     db.transaction(_apply)
     drop_photos(removed.get("photos"))
+    monitoring_store.drop_school(school_id)
     return {"ok": True}
 
 

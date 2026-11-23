@@ -195,3 +195,40 @@ class AvatarChoice(BaseModel):
     preset: Optional[Annotated[str, Field(max_length=40)]] = None
     use_telegram_photo: bool = False
     telegram_photo_url: Optional[Annotated[str, Field(max_length=500)]] = None
+
+
+# ── Мониторинг ───────────────────────────────────────────────────────────────
+
+MonitorText = Annotated[str, Field(max_length=120)]
+
+
+class MonitorRunCreate(BaseModel):
+    """Запуск опроса. class_ids пуст — все классы школы; minutes None — до ручного закрытия."""
+    school_id: int
+    set_key: Optional[Annotated[str, Field(max_length=20)]] = None
+    class_ids: List[int] = Field(default_factory=list, max_length=60)
+    topic: MonitorText = ""
+    goals: List[MonitorText] = Field(default_factory=list, max_length=5)
+    minutes: Optional[int] = Field(default=None, ge=1, le=90)
+    use_code: bool = False
+
+
+class MonitorExtend(BaseModel):
+    minutes: int = Field(default=5, ge=1, le=30)
+
+
+class MonitorJoin(BaseModel):
+    last_name: Annotated[str, Field(max_length=60)]
+    first_name: Annotated[str, Field(max_length=60)]
+    class_id: int
+    code: Optional[Annotated[str, Field(max_length=8)]] = None
+
+
+class MonitorAnswer(BaseModel):
+    token: Annotated[str, Field(max_length=64)]
+    question_id: Annotated[str, Field(max_length=20)]
+    value: dict
+
+
+class MonitorToken(BaseModel):
+    token: Annotated[str, Field(max_length=64)]
