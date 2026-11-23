@@ -211,6 +211,7 @@ app.include_router(cards.router)
 app.include_router(users.router)
 app.include_router(excel.router)
 app.include_router(monitoring.router)
+app.include_router(monitoring.pages)
 app.include_router(m_public.router)
 app.include_router(telegram.router)
 

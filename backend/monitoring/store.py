@@ -275,13 +275,17 @@ def create_run(conn: sqlite3.Connection, fields: Dict[str, Any], classes: List[D
     return run_id
 
 
-def list_runs(conn: sqlite3.Connection, school_id: int, owner_id: Optional[int], limit: int = 30) -> List[Dict[str, Any]]:
+def list_runs(conn: sqlite3.Connection, school_id: int, owner_id: Optional[int], limit: int = 30,
+              class_id: Optional[int] = None) -> List[Dict[str, Any]]:
     """Запуски школы, новые сверху. owner_id=None — все (администратор)."""
     sql = "SELECT * FROM runs WHERE school_id = ?"
     args: List[Any] = [school_id]
     if owner_id is not None:
         sql += " AND owner_id = ?"
         args.append(owner_id)
+    if class_id is not None:
+        sql += " AND id IN (SELECT run_id FROM run_classes WHERE class_id = ?)"
+        args.append(class_id)
     rows = conn.execute(sql + " ORDER BY id DESC LIMIT ?", args + [limit]).fetchall()
     return [run_dict(r) for r in rows]
 

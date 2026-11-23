@@ -138,6 +138,43 @@
 .mon-texts p { font-size: 15px; line-height: 21px; overflow-wrap: anywhere; }
 .mon-texts small { font-size: 12px; }
 
+/* Инструменты итогов: вид, Excel, удаление */
+.mon-res-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.mon-res-tools .seg > button { display: inline-flex; align-items: center; gap: 6px; }
+.mon-history-head { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.mon-history-head .eyebrow { flex: 1; margin: 0 0 12px; }
+.mon-history-head select { height: 36px; margin-bottom: 12px; }
+.mon-more { margin: -20px 0 32px; }
+
+/* Таблица «участник × вопрос»: прокрутка вбок внутри карточки, а не страницы */
+.mon-table-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 14px; }
+.mon-table-tools select { height: 36px; width: auto; }
+.mon-table-wrap { overflow-x: auto; margin-bottom: 10px; }
+.mon-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 19px; }
+.mon-table th, .mon-table td { padding: 9px 12px; border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: top; }
+.mon-table tbody tr:last-child td { border-bottom: 0; }
+.mon-table thead th { position: sticky; top: 0; background: var(--surface-2); font-weight: 600; vertical-align: bottom; }
+.mon-table td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mon-table td.who { font-weight: 600; max-width: 260px; }
+.mon-table .q-col { min-width: 140px; max-width: 200px; }
+.mon-table .q-col small { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mon-table .num-col { text-align: right; }
+.mon-table td.ok { color: var(--success); font-weight: 600; }
+.mon-table td.bad { color: var(--danger); }
+.mon-table td.hidden-cell { color: var(--muted); font-style: italic; }
+.th-sort { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: var(--text);
+  font: 600 13px/18px var(--font-ui); cursor: pointer; white-space: nowrap; }
+.th-sort.on, .th-sort:hover { color: var(--accent-text); }
+.mon-done { display: inline-flex; align-items: center; gap: 4px; color: var(--success); font-weight: 600; white-space: nowrap; }
+.mon-note { font-size: 13px; margin-bottom: 32px; }
+
+/* Опрос у урока во вкладке «Уроки» */
+.lesson-run { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line-soft);
+  background: var(--accent-soft); color: var(--text); font-size: 14px; }
+.lesson-run > .ic { color: var(--accent-text); }
+.lesson-run > span { flex: 1; min-width: 0; }
+
 /* ── Экран для класса ─────────────────────────────────────── */
 
 body.live-open { overflow: hidden; }

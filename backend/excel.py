@@ -219,3 +219,54 @@ def build_export(rows: Iterable[Tuple[str, str, str, int, str, str, str]]) -> by
                 cell.data_type = "s"
     sheet.auto_filter.ref = f"A1:G{count + 1}"
     return _to_bytes(book)
+
+
+# ── Мониторинг: итоги опроса ─────────────────────────────────────────────────
+
+def _as_text(sheet) -> None:
+    """Ответы пишут дети: строка с «=» в начале — текст, а не формула."""
+    for cell in sheet[sheet.max_row]:
+        if isinstance(cell.value, str) and cell.value.startswith("="):
+            cell.data_type = "s"
+
+
+def build_monitoring_export(report: Dict[str, Any]) -> bytes:
+    """Два листа: «Сводка» (доли по вариантам, среднее, тексты) и «Ответы» (участник × вопрос)."""
+    book = Workbook()
+    summary = book.active
+    summary.title = "Сводка"
+    summary.append(("Вопрос", "Ответ", "Сколько", "Доля", "Среднее"))
+    _style_header(summary, (52, 40, 10, 10, 10))
+    for item in report["results"]:
+        title = f"{item['std'] + '. ' if item.get('std') else ''}{item['text']}"
+        n = item["answered"]
+        first = True
+        for option in item.get("options", []):
+            share = round(option["count"] / n, 3) if n else 0
+            summary.append((title if first else "", option["label"], option["count"], share,
+                            item.get("average") if first else None))
+            summary.cell(row=summary.max_row, column=4).number_format = "0%"
+            _as_text(summary)
+            first = False
+        for text in item.get("texts", []):
+            summary.append((title if first else "", text["text"], None, None, None))
+            _as_text(summary)
+            first = False
+        if first:
+            summary.append((title, "нет ответов", 0, None, None))
+
+    sheet = book.create_sheet("Ответы")
+    columns = report["columns"]
+    head = ["Фамилия и имя", "Класс", "Гость", "Закончил"] + (["Баллы"] if report.get("is_test") else [])
+    sheet.append(head + [f"{c['std'] + '. ' if c.get('std') else ''}{c['text']}" for c in columns])
+    _style_header(sheet, [30, 10, 8, 10] + ([8] if report.get("is_test") else []) + [28] * len(columns))
+    for row in report["rows"]:
+        values = [row["name"], row["class_name"], "да" if row["guest"] else "", "да" if row["finished"] else "нет"]
+        if report.get("is_test"):
+            values.append(row["score"])
+        values += [row["answers"].get(c["id"], {}).get("text", "") for c in columns]
+        sheet.append(values)
+        _as_text(sheet)
+    sheet.auto_filter.ref = f"A1:{sheet.cell(row=1, column=len(head) + len(columns)).column_letter}{sheet.max_row}"
+    return _to_bytes(book)
+

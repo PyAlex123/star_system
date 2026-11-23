@@ -16,6 +16,12 @@ let monView = "home";              // home | results
 let monResults = null;
 let monTicket = 0;
 let monSchool = null;              // школа, для которой открыты итоги
+let monTab = "summary";            // итоги: summary | table
+let monSort = { key: "name", dir: 1 };
+let monTableClass = "";            // фильтр таблицы по классу
+let monHistoryClass = "";          // фильтр «Прошедших опросов» по классу
+let monHistoryLimit = 30;
+let monLessonRuns = null;          // опросы для вкладки «Уроки»: «класс|дата» → [опрос]
 
 let launchSet = null;
 let launchClasses = new Set();
@@ -40,17 +46,21 @@ async function loadMonitor() {
   }
   const ticket = ++monTicket;
   const school = activeSchool;
-  if (monSchool !== school) { monView = "home"; monResults = null; monSchool = school; }
+  if (monSchool !== school) {
+    monView = "home"; monResults = null; monSchool = school; monHistoryClass = ""; monHistoryLimit = 30;
+  }
   try {
-    const [library, link, runs] = await Promise.all([
+    // «Идут сейчас» — всегда все опросы школы; фильтр по классу — только для истории
+    const [library, link, runs, filtered] = await Promise.all([
       monLibrary || api("/api/monitoring/library"),
       api(`/api/monitoring/link?school_id=${school}`),
-      api(`/api/monitoring/runs?school_id=${school}`),
+      api(`/api/monitoring/runs?school_id=${school}&limit=${monHistoryLimit}`),
+      monHistoryClass ? api(`/api/monitoring/runs?school_id=${school}&limit=${monHistoryLimit}&class_id=${monHistoryClass}`) : null,
     ]);
     if (ticket !== monTicket) return;                  // пока грузили, выбрали другую школу
     monLibrary = library;
     monLink = link;
-    monRuns = runs;
+    monRuns = { open: runs.open, recent: filtered ? filtered.recent : runs.recent };
     renderMonLink();
     if (monView === "home") renderMonHome();
   } catch (error) {
@@ -66,7 +76,9 @@ function renderMonLink() {
     <span class="caps">Ссылка для учеников</span>
     <span class="mon-url mono">${escapeHtml(monUrlText(monLink.url))}</span>
     <button class="icon-btn boxed" title="Скопировать ссылку" aria-label="Скопировать ссылку" onclick="copyMonLink()">${icon("copy", "ic ic-sm")}</button>
-    <button class="icon-btn boxed" title="QR-код ссылки" aria-label="QR-код ссылки" onclick="showMonQr()">${icon("qr", "ic ic-sm")}</button>` : "";
+    <button class="icon-btn boxed" title="QR-код ссылки" aria-label="QR-код ссылки" onclick="showMonQr()">${icon("qr", "ic ic-sm")}</button>
+    <button class="icon-btn boxed" title="Лист с QR для кабинета — А4" aria-label="Лист с QR для кабинета"
+      onclick="window.open('${BASE}/monitoring/poster/${activeSchool}', '_blank')">${icon("printer", "ic ic-sm")}</button>` : "";
 }
 
 async function copyMonLink() {
@@ -112,9 +124,29 @@ function renderMonHome() {
       <div class="mon-open">${open.map(monOpenCard).join("")}</div>` : ""}
     <h2 class="eyebrow">Стандартные наборы</h2>
     <div class="mon-sets">${monLibrary.sets.map(monSetCard).join("")}</div>
-    <h2 class="eyebrow">Прошедшие опросы</h2>
-    ${recent.length ? `<div class="card mon-recent">${recent.map(monRecentRow).join("")}</div>`
-      : `<p class="muted mon-none">Здесь появятся проведённые опросы — с итогами по каждому вопросу.</p>`}`;
+    <div class="mon-history-head">
+      <h2 class="eyebrow">Прошедшие опросы</h2>
+      ${sortedClasses(activeSchool).length > 1 ? `<select aria-label="Класс" onchange="setMonHistoryClass(this.value)">
+        <option value="">Все классы</option>${sortedClasses(activeSchool).map((c) =>
+          `<option value="${c.id}" ${String(c.id) === String(monHistoryClass) ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
+      </select>` : ""}
+    </div>
+    ${recent.length ? `<div class="card mon-recent">${recent.map(monRecentRow).join("")}</div>
+      ${recent.length + open.length >= monHistoryLimit && monHistoryLimit < 200
+        ? `<button class="btn btn-ghost mon-more" onclick="moreMonHistory()">Показать ещё</button>` : ""}`
+      : `<p class="muted mon-none">${monHistoryClass ? "У этого класса опросов пока не было."
+        : "Здесь появятся проведённые опросы — с итогами по каждому вопросу."}</p>`}`;
+}
+
+function setMonHistoryClass(value) {
+  monHistoryClass = value;
+  monHistoryLimit = 30;
+  loadMonitor();
+}
+
+function moreMonHistory() {
+  monHistoryLimit = Math.min(200, monHistoryLimit + 50);
+  loadMonitor();
 }
 
 function monSetCard(set) {
@@ -425,8 +457,9 @@ function liveToResults() {
 
 /* ── Итоги ────────────────────────────────────────────────── */
 
-async function openMonResults(id) {
+async function openMonResults(id, keepTab = false) {
   monView = "results";
+  if (!keepTab) { monTab = "summary"; monTableClass = ""; monSort = { key: "name", dir: 1 }; }
   $("monHost").innerHTML = `<div class="card empty">Считаем…</div>`;
   window.scrollTo(0, 0);
   try {
@@ -458,11 +491,141 @@ function renderMonResults() {
         <span><b class="num">${r.finished}</b> ${plural(r.finished, "ответил", "ответили", "ответили")}</span>
         ${r.joined > r.finished ? `<span class="muted">не закончили ${r.joined - r.finished}</span>` : ""}
       </div>
-      ${r.open ? `<button class="btn btn-ghost" onclick="openMonResults(${r.id})">${icon("refresh", "ic ic-sm")}Обновить</button>
+      ${r.open ? `<button class="btn btn-ghost" onclick="openMonResults(${r.id}, true)">${icon("refresh", "ic ic-sm")}Обновить</button>
         <button class="btn" onclick="openLive(${r.id})">${icon("maximize", "ic ic-sm")}Экран для класса</button>` : ""}
     </div>
+    <div class="mon-res-tools">
+      <div class="seg" role="tablist" aria-label="Вид итогов">
+        <button role="tab" aria-selected="${monTab === "summary"}" onclick="setMonTab('summary')">${icon("chart", "ic ic-sm")}По вопросам</button>
+        <button role="tab" aria-selected="${monTab === "table"}" onclick="setMonTab('table')">${icon("list", "ic ic-sm")}Ответы участников · ${r.rows.length}</button>
+      </div>
+      <span class="grow"></span>
+      <a class="btn btn-ghost" href="${BASE}/api/monitoring/runs/${r.id}/export.xlsx">${icon("export", "ic ic-sm")}Excel</a>
+      <button class="btn btn-danger-quiet" onclick="deleteRun(${r.id})">${icon("trash", "ic ic-sm")}Удалить</button>
+    </div>
     ${r.goals?.length ? `<p class="mon-goals"><span class="caps">Цели урока</span>${r.goals.map((g) => escapeHtml(g)).join(" · ")}</p>` : ""}
-    <div class="mon-res-grid">${r.results.map(monResultCard).join("")}</div>`;
+    ${monTab === "table" ? monTable(r) : `<div class="mon-res-grid">${r.results.map(monResultCard).join("")}</div>`}`;
+}
+
+function setMonTab(tab) {
+  monTab = tab;
+  renderMonResults();
+}
+
+function deleteRun(id) {
+  const r = monResults;
+  const n = r?.joined || 0;
+  confirmAction("Удалить опрос?", n
+    ? `Вместе с ним удалятся ответы ${n} ${plural(n, "участника", "участников", "участников")}. Вернуть их будет нельзя.`
+    : "В нём пока нет ответов.", async () => {
+    await api(`/api/monitoring/runs/${id}`, { method: "DELETE" });
+    monLessonRuns = null;
+    toast("Опрос удалён", "success");
+    backToMon();
+  }, n ? "Удалить опрос и ответы" : "Удалить");
+}
+
+/* ── Таблица «участник × вопрос» ──────────────────────────── */
+
+function monSortValue(row, key) {
+  if (key === "score") return row.score ?? -1;
+  if (key === "state") return row.finished ? 1 : 0;
+  if (key === "class") return row.class_name;
+  return row.name;
+}
+
+function sortMonTable(key) {
+  monSort = monSort.key === key ? { key, dir: -monSort.dir } : { key, dir: key === "score" ? -1 : 1 };
+  renderMonResults();
+}
+
+function setMonTableClass(value) {
+  monTableClass = value;
+  renderMonResults();
+}
+
+function monTable(r) {
+  const classes = [...new Set(r.rows.map((row) => row.class_name))].sort((a, b) => a.localeCompare(b, "ru"));
+  const rows = r.rows.filter((row) => !monTableClass || row.class_name === monTableClass).slice().sort((a, b) => {
+    const x = monSortValue(a, monSort.key), y = monSortValue(b, monSort.key);
+    return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "ru")) * monSort.dir;
+  });
+  const head = (key, label) => {
+    const on = monSort.key === key;
+    return `<button class="th-sort ${on ? "on" : ""}" onclick="sortMonTable('${key}')"
+      aria-label="Сортировать: ${label}">${label}${on ? icon(monSort.dir > 0 ? "chevron-down" : "chevron-right", "ic ic-xs") : ""}</button>`;
+  };
+  const hasMood = r.columns.some((c) => c.type === "mood");
+  if (!r.rows.length) return `<div class="card empty">${icon("users", "ic ic-xl")}<b>Пока никто не ответил</b></div>`;
+  return `
+    <div class="mon-table-tools">
+      ${classes.length > 1 ? `<select aria-label="Класс" onchange="setMonTableClass(this.value)">
+        <option value="">Все классы</option>${classes.map((c) =>
+          `<option ${c === monTableClass ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}</select>` : ""}
+      <span class="muted">${rows.length} ${plural(rows.length, "участник", "участника", "участников")}</span>
+    </div>
+    <div class="card mon-table-wrap">
+      <table class="mon-table">
+        <thead><tr>
+          <th>${head("name", "Ученик")}</th><th>${head("class", "Класс")}</th>
+          ${r.is_test ? `<th class="num-col">${head("score", "Баллы")}</th>` : ""}
+          <th>${head("state", "Статус")}</th>
+          ${r.columns.map((c, i) => `<th class="q-col" title="${escapeHtml(c.text)}">
+            <span class="mon-std">${escapeHtml(c.std || `В${i + 1}`)}</span><small>${escapeHtml(c.text)}</small></th>`).join("")}
+        </tr></thead>
+        <tbody>${rows.map((row) => `<tr>
+          <td class="who">${escapeHtml(row.name)}${row.guest ? ` <span class="tag" title="Нет в списке класса">гость</span>` : ""}</td>
+          <td>${escapeHtml(row.class_name)}</td>
+          ${r.is_test ? `<td class="num-col num">${row.score == null ? "—" : `${fmt(row.score)} из ${fmt(r.max_score)}`}</td>` : ""}
+          <td>${row.finished ? `<span class="mon-done">${icon("check", "ic ic-xs")}отправлено</span>` : `<span class="muted">не закончено</span>`}</td>
+          ${r.columns.map((c) => {
+            const cell = row.answers[c.id];
+            if (!cell) return `<td class="muted">—</td>`;
+            const mark = cell.correct === true ? "ok" : cell.correct === false ? "bad" : "";
+            return `<td class="${mark} ${cell.text === "скрыто" ? "hidden-cell" : ""}" title="${escapeHtml(cell.text)}">${escapeHtml(cell.text)}</td>`;
+          }).join("")}
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+    ${hasMood ? `<p class="muted mon-note">Настроение в таблице скрыто: по нему видна только общая сводка — так дети отвечают честнее.</p>` : ""}`;
+}
+
+/* ── Отметка опроса у урока (вкладка «Уроки») ─────────────── */
+
+async function loadLessonRuns() {
+  if (!activeSchool || !canEdit()) return;
+  const school = activeSchool;
+  try {
+    const data = await api(`/api/monitoring/runs?school_id=${school}&limit=200`);
+    if (school !== activeSchool) return;
+    monLessonRuns = {};
+    for (const run of [...data.open, ...data.recent]) {
+      for (const c of run.classes) {
+        const key = `${c.id}|${run.lesson_date}`;
+        (monLessonRuns[key] ||= []).push(run);
+      }
+    }
+    renderLessons();
+  } catch (_) {
+    monLessonRuns = {};
+  }
+}
+
+function lessonRuns(lesson) {
+  return monLessonRuns?.[`${lesson.class_id}|${lesson.date}`] || [];
+}
+
+function lessonRunsTag(lesson) {
+  const runs = lessonRuns(lesson);
+  return runs.length ? `<span class="tag tag-accent" title="В этот день был опрос">${icon("activity", "ic ic-xs")}опрос</span>` : "";
+}
+
+function lessonRunsRow(lesson) {
+  return lessonRuns(lesson).map((run) => `<div class="lesson-run">
+    ${icon("activity", "ic ic-sm")}
+    <span><b>${escapeHtml(run.title)}</b> <span class="muted">· ${run.finished} ${plural(run.finished, "ответил", "ответили", "ответили")}</span></span>
+    <button class="btn btn-ghost btn-sm" onclick="switchPage('monitor'); openMonResults(${run.id})">${icon("chart", "ic ic-sm")}Итоги</button>
+  </div>`).join("");
 }
 
 function monResultCard(item) {
