@@ -22,6 +22,8 @@ let monTableClass = "";            // фильтр таблицы по клас�
 let monHistoryClass = "";          // фильтр «Прошедших опросов» по классу
 let monHistoryLimit = 30;
 let monLessonRuns = null;          // опросы для вкладки «Уроки»: «класс|дата» → [опрос]
+let monSection = "sets";           // главный экран: sets — стандартные наборы, forms — мои формы
+let monForms = [];
 
 let launchSet = null;
 let launchClasses = new Set();
@@ -47,16 +49,19 @@ async function loadMonitor() {
   const ticket = ++monTicket;
   const school = activeSchool;
   if (monSchool !== school) {
+    if (typeof mb !== "undefined" && mb) { saveForm(); mb = null; }      // недописанная форма — сохранить
     monView = "home"; monResults = null; monSchool = school; monHistoryClass = ""; monHistoryLimit = 30;
   }
   try {
     // «Идут сейчас» — всегда все опросы школы; фильтр по классу — только для истории
-    const [library, link, runs, filtered] = await Promise.all([
+    const [library, link, runs, filtered, forms] = await Promise.all([
       monLibrary || api("/api/monitoring/library"),
       api(`/api/monitoring/link?school_id=${school}`),
       api(`/api/monitoring/runs?school_id=${school}&limit=${monHistoryLimit}`),
       monHistoryClass ? api(`/api/monitoring/runs?school_id=${school}&limit=${monHistoryLimit}&class_id=${monHistoryClass}`) : null,
+      api(`/api/monitoring/forms?school_id=${school}`),
     ]);
+    monForms = forms.forms;
     if (ticket !== monTicket) return;                  // пока грузили, выбрали другую школу
     monLibrary = library;
     monLink = link;
@@ -122,8 +127,19 @@ function renderMonHome() {
   $("monHost").innerHTML = `
     ${open.length ? `<h2 class="eyebrow">Идут сейчас</h2>
       <div class="mon-open">${open.map(monOpenCard).join("")}</div>` : ""}
-    <h2 class="eyebrow">Стандартные наборы</h2>
-    <div class="mon-sets">${monLibrary.sets.map(monSetCard).join("")}</div>
+    <div class="mon-tabs">
+      <div class="seg" role="tablist" aria-label="Наборы и формы">
+        <button role="tab" aria-selected="${monSection === "sets"}" onclick="setMonSection('sets')">Стандартные наборы</button>
+        <button role="tab" aria-selected="${monSection === "forms"}" onclick="setMonSection('forms')">Мои формы · ${monForms.length}</button>
+      </div>
+      <span class="grow"></span>
+      ${monSection === "forms" ? `<button class="btn" onclick="createForm()">${icon("plus", "ic ic-sm")}Создать форму</button>` : ""}
+    </div>
+    ${monSection === "sets" ? `<div class="mon-sets">${monLibrary.sets.map(monSetCard).join("")}</div>`
+      : monForms.length ? `<div class="mon-sets">${monForms.map(monFormCard).join("")}</div>`
+      : `<div class="card empty mon-forms-empty">${icon("pencil", "ic ic-xl")}<b>Своих форм пока нет</b>
+          Создайте опрос или тест с правильными ответами — или скопируйте готовый набор и допишите свои вопросы.
+          <button class="btn" onclick="createForm()">${icon("plus", "ic ic-sm")}Создать форму</button></div>`}
     <div class="mon-history-head">
       <h2 class="eyebrow">Прошедшие опросы</h2>
       ${sortedClasses(activeSchool).length > 1 ? `<select aria-label="Класс" onchange="setMonHistoryClass(this.value)">
@@ -160,10 +176,81 @@ function monSetCard(set) {
       return `<li><span class="mon-std">${escapeHtml(q.std)}</span><span>${escapeHtml(monShortText(q.text))}</span></li>`;
     }).join("")}</ol>
     <div class="mon-set-foot">
-      <span class="muted">${set.uses_goals ? "нужны цели урока" : `${set.minutes} мин`}</span>
+      <button class="btn btn-link btn-sm" onclick="copySetToForms('${set.key}')" title="Скопировать в «Мои формы», чтобы дописать свои вопросы">
+        ${icon("copy", "ic ic-sm")}В мои формы</button>
+      <span class="grow"></span>
       <button class="btn" onclick="openLaunch('${set.key}')">${icon("play", "ic ic-sm")}Запустить</button>
     </div>
   </article>`;
+}
+
+function setMonSection(section) {
+  monSection = section;
+  renderMonHome();
+}
+
+function monFormCard(form) {
+  const when = new Date(form.updated_at * 1000).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  return `<article class="card mon-set mon-form">
+    <div class="mon-set-head"><h3>${escapeHtml(form.title)}</h3>
+      <span class="tag ${form.kind === "test" ? "tag-star" : ""}">${form.kind === "test" ? "тест" : "опрос"}</span></div>
+    <p class="muted">${form.questions} ${plural(form.questions, "вопрос", "вопроса", "вопросов")} · изменена ${escapeHtml(when)}</p>
+    <div class="mon-set-foot">
+      <button class="btn" onclick="openLaunchForm(${form.id})" ${form.questions ? "" : "disabled title='Сначала добавьте вопросы'"}>
+        ${icon("play", "ic ic-sm")}Запустить</button>
+      <span class="grow"></span>
+      <button class="icon-btn boxed" title="Изменить" aria-label="Изменить форму" onclick="openBuilder(${form.id})">${icon("pencil", "ic ic-sm")}</button>
+      <div class="menu-wrap" id="formMenu${form.id}">
+        <button class="icon-btn boxed" title="Ещё" aria-label="Ещё действия" onclick="toggleMenu('formMenu${form.id}')">${icon("more", "ic ic-sm")}</button>
+        <div class="menu right" role="menu">
+          <button role="menuitem" onclick="copyForm(${form.id})">${icon("copy", "ic ic-sm")}Копировать</button>
+          <button role="menuitem" onclick="formResults(${form.id})">${icon("chart", "ic ic-sm")}Результаты</button>
+          <div class="menu-sep"></div>
+          <button role="menuitem" class="danger" onclick="removeForm(${form.id})">${icon("trash", "ic ic-sm")}Удалить…</button>
+        </div>
+      </div>
+    </div>
+  </article>`;
+}
+
+async function createForm(body = {}) {
+  try {
+    const res = await api("/api/monitoring/forms", { method: "POST", json: { school_id: activeSchool, ...body } });
+    monSection = "forms";
+    openBuilder(res.form.id, res.form);
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+function copySetToForms(key) { createForm({ from_set: key }); }
+function copyForm(id) { closeMenus(); createForm({ from_form: id }); }
+
+function formResults(id) {
+  closeMenus();
+  const run = [...monRuns.open, ...monRuns.recent].find((r) => r.form_id === id);
+  if (!run) return toast("По этой форме ещё не проводили опросов", "error");
+  openMonResults(run.id);
+}
+
+function removeForm(id) {
+  closeMenus();
+  const form = monForms.find((f) => f.id === id);
+  confirmAction("Удалить форму?", `${escapeHtml(form?.title || "")}: вопросы формы удалятся. Проведённые по ней опросы и ответы останутся.`,
+    async () => {
+      await api(`/api/monitoring/forms/${id}`, { method: "DELETE" });
+      toast("Форма удалена", "success");
+      loadMonitor();
+    }, "Удалить форму");
+}
+
+function openLaunchForm(id) {
+  const form = monForms.find((f) => f.id === id);
+  if (!form) return;
+  openLaunch(null, {
+    key: null, formId: form.id, title: form.title, minutes: 10, uses_topic: form.uses_topic, uses_goals: form.uses_goals,
+    about: `${form.kind === "test" ? "Тест" : "Опрос"}: ${form.questions} ${plural(form.questions, "вопрос", "вопроса", "вопросов")}`,
+  });
 }
 
 function monOpenCard(run) {
@@ -213,8 +300,8 @@ function defaultLaunchClasses() {
   return [...new Set(near.length ? near : [activeClass])].filter((id) => id && !busy.has(id));
 }
 
-function openLaunch(key) {
-  launchSet = monLibrary.sets.find((s) => s.key === key);
+function openLaunch(key, source = null) {
+  launchSet = source || monLibrary.sets.find((s) => s.key === key);
   if (!launchSet) return;
   if (!sortedClasses(activeSchool).length) return toast("Сначала добавьте классы", "error");
   launchMinutes = launchSet.minutes;
@@ -274,7 +361,8 @@ async function launchRun() {
     const res = await api("/api/monitoring/runs", {
       method: "POST",
       json: {
-        school_id: activeSchool, set_key: launchSet.key, class_ids: [...launchClasses],
+        school_id: activeSchool, ...(launchSet.formId ? { form_id: launchSet.formId } : { set_key: launchSet.key }),
+        class_ids: [...launchClasses],
         topic: launchSet.uses_topic ? $("launchTopic").value.trim() : "", goals: goals.slice(0, 5),
         minutes: launchMinutes, use_code: $("launchCode").checked,
       },

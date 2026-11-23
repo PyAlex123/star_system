@@ -43,7 +43,7 @@ def _brief(run: Dict[str, Any], classes: List[Dict[str, Any]], counts: Dict[str,
     t = store.now()
     ended = store.closed_at(run)
     return {
-        "id": run["id"], "title": run["title"], "set_key": run["set_key"], "kind": run["kind"],
+        "id": run["id"], "title": run["title"], "set_key": run["set_key"], "form_id": run["form_id"], "kind": run["kind"],
         "classes": classes, "all_classes": run["all_classes"], "topic": run["topic"], "goals": run["goals"],
         "code": run["code"], "lesson_date": run["lesson_date"], "owner_name": run["owner_name"],
         "questions": len(run["questions"]), "open": ended is None,
@@ -87,6 +87,84 @@ def link_qr(school_id: int, size: int = 10, user: User = Depends(require_teacher
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
+# ── Свои формы ────────────────────────────────────────────────────────────────
+
+def _form_or_404(conn, form_id: int, user: User) -> Dict[str, Any]:
+    form = store.get_form(conn, form_id)
+    if not form or not _visible(user, form, db.load_db()):
+        raise not_found("Форма не найдена")
+    return form
+
+
+def _form_brief(form: Dict[str, Any]) -> Dict[str, Any]:
+    qs = form["questions"]
+    return {"id": form["id"], "title": form["title"], "kind": form["kind"], "questions": len(qs),
+            "updated_at": form["updated_at"], "uses_topic": library.uses(qs, library.TOPIC),
+            "uses_goals": library.uses(qs, library.GOAL), "school_id": form["school_id"]}
+
+
+@router.get("/forms")
+def list_forms(school_id: int, user: User = Depends(require_teacher)):
+    """«Мои формы» школы; администратору — формы всех учителей школы."""
+    school_or_404(db.load_db(), school_id, user)
+    with store.read() as conn:
+        forms = store.list_forms(conn, school_id, None if db.is_superadmin(user) else user["id"])
+    return {"forms": [_form_brief(f) for f in forms]}
+
+
+@router.post("/forms")
+def create_form(item: schemas.MonitorFormCreate, user: User = Depends(require_teacher)):
+    """Новая форма: пустая, копия готового набора или копия своей формы."""
+    school_or_404(db.load_db(), item.school_id, user)
+    with store.write() as conn:
+        if item.from_form is not None:
+            source = _form_or_404(conn, item.from_form, user)
+            raw = {"title": item.title or f"{source['title']} (копия)", "kind": source["kind"],
+                   "settings": source["settings"], "questions": source["questions"]}
+        elif item.from_set:
+            found = library.SETS_BY_KEY.get(item.from_set)
+            if not found:
+                raise not_found("Набор не найден")
+            raw = {"title": item.title or found["title"], "kind": "survey",
+                   "questions": [dict(q, std=q["std"]) for q in library.set_questions(found["key"])]}
+        else:
+            raw = {"title": item.title or "Новая форма", "questions": []}
+        form = logic.clean_form(raw)
+        form_id = store.save_form(conn, form, owner_id=user["id"], school_id=item.school_id)
+        saved = store.get_form(conn, form_id)
+    return {"ok": True, "form": saved}
+
+
+@router.get("/forms/{form_id}")
+def get_form(form_id: int, user: User = Depends(require_teacher)):
+    with store.read() as conn:
+        return _form_or_404(conn, form_id, user)
+
+
+@router.put("/forms/{form_id}")
+def save_form(form_id: int, item: schemas.MonitorFormSave, user: User = Depends(require_teacher)):
+    """Сохранить форму из конструктора (автосохранение). Прошлые запуски не меняются:
+    у них свой снимок вопросов."""
+    try:
+        form = logic.clean_form(item.model_dump())
+    except ValueError as error:
+        raise bad_request(str(error))
+    with store.write() as conn:
+        _form_or_404(conn, form_id, user)
+        store.save_form(conn, form, form_id=form_id)
+        saved = store.get_form(conn, form_id)
+    return {"ok": True, "form": saved}
+
+
+@router.delete("/forms/{form_id}")
+def delete_form(form_id: int, user: User = Depends(require_teacher)):
+    """Удалить форму. Проведённые по ней опросы и ответы остаются."""
+    with store.write() as conn:
+        _form_or_404(conn, form_id, user)
+        conn.execute("DELETE FROM forms WHERE id = ?", (form_id,))
+    return {"ok": True}
+
+
 # ── Запуски ───────────────────────────────────────────────────────────────────
 
 @router.get("/runs")
@@ -112,12 +190,21 @@ def create_run(item: schemas.MonitorRunCreate, user: User = Depends(require_teac
         raise not_found("Класс не найден")
     chosen = [school_classes[cid] for cid in dict.fromkeys(item.class_ids)] or list(school_classes.values())
 
-    source = library.SETS_BY_KEY.get(item.set_key or "")
-    if not source:
-        raise bad_request("Выберите набор вопросов")
     goals = logic.clean_goals(item.goals)
+    if item.form_id is not None:
+        with store.read() as conn:
+            form = _form_or_404(conn, item.form_id, user)
+        source = {"key": None, "title": form["title"], "kind": form["kind"], "settings": form["settings"],
+                  "questions": form["questions"], "form_id": form["id"]}
+    elif item.set_key in library.SETS_BY_KEY:
+        found = library.SETS_BY_KEY[item.set_key]
+        source = {"key": found["key"], "title": found["title"], "kind": "survey",
+                  "settings": {"after": "none", "show_names": False, "shuffle": False},
+                  "questions": library.set_questions(found["key"]), "form_id": None}
+    else:
+        raise bad_request("Выберите набор вопросов")
     try:
-        questions = logic.prepare_questions(library.set_questions(source["key"]), item.topic, goals)
+        questions = logic.prepare_questions(source["questions"], item.topic, goals)
     except ValueError as error:
         raise bad_request(str(error))
 
@@ -125,8 +212,8 @@ def create_run(item: schemas.MonitorRunCreate, user: User = Depends(require_teac
     fields = {
         "school_id": school["id"], "school_name": school["name"],
         "owner_id": user["id"], "owner_name": user.get("name") or user.get("login", ""),
-        "form_id": None, "set_key": source["key"], "title": source["title"], "kind": "survey",
-        "settings": {"after": "none", "show_names": False, "shuffle": False},
+        "form_id": source["form_id"], "set_key": source["key"], "title": source["title"], "kind": source["kind"],
+        "settings": source["settings"],
         "questions": questions, "topic": " ".join(item.topic.split()), "goals": goals,
         "all_classes": int(not item.class_ids), "lesson_date": db.today(),
         "code": f"{secrets.randbelow(10000):04d}" if item.use_code else None,

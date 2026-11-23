@@ -6,7 +6,9 @@ const [, , common, ...rest] = process.argv;
 const split = rest.indexOf("--");
 const pages = rest.slice(0, split), names = rest.slice(split + 1);
 const stub = new Proxy(function () { return stub; }, { get: () => stub, apply: () => stub });
-const ctx = vm.createContext({ window: { APP_BASE: "" }, document: stub, location: {}, sessionStorage: stub,
+// window: APP_BASE — пустой подпуть, всё остальное (addEventListener и т. п.) — заглушка
+const win = new Proxy({ APP_BASE: "" }, { get: (target, key) => (key in target ? target[key] : stub) });
+const ctx = vm.createContext({ window: win, document: stub, location: {}, sessionStorage: stub,
   setInterval: () => 0, setTimeout: () => 0, URLSearchParams, console, fetch: () => Promise.resolve(stub) });
 vm.runInContext(fs.readFileSync(common, "utf8"), ctx);
 pages.slice(0, -1).forEach((page) => vm.runInContext(fs.readFileSync(page, "utf8"), ctx));
