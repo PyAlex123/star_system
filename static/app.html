@@ -94,15 +94,21 @@
 
     <section class="view" id="view-rating">
       <div class="pad col-gap16">
+        <div class="seg rating-scope" role="tablist" aria-label="Рейтинг" id="ratingScope" hidden></div>
         <h2 class="eyebrow" id="ratingTitle">Топ-5 класса</h2>
         <div class="podium" id="podium"></div>
         <div class="rank-list" id="rankList"></div>
         <div class="motivation" id="motivation" hidden></div>
+        <p class="hint rating-note" id="ratingNote" hidden>Считаются все заработанные звёзды: забрал приз — место в рейтинге не меняется.</p>
       </div>
     </section>
 
     <section class="view ruled-bg" id="view-history">
       <div class="pad col-gap10">
+        <div class="act-block" id="activityBlock" hidden>
+          <h2 class="eyebrow">Моя активность</h2>
+          <div class="card act-card" id="activityCard"></div>
+        </div>
         <h2 class="eyebrow">История звёзд</h2>
         <div class="month only-clear-flex" id="monthSummary" hidden></div>
         <div id="timeline"></div>
@@ -124,6 +130,11 @@
               <svg class="ic"><use href="#i-send"></use></svg>Фото из Telegram
             </button>
           </div>
+        </div>
+
+        <div class="sub-block" id="lessonsBlock" hidden>
+          <h2 class="eyebrow">Мои занятия</h2>
+          <div class="card my-lessons" id="myLessons"></div>
         </div>
 
         <div class="only-clear sub-block">

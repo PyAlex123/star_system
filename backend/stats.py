@@ -187,24 +187,29 @@ def class_schedule(database: Dict[str, Any], class_id: Optional[int]) -> List[Di
     return sorted(items, key=lambda e: (e["weekday"], e["start"]))
 
 
-def planned_lessons(database: Dict[str, Any], class_ids: Iterable[int], start: Optional[date], end: date) -> int:
-    """Сколько занятий было по расписанию с start по end включительно.
-    Занятие считается с того дня, как его внесли в расписание."""
+def schedule_plan(database: Dict[str, Any], class_ids: Iterable[int], start: Optional[date], end: date) -> Dict[str, int]:
+    """Сколько занятий было по расписанию с start по end включительно (planned) и на скольких
+    из них прошёл урок со звёздами (held). Занятие считается с того дня, как его внесли
+    в расписание, поэтому held никогда не больше planned."""
     ids = set(class_ids)
-    total = 0
+    held_days = {(l.get("class_id"), str(l.get("date", ""))[:10]) for l in database.get("lessons", [])
+                 if l.get("class_id") in ids}
+    planned = held = 0
     for entry in database.get("schedule", []):
         if entry.get("class_id") not in ids:
             continue
         created = parse_day(entry.get("created_at")) or end
         first = max(created, start) if start else created
-        if first > end:
-            continue
-        # дней с нужным днём недели в отрезке [first, end]
-        offset = (entry["weekday"] - 1 - first.weekday()) % 7
-        first_hit = first + timedelta(days=offset)
-        if first_hit <= end:
-            total += (end - first_hit).days // 7 + 1
-    return total
+        day = first + timedelta(days=(entry["weekday"] - 1 - first.weekday()) % 7)
+        while day <= end:
+            planned += 1
+            held += (entry["class_id"], day.isoformat()) in held_days
+            day += timedelta(weeks=1)
+    return {"planned": planned, "held": held}
+
+
+def planned_lessons(database: Dict[str, Any], class_ids: Iterable[int], start: Optional[date], end: date) -> int:
+    return schedule_plan(database, class_ids, start, end)["planned"]
 
 
 # ── Статистика школы ──────────────────────────────────────────────────────────
@@ -270,7 +275,7 @@ def school_stats(database: Dict[str, Any], school_id: int, days: Optional[int]) 
             "students": len(kids), "active": per_class[c["id"]]["active"], "stars": stars,
             "avg": round(stars / len(kids), 1) if kids else 0,
             "lessons": lessons_per_class.get(c["id"], 0),
-            "planned": planned_lessons(database, [c["id"]], start, now),
+            **schedule_plan(database, [c["id"]], start, now),
         })
 
     class_names = {c["id"]: c["name"] for c in classes}
@@ -302,8 +307,8 @@ def school_stats(database: Dict[str, Any], school_id: int, days: Optional[int]) 
         "to": now.isoformat(),
         "totals": {
             "students": len(students), "active": len(active_ids), "awarded": awarded, "spent": spent,
-            "prizes": prizes, "lessons": len(lessons),
-            "planned": planned_lessons(database, class_ids, start, now), "seen": seen,
+            "prizes": prizes, "lessons": len(lessons), "seen": seen,
+            **schedule_plan(database, class_ids, start, now),
         },
         "weeks": weeks,
         "classes": class_rows,

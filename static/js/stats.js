@@ -45,7 +45,6 @@ function renderStats() {
   const t = d.totals;
   const school = schoolById(d.school_id);
   $("statsSub").textContent = `${school?.name || ""} · ${periodWord()}`;
-  const lessonsText = t.planned ? `${t.lessons} из ${t.planned}` : String(t.lessons);
   const share = t.students ? Math.round((t.active / t.students) * 100) : 0;
 
   $("statsHost").innerHTML = `
@@ -53,7 +52,8 @@ function renderStats() {
       <div class="tile"><span>Учеников</span><b>${fmt(t.students)}</b><small>получали звёзды: ${fmt(t.active)} (${share}%)</small></div>
       <div class="tile"><span>Начислено звёзд</span><b>${fmt(t.awarded)} ★</b><small>${periodWord()}</small></div>
       <div class="tile"><span>Потрачено на призы</span><b>${fmt(t.spent)} ★</b><small>выдано призов: ${fmt(t.prizes)}</small></div>
-      <div class="tile"><span>Уроков со звёздами</span><b>${lessonsText}</b><small>${t.planned ? "проведено из запланированных" : "по расписанию не заполнено"}</small></div>
+      <div class="tile"><span>Уроков со звёздами</span><b>${fmt(t.lessons)}</b><small>${t.planned
+        ? `по расписанию: ${t.held} из ${t.planned}` : "расписание не заполнено"}</small></div>
       <div class="tile"><span>Заходили в кабинет</span><b>${fmt(t.seen)}</b><small>учеников ${periodWord()}</small></div>
     </div>
 
@@ -107,15 +107,17 @@ function classTable(classes) {
     const head = c.parallel !== lastParallel
       ? `<div class="st-group">${c.parallel ? `${c.parallel} параллель` : "Без параллели"}</div>` : "";
     lastParallel = c.parallel;
-    const lessons = c.planned ? `${c.lessons}<small> из ${c.planned}</small>` : String(c.lessons);
+    const lessons = String(c.lessons);
+    const plan = c.planned ? `<small title="Проведено по расписанию">${c.held} из ${c.planned}</small>` : `<small>—</small>`;
     return `${head}<div class="st-row">
       <button class="link" onclick="openStatsClass(${c.id})">${escapeHtml(c.name)}</button>
       <span class="r num">${c.students}</span><span class="r num">${fmt(c.stars)}</span>
-      <span class="r num">${c.avg}</span><span class="r num">${lessons}</span></div>`;
+      <span class="r num">${c.avg}</span><span class="r num">${lessons}</span><span class="r num">${plan}</span></div>`;
   }).join("");
   return `<div class="st-table cls">
     <div class="st-row st-headrow"><span>Класс</span><span class="r">Учеников</span><span class="r">Звёзд</span>
-      <span class="r" title="Звёзд в среднем на ученика">В среднем</span><span class="r">Уроков</span></div>${rows}</div>`;
+      <span class="r" title="Звёзд в среднем на ученика">В среднем</span><span class="r">Уроков</span>
+      <span class="r" title="Проведено уроков из запланированных по расписанию">План</span></div>${rows}</div>`;
 }
 
 function idleList(students) {

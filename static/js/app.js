@@ -226,9 +226,14 @@ function constellation(price, frac, { small = false, draw = false, glowLast = fa
 
 /* ── Шапка (S1) ───────────────────────────────────────────── */
 
+/** Заработано за всё время: по этому числу считается место в рейтинге. */
+function earnedTotal() {
+  return data.activity?.earned ?? data.student.total_stars;
+}
+
 function placeText() {
   const b = data.leaderboard;
-  return data.student.total_stars > 0 && b.my_place ? `${b.my_place}-е место из ${b.class_size}` : "";
+  return earnedTotal() > 0 && b?.my_place ? `${b.my_place}-е место из ${b.class_size}` : "";
 }
 
 function goalBlock() {
@@ -436,15 +441,49 @@ function renderPrizes() {
 
 /* ── Рейтинг (S3) ─────────────────────────────────────────── */
 
+// Уровни рейтинга: подпись вкладки, «Топ-5 …», «… в классе»
+const RATING_SCOPES = {
+  class: ["Класс", "класса", "в классе"],
+  parallel: ["Параллель", "параллели", "в параллели"],
+  school: ["Школа", "школы", "в школе"],
+};
+let ratingScope = "class";
+
+function ratingBoards() {
+  return data.leaderboards || { class: data.leaderboard };
+}
+
+function scoreOf(entry) {
+  return entry.score ?? entry.total_stars;
+}
+
+function setRatingScope(scope) {
+  ratingScope = scope;
+  haptic();
+  renderRating();
+}
+
+function renderRatingScope() {
+  const boards = ratingBoards();
+  const keys = Object.keys(RATING_SCOPES).filter((k) => boards[k]);
+  if (!keys.includes(ratingScope)) ratingScope = "class";
+  const seg = $("ratingScope");
+  seg.hidden = keys.length < 2;
+  seg.style.setProperty("--n", keys.length);
+  seg.innerHTML = keys.map((k) =>
+    `<button role="tab" aria-selected="${k === ratingScope}" onclick="setRatingScope('${k}')">${RATING_SCOPES[k][0]}</button>`).join("");
+}
+
 function podiumHtml(entry, place) {
   const sizes = { 1: "p1", 2: "p2", 3: "p3" };
   if (!entry) return `<div class="pod ${sizes[place]} empty"><div class="pod-stand"></div></div>`;
+  const cls = ratingScope !== "class" && !entry.is_me && entry.class_name ? `<span class="pod-cls">${escapeHtml(entry.class_name)}</span>` : "";
   return `
     <div class="pod ${sizes[place]} ${entry.is_me ? "me" : ""}">
       <span class="pod-av"><img src="${escapeHtml(assetUrl(entry.avatar_url))}" alt=""><span class="pod-num">${place}</span></span>
-      <span class="pod-name">${escapeHtml(entry.is_me ? "Это ты" : surname(entry.name))}</span>
+      <span class="pod-name">${escapeHtml(entry.is_me ? "Это ты" : surname(entry.name))}</span>${cls}
       <div class="pod-stand">
-        <span class="pod-score">${fmt(entry.total_stars)}${starIc("ic")}</span>
+        <span class="pod-score">${fmt(scoreOf(entry))}${starIc("ic")}</span>
         <span class="pod-label">${place}-е место</span>
       </div>
     </div>`;
@@ -457,23 +496,28 @@ function rankRow(entry, num) {
       <img src="${escapeHtml(assetUrl(entry.avatar_url))}" alt="">
       <span class="rname">${entry.is_me
         ? `<span class="rn">${escapeHtml(entry.name)}</span><span class="this-is-you">это ты</span>`
-        : `<span class="rn">${escapeHtml(entry.name)}</span>`}</span>
-      <span class="rscore">${fmt(entry.total_stars)}${starIc("ic ic-sm")}</span>
+        : `<span class="rn">${escapeHtml(entry.name)}</span>${ratingScope !== "class" && entry.class_name
+            ? `<span class="rcls">${escapeHtml(entry.class_name)}</span>` : ""}`}</span>
+      <span class="rscore">${fmt(scoreOf(entry))}${starIc("ic ic-sm")}</span>
     </div>`;
 }
 
 function renderRating() {
-  const board = data.leaderboard;
+  renderRatingScope();
+  const board = ratingBoards()[ratingScope] || data.leaderboard;
+  const [, of, inside] = RATING_SCOPES[ratingScope];
   const top = board.top;
-  const bal = data.student.total_stars;
-  $("ratingTitle").textContent = board.class_size ? `Топ-5 класса · в классе ${board.class_size}` : "Топ-5 класса";
+  const bal = earnedTotal();
+  $("ratingTitle").textContent = board.class_size ? `Топ-5 ${of} · ${inside} ${board.class_size}` : `Топ-5 ${of}`;
 
   if (!top.length) {
     $("podium").innerHTML = "";
-    $("rankList").innerHTML = `<div class="empty-card">${icon("trophy", "ic ic-xl")}<b>Рейтинг пока пуст</b>Он появится, когда в классе начислят первые звёзды.</div>`;
+    $("rankList").innerHTML = `<div class="empty-card">${icon("trophy", "ic ic-xl")}<b>Рейтинг пока пуст</b>Он появится, когда ${inside} начислят первые звёзды.</div>`;
     $("motivation").hidden = true;
+    $("ratingNote").hidden = true;
     return;
   }
+  $("ratingNote").hidden = false;
   $("podium").innerHTML = podiumHtml(top[1], 2) + podiumHtml(top[0], 1) + podiumHtml(top[2], 3);
 
   let rows = top.slice(3, 5).map((e, i) => rankRow(e, i + 4)).join("");
@@ -488,10 +532,10 @@ function renderRating() {
   const mot = $("motivation");
   let text = "";
   if (data.student.rating_hidden) text = "";
-  else if (bal === 0) text = "Заработай первую звезду на уроке — и появишься в рейтинге класса.";
-  else if (board.my_place === 1) text = `Ты на <b>1-м месте</b> в классе. Так держать!`;
+  else if (bal === 0) text = `Заработай первую звезду на уроке — и появишься в рейтинге ${of}.`;
+  else if (board.my_place === 1) text = `Ты на <b>1-м месте</b> ${inside}. Так держать!`;
   else if (board.gap_to_next && board.my_place) {
-    text = `Ещё <b>${board.gap_to_next}&nbsp;${starWord(board.gap_to_next)}</b> — и ты поднимешься на <b>${board.my_place - 1}-е место</b> в классе!`;
+    text = `Ещё <b>${board.gap_to_next}&nbsp;${starWord(board.gap_to_next)}</b> — и ты поднимешься на <b>${board.my_place - 1}-е место</b> ${inside}!`;
   }
   mot.hidden = !text;
   mot.innerHTML = `${icon("target", "ic ic-lg")}<span>${text}</span>`;
@@ -506,7 +550,90 @@ function entryTitle(item) {
   return { title: item.reason || "Списание", sub: "Списал учитель" };
 }
 
+/* ── Занятия и активность ─────────────────────────────────── */
+
+const WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const WEEKDAY_ON = ["в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу", "в воскресенье"];
+
+function clockNow() {
+  const now = new Date();
+  return {
+    weekday: ((now.getDay() + 6) % 7) + 1,
+    hm: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+  };
+}
+
+/** Ближайшее занятие по расписанию класса: {entry, offset} (0 — сегодня) или null. */
+function nextLesson() {
+  const list = data.schedule || [];
+  if (!list.length) return null;
+  const { weekday, hm } = clockNow();
+  for (let offset = 0; offset <= 7; offset++) {
+    const day = ((weekday - 1 + offset) % 7) + 1;
+    const entry = list.filter((e) => e.weekday === day && (offset > 0 || e.end > hm))
+      .sort((a, b) => a.start.localeCompare(b.start))[0];
+    if (entry) return { entry, offset, now: offset === 0 && entry.start <= hm };
+  }
+  return null;
+}
+
+function nextLessonText() {
+  const next = nextLesson();
+  if (!next) return "";
+  const { entry, offset } = next;
+  const when = next.now ? `идёт сейчас, до ${escapeHtml(entry.end)}`
+    : offset === 0 ? `сегодня в ${escapeHtml(entry.start)}`
+    : offset === 1 ? `завтра в ${escapeHtml(entry.start)}`
+    : `${WEEKDAY_ON[entry.weekday - 1]} в ${escapeHtml(entry.start)}`;
+  const meta = [entry.room ? `каб.&nbsp;${escapeHtml(entry.room)}` : "", escapeHtml(entry.teacher || "")].filter(Boolean).join(" · ");
+  return `<div class="act-next">${icon("clock", "ic")}<span><span>${next.now ? "Занятие" : "Следующее занятие"} <b>${when}</b></span>${
+    meta ? `<small>${meta}</small>` : ""}</span></div>`;
+}
+
+function actTile(label, value, note = "") {
+  return `<div class="act-tile"><span>${label}</span><b>${value}</b>${note ? `<small>${note}</small>` : ""}</div>`;
+}
+
+function renderActivity() {
+  const a = data.activity;
+  const next = nextLessonText();
+  const any = a && (a.earned > 0 || (data.history || []).length);
+  $("activityBlock").hidden = !any && !next;
+  if ($("activityBlock").hidden) return;
+  let body = next;
+  if (any) {
+    const third = a.streak > 0
+      ? actTile("Уроков подряд", `${icon("flame", "ic ic-sm act-flame")}${a.streak}`, "со звёздами")
+      : actTile("Заработано", `${fmt(a.earned)}${starIc("ic ic-sm")}`, "за всё время");
+    body += `<div class="act-tiles">
+        ${actTile("За неделю", `${a.week ? "+" : ""}${fmt(a.week)}${starIc("ic ic-sm")}`)}
+        ${actTile("За 30 дней", `${a.month ? "+" : ""}${fmt(a.month)}${starIc("ic ic-sm")}`)}
+        ${third}
+      </div>`;
+    if (a.weeks?.some((w) => w.stars > 0)) {
+      body += `<div class="act-chart"><span class="act-caps">Звёзды по неделям</span>${weekBars(a.weeks, { step: 2 })}</div>`;
+    }
+  }
+  $("activityCard").innerHTML = body;
+}
+
+function renderMyLessons() {
+  const list = (data.schedule || []).slice().sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
+  $("lessonsBlock").hidden = !list.length;
+  if (!list.length) return;
+  const { weekday } = clockNow();
+  $("myLessons").innerHTML = list.map((e) => {
+    const meta = [e.room ? `каб.&nbsp;${escapeHtml(e.room)}` : "", escapeHtml(e.teacher || "")].filter(Boolean).join(" · ");
+    return `<div class="ml-row ${e.weekday === weekday ? "today" : ""}">
+      <b class="ml-day">${WEEKDAY_SHORT[e.weekday - 1]}</b>
+      <span class="ml-mid"><span class="ml-time">${escapeHtml(e.start)}–${escapeHtml(e.end)}</span>${meta ? `<span class="ml-meta">${meta}</span>` : ""}</span>
+      ${e.weekday === weekday ? `<span class="ml-today">сегодня</span>` : ""}
+    </div>`;
+  }).join("");
+}
+
 function renderHistory() {
+  renderActivity();
   const history = data.history || [];
   if (!history.length) {
     $("monthSummary").hidden = true;
@@ -599,6 +726,7 @@ function currentPreset() {
 
 function renderProfile() {
   $("avatarGrid").innerHTML = avatarGrid(currentPreset(), "pickPreset");
+  renderMyLessons();
   $("tgPhotoBtn").hidden = !telegramPhotoUrl;
   $("infoLogin").textContent = data.student.login || "—";
   renderModeSeg();

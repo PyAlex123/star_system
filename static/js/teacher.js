@@ -1072,22 +1072,6 @@ async function toggleRating(id) {
 
 /** Столбики по неделям: одна серия — один цвет звезды, без легенды; подпись и
  *  подсказка у каждого столбика, текстовая версия — для экранного чтеца. */
-function weekBars(weeks, { tall = false } = {}) {
-  const max = Math.max(1, ...weeks.map((w) => w.stars));
-  const label = (w) => {
-    const [y, m, d] = w.week.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", "");
-  };
-  const text = weeks.map((w) => `неделя с ${label(w)}: ${w.stars} ${stars(w.stars)}`).join("; ");
-  return `<div class="bars ${tall ? "tall" : ""}" role="img" aria-label="Звёзды по неделям. ${escapeHtml(text)}">
-    ${weeks.map((w, i) => `<span class="bar-col" title="Неделя с ${escapeHtml(label(w))}: ${w.stars} ${stars(w.stars)}">
-      <span class="bar-val">${w.stars || ""}</span>
-      <span class="bar" style="height:${Math.round((w.stars / max) * 100)}%"></span>
-      <span class="bar-x">${i % 2 === weeks.length % 2 || weeks.length <= 8 ? escapeHtml(label(w)) : ""}</span>
-    </span>`).join("")}
-  </div>`;
-}
-
 function shortDay(iso) { return iso ? formatDay(iso, { year: false }) : "—"; }
 
 async function openActivity(studentId) {
@@ -1103,7 +1087,7 @@ async function openActivity(studentId) {
     $("activityBody").innerHTML = `
       <div class="tiles">
         <div class="tile"><span>За неделю</span><b>${fmt(a.week)} ★</b></div>
-        <div class="tile"><span>За месяц</span><b>${fmt(a.month)} ★</b></div>
+        <div class="tile"><span>За 30 дней</span><b>${fmt(a.month)} ★</b></div>
         <div class="tile"><span>Серия уроков</span><b>${a.streak}</b></div>
         <div class="tile"><span>Призов</span><b>${a.prizes}</b></div>
       </div>
@@ -1869,12 +1853,12 @@ function resetUserPassword(id) {
 function removeUser(id) {
   const user = (state.users || []).find((u) => u.id === id);
   if (!user) return;
-  confirmAction(`Удалить учителя ${escapeHtml(user.name)}?`,
-    "Он больше не сможет войти. Классы и ученики останутся.",
+  confirmAction(`Удалить сотрудника ${escapeHtml(user.name)}?`,
+    "Войти под этим логином больше не получится. Классы, ученики и расписание останутся.",
     async () => {
       await api(`/api/users/${id}`, { method: "DELETE" });
       await loadState();
-      toast("Учитель удалён", "success");
+      toast("Сотрудник удалён", "success");
     }, "Удалить");
 }
 

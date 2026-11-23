@@ -90,3 +90,21 @@ def test_planned_lessons_count(teacher):
     assert stats.planned_lessons(database, [1], date(2026, 11, 2), date(2026, 11, 15)) == 4
     assert stats.planned_lessons(database, [1], date(2026, 11, 3), date(2026, 11, 4)) == 1
     assert stats.planned_lessons(database, [2], date(2026, 11, 2), date(2026, 11, 15)) == 0
+
+
+def test_held_counts_only_scheduled_days(teacher):
+    """«Проведено из запланированных» не превышает план: уроки до появления расписания
+    и уроки в другие дни недели в «проведено» не попадают."""
+    add(teacher, weekdays=[1, 3])                      # пн и ср
+    database = load_db()
+    for e in database["schedule"]:
+        e["created_at"] = "2026-11-02"
+    database["lessons"] = [
+        {"id": 1, "class_id": 1, "date": "2026-10-26"},  # до расписания
+        {"id": 2, "class_id": 1, "date": "2026-11-02"},  # пн — по расписанию
+        {"id": 3, "class_id": 1, "date": "2026-11-06"},  # пт — вне расписания
+        {"id": 4, "class_id": 1, "date": "2026-11-11"},  # ср — по расписанию
+        {"id": 5, "class_id": 2, "date": "2026-11-09"},  # другой класс
+    ]
+    plan = stats.schedule_plan(database, [1], date(2026, 10, 1), date(2026, 11, 15))
+    assert plan == {"planned": 4, "held": 2}
