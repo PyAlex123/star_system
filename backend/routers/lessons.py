@@ -91,6 +91,7 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
         database["lessons"].insert(0, {
             "id": settings["last_lesson_id"],
             "class_id": cls["id"],
+            "user_id": user["id"],          # кто провёл — для статистики по учителям
             "class_name": cls["name"],       # для истории: класс могут переименовать
             "school_name": db.school_name_of_class(database, cls["id"]),
             "date": payload.date,

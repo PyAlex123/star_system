@@ -24,17 +24,23 @@
     </div>
 
     <nav class="nav" aria-label="Разделы">
-      <button data-page="journal" aria-current="page" onclick="switchPage('journal')">
+      <button data-page="journal" class="editor-only" aria-current="page" onclick="switchPage('journal')">
         <svg class="ic"><use href="#i-book"></use></svg>Журнал
       </button>
-      <button data-page="prizes" onclick="switchPage('prizes')">
+      <button data-page="schedule" onclick="switchPage('schedule')">
+        <svg class="ic"><use href="#i-clock"></use></svg>Расписание
+      </button>
+      <button data-page="prizes" class="editor-only" onclick="switchPage('prizes')">
         <svg class="ic"><use href="#i-gift"></use></svg>Призы
       </button>
       <button data-page="lessons" onclick="switchPage('lessons')">
         <svg class="ic"><use href="#i-calendar"></use></svg>Уроки
       </button>
+      <button data-page="stats" onclick="switchPage('stats')">
+        <svg class="ic"><use href="#i-chart"></use></svg>Статистика
+      </button>
       <button data-page="users" class="admin-only" onclick="switchPage('users')">
-        <svg class="ic"><use href="#i-users"></use></svg>Учителя
+        <svg class="ic"><use href="#i-users"></use></svg>Сотрудники
       </button>
     </nav>
 
@@ -114,6 +120,8 @@
     </div>
   </div>
 
+  <div class="today-strip" id="todayStrip" hidden></div>
+
   <div class="class-tabs" id="classTabs" role="tablist" aria-label="Классы"></div>
 
   <section class="sheet" id="journalSheet">
@@ -186,15 +194,48 @@
   <div class="lesson-list" id="lessonList"></div>
 </main>
 
-<!-- ── Учителя (только администратор) ──────────────────────── -->
+<!-- ── Расписание ──────────────────────────────────────────── -->
+<main class="page" id="page-schedule">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Расписание</h1>
+      <p class="page-sub">Занятия со звёздами по дням недели. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
+    </div>
+    <div class="seg class-seg" id="scheduleClasses" role="tablist" aria-label="Класс"></div>
+    <button class="btn editor-only" onclick="openScheduleEntry()">
+      <svg class="ic"><use href="#i-plus"></use></svg>Занятие
+    </button>
+  </div>
+  <div class="week-grid" id="weekGrid"></div>
+</main>
+
+<!-- ── Статистика ──────────────────────────────────────────── -->
+<main class="page" id="page-stats">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Статистика</h1>
+      <p class="page-sub" id="statsSub">Звёзды, уроки и активность учеников школы.</p>
+    </div>
+    <div class="seg" role="radiogroup" aria-label="Период" id="statsPeriod">
+      <button role="radio" data-days="7" onclick="setStatsPeriod(7)">7 дней</button>
+      <button role="radio" data-days="30" onclick="setStatsPeriod(30)">30 дней</button>
+      <button role="radio" data-days="90" onclick="setStatsPeriod(90)">90 дней</button>
+      <button role="radio" data-days="" onclick="setStatsPeriod(null)">Всё время</button>
+    </div>
+  </div>
+  <div id="statsHost"></div>
+</main>
+
+<!-- ── Сотрудники (только администратор) ───────────────────── -->
 <main class="page narrow" id="page-users">
   <div class="page-head">
     <div>
-      <h1 class="page-title">Учителя</h1>
-      <p class="page-sub">Учитель входит по своему логину и видит только отмеченные школы.</p>
+      <h1 class="page-title">Сотрудники</h1>
+      <p class="page-sub">Учителя ведут журнал своих школ. Администрация школы (директор, завуч) видит статистику и ничего не меняет.
+        Пароль виден здесь, пока сотрудник не сменит его сам.</p>
     </div>
     <button class="btn" onclick="openUser()">
-      <svg class="ic"><use href="#i-plus"></use></svg>Добавить учителя
+      <svg class="ic"><use href="#i-plus"></use></svg>Добавить сотрудника
     </button>
   </div>
   <div class="card users" id="userList"></div>
@@ -407,6 +448,14 @@
       <div class="modal-title" id="userModalTitle">Новый учитель</div>
       <p class="modal-sub">Учитель войдёт на сайт по логину и паролю и увидит только отмеченные школы.</p>
     </div>
+    <div class="field" id="userRoleField">
+      <span class="field-label">Роль</span>
+      <div class="seg seg-2" role="radiogroup" aria-label="Роль" id="userRole">
+        <button type="button" role="radio" data-role="teacher" onclick="pickUserRole('teacher')">Учитель</button>
+        <button type="button" role="radio" data-role="school_admin" onclick="pickUserRole('school_admin')">Администрация школы</button>
+      </div>
+      <p class="field-hint" id="userRoleHint"></p>
+    </div>
     <div class="field">
       <label for="userName">Имя</label>
       <input type="text" id="userName" placeholder="Иванова Марина Сергеевна">
@@ -426,6 +475,56 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalUser')">Отмена</button>
       <button class="btn" onclick="saveUser()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalSchedule" onclick="if(event.target===this) closeModal('modalSchedule')">
+  <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="scheduleTitle">
+    <div>
+      <div class="modal-title" id="scheduleTitle">Новое занятие</div>
+      <p class="modal-sub" id="scheduleSub">Можно отметить сразу несколько дней недели.</p>
+    </div>
+    <div class="field">
+      <label for="schClass">Класс</label>
+      <select id="schClass"></select>
+    </div>
+    <div class="field">
+      <span class="field-label">Дни недели</span>
+      <div class="day-pick" id="schDays" role="group" aria-label="Дни недели"></div>
+    </div>
+    <div class="sch-row">
+      <div class="field"><label for="schStart">Начало</label><input type="time" id="schStart" value="14:00"></div>
+      <div class="field"><label for="schEnd">Конец</label><input type="time" id="schEnd" value="14:45"></div>
+      <div class="field"><label for="schRoom">Кабинет</label><input type="text" id="schRoom" maxlength="40" placeholder="12"></div>
+    </div>
+    <div class="field">
+      <label for="schTeacher">Учитель</label>
+      <select id="schTeacher"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger-quiet" id="schDelete" onclick="removeScheduleEntry()" hidden>
+        <svg class="ic ic-sm"><use href="#i-trash"></use></svg>Удалить</button>
+      <span class="grow"></span>
+      <button class="btn btn-ghost" onclick="closeModal('modalSchedule')">Отмена</button>
+      <button class="btn" onclick="saveScheduleEntry()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalActivity" onclick="if(event.target===this) closeModal('modalActivity')">
+  <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="activityName">
+    <div class="act-head">
+      <img id="activityAvatar" alt="">
+      <div>
+        <div class="caps">Активность</div>
+        <div class="modal-title" id="activityName">—</div>
+        <div class="modal-sub" id="activitySub"></div>
+      </div>
+    </div>
+    <div id="activityBody"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalActivity')">Закрыть</button>
     </div>
   </div>
 </div>
@@ -539,5 +638,7 @@
 <script>window.APP_BASE = "{{BASE}}";</script>
 <script src="{{BASE}}/static/js/common.js"></script>
 <script src="{{BASE}}/static/js/teacher.js"></script>
+<script src="{{BASE}}/static/js/schedule.js"></script>
+<script src="{{BASE}}/static/js/stats.js"></script>
 </body>
 </html>

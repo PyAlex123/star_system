@@ -42,16 +42,24 @@ def html_handlers(page: str) -> set:
     return names - BUILTINS
 
 
-@pytest.mark.parametrize("page_js,page_html", [("app.js", "app.html"), ("teacher.js", "teacher.html")])
-def test_every_handler_in_markup_exists(page_js, page_html):
+def page_scripts(page: str) -> list:
+    """Скрипты страницы в порядке подключения, кроме common.js."""
+    html = (ROOT / "static" / page).read_text(encoding="utf-8")
+    return [JS / name for name in re.findall(r'src="[^"]*/static/js/([\w.-]+\.js)"', html) if name != "common.js"]
+
+
+@pytest.mark.parametrize("page_html", ["app.html", "teacher.html"])
+def test_every_handler_in_markup_exists(page_html):
     """Каждая функция, на которую ссылается кнопка в разметке, объявлена в скриптах."""
     names = sorted(html_handlers(page_html))
     assert len(names) > 5, "в разметке почти нет обработчиков — проверка сломалась"
-    r = run_node(ROOT / "tests" / "js_load_check.js", JS / "common.js", JS / page_js, *names)
+    scripts = page_scripts(page_html)
+    assert scripts, "не нашли скрипты страницы"
+    r = run_node(ROOT / "tests" / "js_load_check.js", JS / "common.js", *scripts, "--", *names)
     assert r.returncode == 0, r.stdout + r.stderr
 
 
-@pytest.mark.parametrize("name", ["common.js", "app.js", "teacher.js"])
+@pytest.mark.parametrize("name", sorted(p.name for p in JS.glob("*.js")))
 def test_syntax(name):
     r = run_node("--check", JS / name)
     assert r.returncode == 0, r.stderr

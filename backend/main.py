@@ -11,7 +11,8 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
-from .routers import auth, cards, excel, lessons, me, prizes, schools, students, telegram, users
+from .routers import (auth, cards, excel, lessons, me, prizes, schedule, schools, stats, students,
+                      telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
@@ -198,7 +199,9 @@ app.mount("/static/uploads", StaticFiles(directory=str(config.UPLOADS_DIR)), nam
 app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static")
 
 app.include_router(auth.router)
+app.include_router(stats.router)
 app.include_router(schools.router)
+app.include_router(schedule.router)
 app.include_router(students.router)
 app.include_router(lessons.router)
 app.include_router(prizes.router)

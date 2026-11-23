@@ -10,6 +10,8 @@ body.teacher { min-height: 100vh; display: flex; flex-direction: column; }
 /* Роли: кнопки администратора учитель не видит (сервер проверяет сам) */
 body:not(.is-admin) .admin-only { display: none !important; }
 body:not(.is-teacher) .teacher-only { display: none !important; }
+/* Администрация школы только смотрит: всё, что меняет данные, ей не показываем */
+body.is-sadmin .editor-only { display: none !important; }
 
 .grow { flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -734,7 +736,10 @@ body:not(.is-teacher) .teacher-only { display: none !important; }
 /* ── Учителя ───────────────────────────────────────────────── */
 
 .users { overflow: hidden; }
-.users-head, .user-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 150px 130px minmax(160px, 1.5fr) 132px; align-items: center; gap: 12px; padding: 0 20px; }
+.users-head, .user-row { display: grid; grid-template-columns: minmax(160px, 1.2fr) 130px 150px 150px minmax(140px, 1.3fr) 132px; align-items: center; gap: 12px; padding: 0 20px; }
+.pw-cell { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.pw-cell .mono { font-size: 13px; }
+.pw-unknown { font-size: 13px; }
 .users-head { height: 40px; background: var(--surface-3); font: 600 11px/14px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .user-row { min-height: 56px; border-top: 1px solid var(--line-soft); }
 .user-row .n { font-weight: 600; }
@@ -820,4 +825,156 @@ code { font: 500 12px var(--font-mono); background: var(--surface-2); border: va
   #page-prizes, #page-lessons, #page-users { padding: 20px 16px 40px; }
   .kbd-hints { display: none; }
   .jt { overflow-x: auto; }
+}
+
+
+/* ══ Расписание, статистика, активность ═════════════════════════
+   Новые экраны собраны из компонентов макета: карточки, линейки-заголовки,
+   сегменты, строки как в журнале. Только токены тем. */
+
+.seg-2 { display: grid; grid-template-columns: 1fr 1fr; border-color: var(--line-strong); background: var(--field-bg); }
+.seg-2 > button { height: 38px; }
+
+/* Полоска «по расписанию на дату» в журнале */
+.today-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.today-strip[hidden] { display: none; }
+.today-strip .caps { margin-right: 4px; }
+.ts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: var(--bw) solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: 500 13px/1 var(--font-ui);
+  cursor: pointer;
+}
+.ts-chip:hover { border-color: var(--line-strong); }
+.ts-chip b { font: var(--nw) 14px/1 var(--font-num); }
+.ts-chip .ts-time { font-variant-numeric: tabular-nums; color: var(--muted); }
+.ts-chip .ts-room { color: var(--muted); }
+.ts-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
+.ts-chip.on .ts-time, .ts-chip.on .ts-room { color: var(--accent-text); }
+.ts-chip.done .ic { color: var(--success); }
+
+.tag-idle { border: 0; cursor: pointer; background: var(--star-bg); color: var(--star-text); font: 600 12px/22px var(--font-ui); }
+.tag-idle:hover { background: var(--star-line); }
+
+/* Сетка недели */
+.week-grid { display: grid; grid-template-columns: repeat(var(--days, 6), minmax(0, 1fr)); gap: 12px; align-items: start; }
+.day { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 160px; padding: 12px; border-radius: var(--r18);
+  background: var(--surface-2); border: var(--bw) solid var(--line-soft); }
+.day.today { background: var(--accent-soft); border-color: var(--accent); }
+.day-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; padding: 0 2px 4px; }
+.day-head b { font: var(--dw) 18px/22px var(--font-display); }
+.day-head > span:not(.tag) { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.day-head .tag { margin-left: auto; }
+.day-empty { margin: 0; padding: 6px 2px; font-size: 13px; color: var(--muted); }
+.sch-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  border: var(--bw) solid var(--line);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--r12);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  box-shadow: var(--shadow-card);
+}
+button.sch-card { cursor: pointer; }
+button.sch-card:hover { border-color: var(--line-strong); border-left-color: var(--primary); }
+.sch-card.done, button.sch-card.done:hover { border-left-color: var(--success); }
+.sch-time { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sch-class { font: var(--nw) 18px/22px var(--font-num); }
+.sch-meta { font-size: 12px; line-height: 16px; color: var(--muted); overflow-wrap: anywhere; }
+.sch-meta:empty { display: none; }
+.sch-state { margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sch-state.ok { color: var(--success); }
+
+.day-pick { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.day-pick button {
+  height: 38px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r8);
+  background: var(--field-bg);
+  color: var(--text);
+  font: 600 14px/1 var(--font-ui);
+  cursor: pointer;
+}
+.day-pick button.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.sch-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.sch-row .field { min-width: 0; }
+input[type="time"] { width: 100%; min-width: 0; height: 44px; padding: 0 12px; border: var(--bw) solid var(--line-strong); border-radius: var(--r10);
+  background: var(--field-bg); color: var(--text); font: 400 15px/20px var(--font-ui); font-variant-numeric: tabular-nums; }
+input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* Плитки с итогами */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 12px 14px; border: var(--bw) solid var(--line);
+  border-radius: var(--r14); background: var(--surface); }
+.tile > span { font-size: 12px; line-height: 16px; color: var(--muted); }
+.tile > b { font: var(--nw) 24px/30px var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile > small { font-size: 12px; line-height: 16px; color: var(--muted); }
+.stat-tiles { margin-bottom: 16px; }
+.stat-tiles .tile { box-shadow: var(--shadow-card); }
+
+/* Окно активности ученика */
+.act-head { display: flex; align-items: center; gap: 14px; }
+.act-head img { flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--line); }
+.act-caps { margin: 16px 0 8px; }
+#activityBody .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#activityBody .tile > b { font-size: 20px; line-height: 26px; }
+.act-facts { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 14px; }
+.act-facts > div { display: flex; flex-direction: column; gap: 1px; }
+.act-facts span { font-size: 12px; color: var(--muted); }
+.act-facts b { font-weight: 600; }
+.act-facts b.warn { color: var(--danger); }
+
+/* Статистика */
+.stat-card { padding: 16px 18px 18px; margin-bottom: 16px; }
+.stat-card .eyebrow { margin-bottom: 12px; }
+.stat-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.stat-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.stat-head .eyebrow { flex: 1; min-width: 180px; margin: 0; }
+.stat-head select { width: auto; height: 40px; }
+.st-table { display: flex; flex-direction: column; }
+.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 40px; padding: 4px 6px;
+  border-bottom: 1px solid var(--line-soft); font-size: 14px; }
+.st-row:last-child { border-bottom: 0; }
+.st-table.cls .st-row { grid-template-columns: minmax(0, 1fr) 70px 64px 76px 60px 64px; }
+.st-table.rank .st-row { grid-template-columns: 28px 32px minmax(0, 1.4fr) 64px minmax(60px, 1fr) 76px; }
+.st-headrow { min-height: 32px; font: 600 11px/14px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.st-group { padding: 10px 6px 4px; font: 600 12px/16px var(--font-ui); color: var(--accent-text); }
+.st-row .r { text-align: right; white-space: nowrap; }
+.st-row small { color: var(--muted); font-size: 12px; }
+.st-row img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.st-place { color: var(--muted); text-align: center; }
+.st-note { margin: 10px 0 0; font-size: 13px; line-height: 18px; }
+.link { min-width: 0; padding: 0; border: 0; background: none; color: var(--text); font: 600 14px/20px var(--font-ui); text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline dotted; text-underline-offset: 4px;
+  text-decoration-color: var(--line-strong); }
+.link:hover { color: var(--accent-text); }
+.meter { display: block; height: 6px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 999px; background: var(--star); }
+
+@media (max-width: 1100px) {
+  .week-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stat-cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .week-grid { grid-template-columns: 1fr; }
+  .day { min-height: 0; }
+  #activityBody .tiles { grid-template-columns: 1fr 1fr; }
+  .st-table.cls .st-row { grid-template-columns: minmax(0, 1fr) 56px 64px; }
+  .st-table.cls .st-row > :nth-child(n+4) { display: none; }
+  .st-table.rank .st-row { grid-template-columns: 24px 32px minmax(0, 1fr) 70px; }
+  .st-table.rank .st-row > .muted, .st-table.rank .st-row > .meter { display: none; }
 }

@@ -557,3 +557,16 @@ kbd {
 @media print {
   .no-print { display: none !important; }
 }
+
+/* Столбики по неделям: одна серия — цвет звезды, без легенды, подпись при наведении */
+.wk-bars { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; align-items: end; height: 132px; padding-top: 4px; }
+.wk-bars.tall { height: 180px; }
+.wk-col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+.wk-col::before { content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 1px; background: var(--line); }
+.wk-bar { display: block; min-height: 2px; margin: 0 2px 22px; border-radius: 4px 4px 0 0; background: var(--star); }
+.wk-col:hover .wk-bar { background: var(--star-depth); }
+.wk-val { text-align: center; font: 600 11px/14px var(--font-ui); color: var(--muted); font-variant-numeric: tabular-nums; }
+.wk-x { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; font-size: 11px; line-height: 16px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; }
+/* Подписи через одну — можно занять место соседнего столбика */
+.wk-bars.sparse .wk-x { left: -50%; right: -50%; overflow: visible; }

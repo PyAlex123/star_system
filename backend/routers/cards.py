@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from qrcode.image.pil import PilImage
 
 from .. import assets, config, db, themes
-from ..security import panel_user, require_teacher, require_teacher_page
+from ..security import panel_user, require_editor_page, require_teacher
 from .common import class_or_404, student_or_404
 
 router = APIRouter(tags=["cards"])
@@ -139,7 +139,7 @@ function togglePick(button) {
 
 
 @router.get("/cards/{class_id}", response_class=HTMLResponse,
-            dependencies=[Depends(require_teacher_page)])
+            dependencies=[Depends(require_editor_page)])
 def class_cards(class_id: int, request: Request):
     """Печатная страница: листы А4 по 8 карточек (2×4) с метками реза."""
     database = db.load_db()

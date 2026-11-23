@@ -1,9 +1,10 @@
-"""Кабинет ученика. Отдаёт только его собственные данные и топ-5 его класса."""
+"""Кабинет ученика. Отдаёт только его собственные данные, топ-5 класса, параллели
+и школы, расписание класса и его активность."""
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from .. import config, db, images, passwords, schemas, security, themes
+from .. import config, db, images, passwords, schemas, security, stats, themes
 from ..security import require_student
 
 router = APIRouter(prefix="/api/me", tags=["student"])
@@ -21,50 +22,34 @@ def avatar_url(student: Dict[str, Any]) -> str:
     return f"/static/img/avatars/{db.default_avatar(student['id'])['value']}.svg"
 
 
-def public_card(student: Dict[str, Any], place: int, me_id: int) -> Dict[str, Any]:
-    """Строка рейтинга. Намеренно без истории, кода карточки и Telegram-данных."""
+def public_card(student: Dict[str, Any], place: int, me_id: int, class_names: Dict[int, str]) -> Dict[str, Any]:
+    """Строка рейтинга. Намеренно без истории, кода карточки и Telegram-данных.
+    score — заработано за всё время: по нему считается место."""
     return {
         "place": place,
         "id": student["id"],
         "name": student["name"],
-        "total_stars": student["total_stars"],
+        "class_name": class_names.get(student.get("class_id"), ""),
+        "score": stats.earned(student),
+        "total_stars": stats.earned(student),
         "avatar_url": avatar_url(student),
         "is_me": student["id"] == me_id,
     }
 
 
-def class_ranking(database: Dict[str, Any], class_id: int) -> List[Dict[str, Any]]:
-    """Звёзды по убыванию, при равенстве — по алфавиту.
-    Ученики, которых учитель скрыл из рейтинга, в нём не участвуют."""
-    classmates = [s for s in db.class_students(database, class_id) if not s.get("rating_hidden")]
-    return sorted(classmates, key=lambda s: (-s["total_stars"], s["name"].lower()))
+def build_leaderboards(database: Dict[str, Any], student: Dict[str, Any]) -> Dict[str, Any]:
+    """Рейтинг класса, параллели («5-А», «5-Б»…) и школы — по заработанным звёздам.
+    Уровня нет (None), если в нём нечего сравнивать: кружок без параллели, одна школа-класс."""
+    class_names = {c["id"]: c["name"] for c in database["classes"]}
 
+    def card(s: Dict[str, Any], place: int) -> Dict[str, Any]:
+        return public_card(s, place, student["id"], class_names)
 
-def build_leaderboard(database: Dict[str, Any], student: Dict[str, Any]) -> Dict[str, Any]:
-    ranking = class_ranking(database, student.get("class_id"))
-    my_index = next((i for i, s in enumerate(ranking) if s["id"] == student["id"]), None)
-
-    top = [public_card(s, i + 1, student["id"]) for i, s in enumerate(ranking[:TOP_SIZE])]
-
-    me_row: Optional[Dict[str, Any]] = None
-    if my_index is not None and my_index >= TOP_SIZE:
-        me_row = public_card(student, my_index + 1, student["id"])
-
-    gap_to_next: Optional[int] = None
-    next_name: Optional[str] = None
-    if my_index is not None and my_index > 0:
-        ahead = ranking[my_index - 1]
-        gap_to_next = max(1, ahead["total_stars"] - student["total_stars"] + 1)
-        next_name = ahead["name"]
-
-    return {
-        "top": top,
-        "me": me_row,
-        "my_place": (my_index + 1) if my_index is not None else None,
-        "class_size": len(ranking),
-        "gap_to_next": gap_to_next,
-        "next_name": next_name,
-    }
+    boards = {}
+    for scope in ("class", "parallel", "school"):
+        group = stats.scope_students(database, student, scope)
+        boards[scope] = None if group is None else stats.leaderboard(database, student, group, card)
+    return boards
 
 
 def build_prizes(database: Dict[str, Any], stars: int) -> List[Dict[str, Any]]:
@@ -88,11 +73,12 @@ def build_prizes(database: Dict[str, Any], stars: int) -> List[Dict[str, Any]]:
 
 
 @router.get("")
-def get_me(student: Dict[str, Any] = Depends(require_student)):
+def get_me(request: Request, student: Dict[str, Any] = Depends(require_student)):
     """Всё для кабинета одним запросом."""
+    _mark_seen(request, student["id"])
     database = db.load_db()
     fresh = db.find_student(database, student["id"]) or student
-    leaderboard = build_leaderboard(database, fresh)
+    leaderboards = build_leaderboards(database, fresh)
     prizes = build_prizes(database, fresh["total_stars"])
     next_prize = next((p for p in prizes if not p["affordable"]), None)
 
@@ -119,12 +105,32 @@ def get_me(student: Dict[str, Any] = Depends(require_student)):
             "theme": themes.theme_of_class(database, fresh.get("class_id")),
             "rating_hidden": bool(fresh.get("rating_hidden")),
         },
-        "leaderboard": leaderboard,
+        "leaderboard": leaderboards["class"],
+        "leaderboards": leaderboards,
+        "schedule": stats.class_schedule(database, fresh.get("class_id")),
+        "activity": stats.student_activity(database, fresh),
         "prizes": prizes,
         "next_prize": next_prize,
         "history": history,
         "avatar_presets": db.AVATAR_PRESETS,
     }
+
+
+def _mark_seen(request: Request, student_id: int) -> None:
+    """Дата последнего захода в кабинет — для статистики школы. Пишем не чаще раза
+    в день и не в предпросмотре учителя: иначе каждый опрос переписывал бы базу."""
+    if getattr(request.state, "student_preview", False):
+        return
+    today = db.today()
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_student(database, student_id)
+        if not fresh or fresh.get("last_seen") == today:
+            return db.NO_SAVE
+        fresh["last_seen"] = today
+        return None
+
+    db.transaction(_apply)
 
 
 def _forbid_preview(request: Request, message: str) -> None:

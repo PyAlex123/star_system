@@ -137,3 +137,23 @@ async function requestJson(path, options = {}, fallbackError = "Что-то по
   }
   return payload;
 }
+
+/** Столбики «звёзды по неделям» (панель и кабинет). Одна серия — цвет звезды,
+    без легенды; подпись недели при наведении, текстовая версия — в aria-label.
+    weeks: [{week: "ГГГГ-ММ-ДД" (понедельник), stars}]. */
+function weekBars(weeks, { tall = false, step = weeks.length > 8 ? 2 : 1 } = {}) {
+  const max = Math.max(1, ...weeks.map((w) => w.stars));
+  const word = (n) => plural(n, "звезда", "звезды", "звёзд");
+  const label = (w) => {
+    const [y, m, d] = w.week.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }).replace(".", "");
+  };
+  const text = weeks.map((w) => `неделя с ${label(w)}: ${w.stars} ${word(w.stars)}`).join("; ");
+  return `<div class="wk-bars ${tall ? "tall" : ""} ${step > 1 ? "sparse" : ""}" role="img" aria-label="Звёзды по неделям. ${escapeHtml(text)}">
+    ${weeks.map((w, i) => `<span class="wk-col" title="Неделя с ${escapeHtml(label(w))}: ${w.stars} ${word(w.stars)}">
+      <span class="wk-val">${w.stars || ""}</span>
+      <span class="wk-bar" style="height:calc((100% - 36px) * ${(w.stars / max).toFixed(3)})"></span>
+      <span class="wk-x">${(weeks.length - 1 - i) % step === 0 ? escapeHtml(label(w)) : ""}</span>
+    </span>`).join("")}
+  </div>`;
+}
