@@ -68,6 +68,12 @@ body.is-sadmin .editor-only { display: none !important; }
 .nav button:hover { background: var(--surface-2); }
 .nav button[aria-current="page"] { background: var(--primary); color: var(--on-primary); }
 .topbar-end { justify-self: end; display: flex; gap: 8px; }
+/* Семь разделов не помещаются рядом с полными кнопками «Пароль» и «Выйти» (шапка не шире
+   1344 px при любом окне): эти две — значки с подсказкой, отступы разделов поменьше */
+.topbar-in { grid-template-columns: minmax(0, 1fr) auto auto; }
+.nav button { padding: 0 11px; gap: 6px; }
+.topbar-end .tb-label { display: none; }
+.topbar-end .btn { width: 36px; padding: 0; }
 
 /* ── Страницы ──────────────────────────────────────────────── */
 

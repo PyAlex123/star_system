@@ -143,9 +143,12 @@ def join(code: str, item: schemas.MonitorJoin, request: Request):
             wait = ratelimit.retry_after("m-code", key)
             if wait:
                 raise _too_many(wait)
-            if (item.code or "").strip() != run["code"]:
+            given = (item.code or "").strip()
+            if not given:
+                raise _error(status.HTTP_400_BAD_REQUEST, "Введи код урока — 4 цифры на экране класса")
+            if given != run["code"]:
                 ratelimit.register_failure("m-code", key)
-                raise _error(status.HTTP_400_BAD_REQUEST, "Неверный код урока — посмотри на доске")
+                raise _error(status.HTTP_400_BAD_REQUEST, "Неверный код урока — посмотри на экран класса")
         count = conn.execute("SELECT COUNT(*) FROM participants WHERE run_id = ?", (run["id"],)).fetchone()[0]
         if count >= store.MAX_PARTICIPANTS:
             raise _error(status.HTTP_400_BAD_REQUEST, "В опросе уже слишком много участников")

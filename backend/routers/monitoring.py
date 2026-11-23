@@ -43,6 +43,7 @@ def _brief(run: Dict[str, Any], classes: List[Dict[str, Any]], counts: Dict[str,
         "classes": classes, "all_classes": run["all_classes"], "topic": run["topic"], "goals": run["goals"],
         "code": run["code"], "lesson_date": run["lesson_date"], "owner_name": run["owner_name"],
         "questions": len(run["questions"]), "open": ended is None,
+        "stopped": run["closed_at"] is not None,          # завершил учитель — продлить нельзя
         "seconds_left": None if run["closes_at"] is None or ended is not None else run["closes_at"] - t,
         "ended_ago": None if ended is None else t - ended,
         "joined": counts.get("joined", 0), "finished": counts.get("finished", 0),

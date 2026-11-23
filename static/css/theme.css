@@ -570,3 +570,16 @@ kbd {
   white-space: nowrap; overflow: hidden; }
 /* Подписи через одну — можно занять место соседнего столбика */
 .wk-bars.sparse .wk-x { left: -50%; right: -50%; overflow: visible; }
+
+/* Лица настроения «Мониторинга»: опрос ученика и итоги в панели.
+   Цвет состояния — через color-mix из токенов, лицо всегда с подписью рядом. */
+.mood-5 { --c: var(--success); }
+.mood-4 { --c: color-mix(in srgb, var(--success) 60%, var(--star)); }
+.mood-3 { --c: var(--star); }
+.mood-2 { --c: color-mix(in srgb, var(--star) 45%, var(--danger)); }
+.mood-1 { --c: var(--danger); }
+.face-art { display: block; aspect-ratio: 1; }
+.face-art .face-bg { fill: color-mix(in srgb, var(--c) 22%, var(--surface)); stroke: var(--c); stroke-width: 2; }
+.face-art .eye { fill: var(--text); }
+.face-art path { fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; }
+.face-art path.fill { fill: var(--text); stroke-linejoin: round; }

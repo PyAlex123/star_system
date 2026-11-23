@@ -106,13 +106,11 @@ body.m {
 .mq-hint { margin-top: -6px; font-size: 14px; color: var(--muted); }
 
 .m-nav { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
-.m-nav > .btn:last-child { justify-self: end; min-width: 150px; }
-.m-nav > .btn:only-child { grid-column: 2; }
+.m-nav > .m-next { grid-column: 2; justify-self: end; min-width: 150px; }
 
 /* Лица настроения */
 .mq-faces { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .mq-face {
-  --c: var(--star);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -125,20 +123,11 @@ body.m {
   font: 500 12px/15px var(--font-ui);
   cursor: pointer;
 }
-.mq-face.lvl-5 { --c: var(--success); }
-.mq-face.lvl-4 { --c: color-mix(in srgb, var(--success) 60%, var(--star)); }
-.mq-face.lvl-3 { --c: var(--star); }
-.mq-face.lvl-2 { --c: color-mix(in srgb, var(--star) 45%, var(--danger)); }
-.mq-face.lvl-1 { --c: var(--danger); }
-.face-art { width: 100%; max-width: 60px; aspect-ratio: 1; }
-.face-art .face-bg { fill: color-mix(in srgb, var(--c) 22%, var(--surface)); stroke: var(--c); stroke-width: 2; }
-.face-art .eye { fill: var(--text); }
-.face-art path { fill: none; stroke: var(--text); stroke-width: 2.4; stroke-linecap: round; }
-.face-art path.fill { fill: var(--text); stroke-linejoin: round; }
+.mq-face .face-art { width: 100%; max-width: 60px; }
 .mq-face:hover { background: var(--surface-2); }
 .mq-face.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, var(--surface)); font-weight: 700; }
 .mq-face.on .face-art .face-bg { fill: color-mix(in srgb, var(--c) 45%, var(--surface)); stroke-width: 3; }
-.mq-faces:has(.on) .mq-face:not(.on) { opacity: .55; }
+.mq-faces:has(.on) .mq-face:not(.on) .face-art { opacity: .5; }   /* подпись не тускнеет — контраст текста */
 
 /* Шкала */
 .mq-scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); gap: 8px; }
@@ -225,7 +214,7 @@ body.m {
 @media (max-width: 370px) {
   .m-card { padding: 18px 14px; }
   .mq-face { font-size: 11px; }
-  .m-nav > .btn:last-child { min-width: 0; }
+  .m-nav > .m-next { min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

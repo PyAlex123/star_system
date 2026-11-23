@@ -11,7 +11,7 @@ const LINK = (() => {
   return parts[0] === "m" && parts[1] ? decodeURIComponent(parts[1]) : "";
 })();
 const KEY = `zv_m_${LINK}`;
-const POLL_WAIT = 5000;           // ждём запуска — раз в 5 секунд
+const POLL_WAIT = 4000;           // ждём запуска: опрос откроется не позже чем через 5 секунд
 const POLL_BUSY = 15000;          // отвечает — реже: узнать, не закрыт ли опрос
 const FORGET_AFTER = 10 * 60;     // старый опрос (закрыт больше 10 минут назад) — забываем
 
@@ -20,7 +20,7 @@ let screen = "loading";
 let qIndex = 0;
 let answers = {};
 let pollTimer = null;
-let flushing = false;
+let flushRun = null;              // идущая отправка очереди — её можно дождаться
 let finishing = false;
 
 /* ── Память устройства ────────────────────────────────────── */
@@ -67,26 +67,26 @@ function pending() {
   return queue().filter((i) => i.token === token);
 }
 
-async function flush() {
-  if (flushing) return;
-  flushing = true;
-  try {
-    let item;
-    while ((item = pending()[0])) {
-      try {
-        await requestJson("/api/m/answer", { method: "POST", json: item });
-        setOnline(true);
-      } catch (error) {
-        if (!error.status) { setOnline(false); break; }                 // нет сети — попробуем позже
-        if (error.status === 409 || error.status === 404) { remember({ queue: [] }); poll(); break; }
-        toast(error.message, "error");                                  // ответ не подошёл — показать и отбросить
-      }
-      // Убираем именно отправленное: пока шёл запрос, ученик мог ответить ещё раз
-      const sent = JSON.stringify(item);
-      remember({ queue: queue().filter((i) => JSON.stringify(i) !== sent) });
+/** Отправить очередь. Если отправка уже идёт — вернуть её же, чтобы можно было дождаться. */
+function flush() {
+  if (!flushRun) flushRun = sendQueue().finally(() => { flushRun = null; });
+  return flushRun;
+}
+
+async function sendQueue() {
+  let item;
+  while ((item = pending()[0])) {
+    try {
+      await requestJson("/api/m/answer", { method: "POST", json: item });
+      setOnline(true);
+    } catch (error) {
+      if (!error.status) { setOnline(false); return; }                  // нет сети — попробуем позже
+      if (error.status === 409 || error.status === 404) { remember({ queue: [] }); poll(); return; }
+      toast(error.message, "error");                                    // ответ не подошёл — показать и отбросить
     }
-  } finally {
-    flushing = false;
+    // Убираем именно отправленное: пока шёл запрос, ученик мог ответить ещё раз
+    const sent = JSON.stringify(item);
+    remember({ queue: queue().filter((i) => JSON.stringify(i) !== sent) });
   }
 }
 
@@ -226,9 +226,8 @@ function submitJoin(event) {
   if (!last) { $("jLast").focus(); return joinError("Напиши фамилию"); }
   if (!first) { $("jFirst").focus(); return joinError("Напиши имя"); }
   if (!classId) { $("jClass").focus(); return joinError("Выбери класс"); }
-  const code = $("jCode")?.value.trim();
-  if (openClass(classId)?.code && !/^\d{4}$/.test(code || "")) { $("jCode").focus(); return joinError("Введи 4 цифры кода урока"); }
-  join(last, first, classId, code);
+  // Нужен ли код, решает сервер: список классов на устройстве может отставать на 5 секунд
+  join(last, first, classId, $("jCode")?.value.trim());
 }
 
 function showConfirm() {
@@ -249,9 +248,7 @@ function showConfirm() {
 function confirmMe(event) {
   event.preventDefault();
   const mem = memory();
-  const code = $("jCode")?.value.trim();
-  if (openClass(mem.class_id)?.code && !/^\d{4}$/.test(code || "")) { $("jCode").focus(); return joinError("Введи 4 цифры кода урока"); }
-  join(mem.last, mem.first, mem.class_id, code);
+  join(mem.last, mem.first, mem.class_id, $("jCode")?.value.trim());
 }
 
 function notMe() {
@@ -292,7 +289,7 @@ function renderQuestion() {
     <div class="m-card m-q">${questionHtml(q, value)}</div>
     <div class="m-nav">
       ${qIndex > 0 ? `<button class="btn btn-ghost btn-lg" type="button" onclick="go(-1)">${icon("arrow-left")}Назад</button>` : "<span></span>"}
-      ${instantWait ? "" : `<button class="btn btn-lg" type="button" id="mNext" onclick="${last ? "finish()" : "go(1)"}"
+      ${instantWait ? "" : `<button class="btn btn-lg m-next" type="button" id="mNext" onclick="${last ? "finish()" : "go(1)"}"
         ${q.required && !done ? "disabled" : ""}>${label}${last ? "" : icon("arrow-right")}</button>`}
     </div>`;
 }
@@ -365,7 +362,7 @@ async function finish() {
     return toast("Ответь на этот вопрос", "error");
   }
   finishing = true;
-  await flush();
+  for (let tries = 0; tries < 3 && pending().length; tries++) await flush();   // и то, что успело встать в очередь
   if (pending().length) {
     return toast("Нет связи — ответы отправятся, как только появится интернет", "error", "wifi-off");
   }

@@ -147,3 +147,14 @@ def test_results_summary_counts(teacher):
     assert {o["key"]: o["count"] for o in light["options"]} == {"green": 2, "yellow": 0, "red": 1}
     assert pace["answered"] == 0
     assert data["joined"] == 3 and data["finished"] == 0
+
+
+def test_backup_snapshot_is_readable(teacher, tmp_path):
+    """deploy/backup.sh делает снимок SQLite изнутри контейнера — копия открывается и полна."""
+    import sqlite3
+    launch(teacher)
+    target = tmp_path / "copy.sqlite3"
+    store.backup_to(str(target))
+    conn = sqlite3.connect(target)
+    assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+    conn.close()

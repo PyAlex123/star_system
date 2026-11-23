@@ -22,7 +22,7 @@ const MOOD_MOUTHS = {
 
 /** Лицо настроения: круг цвета состояния, глаза и рот. */
 function faceSvg(level) {
-  const brows = level === 1 ? '<path d="M13 15.5 L20 18"/><path d="M35 15.5 L28 18"/>' : "";
+  const brows = level === 1 ? '<path d="M12.5 17.5 L19.5 14.5"/><path d="M35.5 17.5 L28.5 14.5"/>' : "";   // грустные, не сердитые
   return `<svg class="face-art" viewBox="0 0 48 48" aria-hidden="true">
     <circle cx="24" cy="24" r="21" class="face-bg"/>
     ${brows}<circle cx="17.5" cy="21" r="2.6" class="eye"/><circle cx="30.5" cy="21" r="2.6" class="eye"/>
@@ -64,7 +64,7 @@ function optionsHtml(q, value) {
 function answerHtml(q, value) {
   if (q.type === "mood") {
     return `<div class="mq-faces" role="radiogroup">${MOOD_LEVELS.map(([v, label]) => `
-      <button type="button" class="mq-face lvl-${v} ${picked(value, v) ? "on" : ""}" data-pick data-v="${v}"
+      <button type="button" class="mq-face mood-${v} ${picked(value, v) ? "on" : ""}" data-pick data-v="${v}"
         role="radio" aria-checked="${picked(value, v)}">${faceSvg(v)}<span>${label}</span></button>`).join("")}</div>`;
   }
   if (q.type === "scale") {
