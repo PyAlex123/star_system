@@ -97,11 +97,12 @@ def test_answers_and_finish(teacher, link):
 
 
 def test_closed_window_rejects_answers(teacher, link, monkeypatch):
+    began = store.now()
+    monkeypatch.setattr(store, "now", lambda: began)                       # часы стоят: секунда на запуск не сдвинет итог
     start(teacher)
     kid = TestClient(app)
     token = join(kid, link).json()["token"]
-    later = store.now() + 6 * 60
-    monkeypatch.setattr(store, "now", lambda: later)                       # окно в 5 минут прошло
+    monkeypatch.setattr(store, "now", lambda: began + 6 * 60)              # окно в 5 минут прошло
     r = kid.post("/api/m/answer", json={"token": token, "question_id": "c2", "value": {"v": 4}})
     assert r.status_code == 409
     state = kid.get(f"/api/m/{link}/state?p={token}").json()
