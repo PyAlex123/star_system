@@ -164,6 +164,9 @@ CHECKIN_BOT_ENABLED = bool(CHECKIN_BOT_TOKEN) and not CHECKIN_TOKEN_CLASH
 # Отметки, журналы и уроки по датам растут без предела — им не место в JSON,
 # который переписывается целиком. Лежат в том же каталоге данных, бэкап — тот же.
 CHECKIN_DB_FILE = DATA_DIR / "checkin.sqlite"
+# Согласованный снимок для бэкапа: его делает планировщик ночью и deploy/backup.sh
+CHECKIN_BACKUP_FILE = DATA_DIR / "checkin.backup.sqlite"
+CHECKIN_INVITE_DAYS = 7          # ссылка-приглашение преподавателя действует неделю
 # Все расчёты отметок — по часам школ. В Узбекистане нет перехода на летнее время.
 TZ_NAME = os.getenv("TZ_NAME", "").strip() or "Asia/Tashkent"
 
@@ -187,6 +190,13 @@ def webapp_url() -> str:
 def webhook_url() -> str:
     """Адрес, который мы сообщаем Telegram. Здесь подпуть обязателен."""
     return site_url(WEBHOOK_PATH)
+
+
+def checkin_invite_link(code: str) -> str:
+    """Ссылка-приглашение преподавателя в бот отметок. Пусто — имя бота неизвестно."""
+    if not CHECKIN_BOT_USERNAME:
+        return ""
+    return f"https://t.me/{CHECKIN_BOT_USERNAME}?start=inv_{code}"
 
 
 def deep_link(token: str) -> str:

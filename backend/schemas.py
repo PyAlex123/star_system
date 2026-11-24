@@ -4,9 +4,9 @@
 мегабайтное имя, и оно разъедется по рейтингу, карточкам и выгрузке.
 """
 from datetime import date
-from typing import Annotated, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field, field_validator
 
 MAX_NAME = 120          # ФИО, название школы, класса, приза
 MAX_TEXT = 300          # описание приза, причина списания
@@ -15,6 +15,16 @@ MAX_IMPORT_ROWS = 500   # строк за один импорт из Excel
 Name = Annotated[str, Field(max_length=MAX_NAME)]
 Text = Annotated[str, Field(max_length=MAX_TEXT)]
 Secret = Annotated[str, Field(max_length=128)]
+
+
+def _iso_date(value: str) -> str:
+    try:
+        return date.fromisoformat(value.strip()).isoformat()
+    except (ValueError, AttributeError):
+        raise ValueError("Дата должна быть в формате ГГГГ-ММ-ДД")
+
+
+IsoDate = Annotated[str, Field(max_length=10), AfterValidator(_iso_date)]
 
 
 class SchoolCreate(BaseModel):
@@ -136,6 +146,10 @@ class UserUpdate(BaseModel):
     name: Optional[Name] = None
     school_ids: Optional[List[int]] = Field(default=None, max_length=200)
     role: Optional[StaffRole] = None
+    # Отметки преподавателей. hourly_rate: null — снять ставку (отчёт только в часах)
+    hourly_rate: Optional[int] = Field(default=None, ge=0, le=10_000_000)
+    checkin_tracked: Optional[bool] = None     # отмечается в боте
+    checkin_manager: Optional[bool] = None     # ведёт раздел «Отметки»
 
 
 Clock = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]
@@ -149,6 +163,8 @@ class ScheduleCreate(BaseModel):
     end: Clock
     room: Annotated[str, Field(max_length=40)] = ""
     user_id: Optional[int] = None
+    valid_from: Optional[IsoDate] = None       # пусто — с сегодняшнего дня
+    valid_to: Optional[IsoDate] = None         # пусто — без конца
 
 
 class ScheduleUpdate(BaseModel):
@@ -157,6 +173,61 @@ class ScheduleUpdate(BaseModel):
     end: Optional[Clock] = None
     room: Optional[Annotated[str, Field(max_length=40)]] = None
     user_id: Optional[int] = None
+    valid_from: Optional[IsoDate] = None
+    valid_to: Optional[IsoDate] = None
+
+
+# ── Отметки преподавателей ───────────────────────────────────────────────────
+
+Reason = Annotated[str, Field(max_length=MAX_TEXT)]
+
+
+class CheckinDecision(BaseModel):
+    """Решение администратора по урокам — одному или пачкой, с причиной."""
+    lesson_ids: List[int] = Field(min_length=1, max_length=200)
+    action: Annotated[str, Field(pattern="^(approve|reject|cancel|reopen)$")]
+    reason: Reason = ""
+
+
+class CheckinHours(BaseModel):
+    """Ручные часы урока. hours = null — вернуть часы по расписанию."""
+    hours: Optional[float] = Field(default=None, ge=0, le=12)
+    reason: Reason = ""
+
+
+class CheckinLesson(BaseModel):
+    """Разовый урок вне расписания."""
+    user_id: int
+    class_id: int
+    date: IsoDate
+    start: Clock
+    end: Clock
+    room: Annotated[str, Field(max_length=40)] = ""
+    reason: Reason = ""
+
+
+class CheckinException(BaseModel):
+    """Праздник, отмена или замена на дату или диапазон дат."""
+    kind: Annotated[str, Field(pattern="^(holiday|cancel|substitute)$")]
+    date_from: IsoDate
+    date_to: Optional[IsoDate] = None
+    school_id: Optional[int] = None
+    entry_id: Optional[int] = None
+    user_id: Optional[int] = None
+    substitute_user_id: Optional[int] = None
+    reason: Reason = ""
+
+
+class CheckinSettings(BaseModel):
+    values: Dict[str, Any] = Field(max_length=20)
+
+
+class SchoolLocation(BaseModel):
+    """Где школа: точка на карте и радиус, в котором отметка считается «на месте»."""
+    address: Annotated[str, Field(max_length=255)] = ""
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    radius_m: int = Field(default=150, ge=30, le=2000)
 
 
 class StudentLogin(BaseModel):

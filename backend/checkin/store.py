@@ -12,6 +12,8 @@
   потоков, а SQLite даёт писать только одному.
 """
 import json
+import logging
+import shutil
 import sqlite3
 import sys
 import threading
@@ -21,6 +23,8 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 from .. import config
 from . import clock
+
+log = logging.getLogger("stars.checkin")
 
 _lock = threading.RLock()
 _ready_for: Optional[Path] = None
@@ -361,10 +365,12 @@ def reset_for_tests() -> None:
     global _ready_for
     with _lock:
         _ready_for = None
-        for suffix in ("", "-wal", "-shm"):
+        for suffix in ("", "-wal", "-shm", "-journal"):
             target = Path(str(config.CHECKIN_DB_FILE) + suffix)
             if target.exists():
                 target.unlink()
+        if config.CHECKIN_BACKUP_FILE.exists():
+            config.CHECKIN_BACKUP_FILE.unlink()
 
 
 # ── Помощники запросов ────────────────────────────────────────────────────────
@@ -457,9 +463,22 @@ def snapshot(target: Path) -> Path:
     return target
 
 
+def restore_if_missing() -> bool:
+    """При старте: базы нет, а снимок есть — значит, data/ распаковали из бэкапа
+    (живой файл в архив не кладётся). Снимок становится базой."""
+    global _ready_for
+    with _lock:
+        if config.CHECKIN_DB_FILE.exists() or not config.CHECKIN_BACKUP_FILE.exists():
+            return False
+        shutil.copyfile(config.CHECKIN_BACKUP_FILE, config.CHECKIN_DB_FILE)
+        _ready_for = None
+    log.warning("База отметок восстановлена из снимка %s", config.CHECKIN_BACKUP_FILE.name)
+    return True
+
+
 if __name__ == "__main__":       # python -m backend.checkin.store snapshot [путь]
     if len(sys.argv) >= 2 and sys.argv[1] == "snapshot":
-        out = Path(sys.argv[2]) if len(sys.argv) > 2 else config.DATA_DIR / "checkin.backup.sqlite"
+        out = Path(sys.argv[2]) if len(sys.argv) > 2 else config.CHECKIN_BACKUP_FILE
         print(snapshot(out))
     else:
         print("Использование: python -m backend.checkin.store snapshot [путь]")

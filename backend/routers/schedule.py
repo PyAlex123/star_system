@@ -3,11 +3,13 @@
 Читают все роли (расписание приходит в /api/state и в кабинет ученика).
 Добавляют, меняют и удаляют — учитель своей школы и администратор.
 """
-from typing import Any, Dict, Optional
+from datetime import date
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends
 
 from .. import db, schemas
+from ..checkin import domain
 from ..security import require_teacher
 from .common import bad_request, class_or_404, not_found
 
@@ -37,6 +39,35 @@ def _check_time(start: str, end: str) -> None:
         raise bad_request("Занятие должно заканчиваться позже, чем начинается")
 
 
+def _check_dates(bounds: Tuple[Optional[date], Optional[date]]) -> None:
+    start, end = bounds
+    if start and end and end < start:
+        raise bad_request("Занятие должно действовать хотя бы один день: «по» не раньше «с»")
+
+
+def _period(bounds: Tuple[Optional[date], Optional[date]]) -> str:
+    start, end = bounds
+    if end:
+        return f" (действует по {end.strftime('%d.%m.%Y')})"
+    if start and start > date.fromisoformat(db.today()):
+        return f" (с {start.strftime('%d.%m.%Y')})"
+    return ""
+
+
+def _clash(schedule: list, cls: Dict[str, Any], weekday: int, start: str, end: str,
+           bounds: Tuple[Optional[date], Optional[date]], skip_id: Optional[int] = None) -> None:
+    """Два занятия класса в одно время — ошибка, если их сроки действия пересекаются.
+    Закрытое занятие (valid_to в прошлом) не мешает новому в том же месте сетки."""
+    for other in schedule:
+        if other.get("id") == skip_id or other["class_id"] != cls["id"] or other["weekday"] != weekday:
+            continue
+        if not (other["start"] < end and start < other["end"]):
+            continue
+        if domain.ranges_overlap(domain.entry_bounds(other), bounds):
+            raise bad_request(f"У класса {cls['name']} в этот день уже есть занятие "
+                              f"{other['start']}–{other['end']}{_period(domain.entry_bounds(other))}")
+
+
 @router.post("")
 def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(require_teacher)):
     """Занятие сразу на несколько дней недели. Учитель по умолчанию — тот, кто добавил."""
@@ -48,16 +79,15 @@ def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(req
                                  cls["school_id"])
         schedule = database.setdefault("schedule", [])
         created = []
+        draft = {"created_at": db.today(), "valid_from": item.valid_from, "valid_to": item.valid_to}
+        bounds = domain.entry_bounds(draft)
+        _check_dates(bounds)
         for weekday in sorted(set(item.weekdays)):
-            clash = next((e for e in schedule if e["class_id"] == cls["id"] and e["weekday"] == weekday
-                          and e["start"] < item.end and item.start < e["end"]), None)
-            if clash:
-                raise bad_request(f"У класса {cls['name']} в этот день уже есть занятие "
-                                  f"{clash['start']}–{clash['end']}")
+            _clash(schedule, cls, weekday, item.start, item.end, bounds)
             entry = {"id": db.next_counted_id(database, "schedule"), "class_id": cls["id"], "weekday": weekday,
                      "start": item.start, "end": item.end, "room": item.room.strip(),
                      "user_id": teacher, "created_at": db.today(),
-                     "valid_from": None, "valid_to": None}
+                     "valid_from": item.valid_from, "valid_to": item.valid_to}
             schedule.append(entry)
             created.append(entry)
         return created
@@ -81,6 +111,13 @@ def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, A
             entry["room"] = item.room.strip()
         if "user_id" in item.model_fields_set:
             entry["user_id"] = _check_teacher(database, item.user_id, cls["school_id"])
+        for field in ("valid_from", "valid_to"):
+            if field in item.model_fields_set:
+                entry[field] = getattr(item, field)
+        bounds = domain.entry_bounds(entry)
+        _check_dates(bounds)
+        _clash(database["schedule"], cls, entry["weekday"], entry["start"], entry["end"], bounds,
+               skip_id=entry["id"])
         return entry
 
     return {"ok": True, "entry": db.transaction(_apply)}

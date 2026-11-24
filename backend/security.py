@@ -199,6 +199,17 @@ def require_teacher(request: Request) -> Dict[str, Any]:
     return user
 
 
+def require_checkin_admin(request: Request) -> Dict[str, Any]:
+    """Раздел «Отметки преподавателей»: администратор и ответственный за отметки.
+    Учителю без поручения и администрации школы — 403, в том числе на чтение:
+    там часы, ставки и суммы."""
+    user = require_panel(request)
+    if not db.can_manage_checkins(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Раздел отметок доступен администратору "
+                                                       "и ответственному за отметки")
+    return user
+
+
 def require_superadmin(request: Request) -> Dict[str, Any]:
     """Только суперадмин: школы, учителя, витрина призов."""
     user = require_panel(request)

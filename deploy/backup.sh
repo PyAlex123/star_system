@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Резервная копия системы наград: база звёзд и загруженные фотографии.
+# Резервная копия системы наград: база звёзд, отметки преподавателей и загруженные фотографии.
 #
 # Запуск вручную:
 #   bash deploy/backup.sh
@@ -23,7 +23,23 @@ mkdir -p "$BACKUP_DIR"
 STAMP="$(date +%Y-%m-%d_%H-%M)"
 ARCHIVE="${BACKUP_DIR}/stars_${STAMP}.tar.gz"
 
-tar -czf "$ARCHIVE" -C "$PROJECT_DIR" data
+# База отметок (SQLite): живой файл посреди записи может попасть в архив несогласованным,
+# поэтому кладём согласованный снимок. Его делает приложение — по команде ниже и само каждую ночь.
+# При восстановлении приложение само сделает снимок базой (backend/checkin/store.py).
+if command -v docker >/dev/null 2>&1 \
+        && docker compose -f "${PROJECT_DIR}/docker-compose.yml" ps --status running -q stars 2>/dev/null | grep -q .; then
+    if docker compose -f "${PROJECT_DIR}/docker-compose.yml" exec -T stars \
+            python -m backend.checkin.store snapshot >/dev/null; then
+        echo "Снимок базы отметок обновлён"
+    else
+        echo "Снимок базы отметок не обновился — в архив пойдёт ночной"
+    fi
+else
+    echo "Контейнер не запущен — в архив пойдёт ночной снимок базы отметок"
+fi
+
+tar -czf "$ARCHIVE" -C "$PROJECT_DIR" \
+    --exclude=data/checkin.sqlite --exclude=data/checkin.sqlite-journal data
 
 SIZE="$(du -h "$ARCHIVE" | cut -f1)"
 echo "$(date '+%Y-%m-%d %H:%M')  создана копия: $(basename "$ARCHIVE") ($SIZE)"

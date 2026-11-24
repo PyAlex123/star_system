@@ -65,7 +65,7 @@ ADMIN_ONLY_USER_FIELDS = ("password_shown", "invite_code")
 # Поля сотрудника для отметок (схема 9). Значения по умолчанию — для миграции и новых записей.
 STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
     "tg_id": None, "tg_username": None, "tg_bound_at": None, "tg_blocked_at": None,
-    "invite_code": None, "lang": "ru", "consent_at": None, "hourly_rate": None,
+    "invite_code": None, "invite_created_at": None, "lang": "ru", "consent_at": None, "hourly_rate": None,
     # Отмечается ли сотрудник в боте. Уроки и проверки — только у таких: учитель
     # занятия по умолчанию тот, кто его внёс, в том числе администратор.
     "checkin_tracked": False,
@@ -205,6 +205,16 @@ def is_school_admin(user: Optional[Dict[str, Any]]) -> bool:
 def can_edit(user: Optional[Dict[str, Any]]) -> bool:
     """Менять данные может администратор и учитель; администрация школы — только смотрит."""
     return bool(user) and user.get("role") in (ROLE_SUPERADMIN, ROLE_TEACHER)
+
+
+def can_manage_checkins(user: Optional[Dict[str, Any]]) -> bool:
+    """Раздел «Отметки»: администратор и учитель, которому его поручили.
+    Администрации школы — никогда: она только смотрит."""
+    if not user:
+        return False
+    if user.get("role") == ROLE_SUPERADMIN:
+        return True
+    return user.get("role") == ROLE_TEACHER and bool(user.get("checkin_manager"))
 
 
 def allowed_school_ids(db: Dict[str, Any], user: Optional[Dict[str, Any]]) -> set:

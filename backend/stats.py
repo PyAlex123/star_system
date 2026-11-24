@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
 
 from . import db
+from .checkin.domain import entry_active_on, entry_bounds
 
 TOP_SIZE = 5
 IDLE_LESSONS = 3          # столько уроков подряд без звёзд — «давно без звёзд»
@@ -180,10 +181,12 @@ def student_activity(database: Dict[str, Any], student: Dict[str, Any], now: Opt
 # ── Расписание ────────────────────────────────────────────────────────────────
 
 def class_schedule(database: Dict[str, Any], class_id: Optional[int]) -> List[Dict[str, Any]]:
-    """Занятия класса по дням недели и времени, с именем учителя."""
+    """Действующие сегодня занятия класса по дням недели и времени, с именем учителя.
+    Закрытое или ещё не начавшееся занятие ребёнок не увидит «следующим уроком»."""
     names = {u["id"]: u.get("name", "") for u in database.get("users", [])}
+    now = today()
     items = [dict(e, teacher=names.get(e.get("user_id"), "")) for e in database.get("schedule", [])
-             if e.get("class_id") == class_id]
+             if e.get("class_id") == class_id and entry_active_on(e, now)]
     return sorted(items, key=lambda e: (e["weekday"], e["start"]))
 
 
@@ -198,10 +201,12 @@ def schedule_plan(database: Dict[str, Any], class_ids: Iterable[int], start: Opt
     for entry in database.get("schedule", []):
         if entry.get("class_id") not in ids:
             continue
-        created = parse_day(entry.get("created_at")) or end
+        valid_from, valid_to = entry_bounds(entry)
+        created = valid_from or end
         first = max(created, start) if start else created
+        last = min(end, valid_to) if valid_to else end
         day = first + timedelta(days=(entry["weekday"] - 1 - first.weekday()) % 7)
-        while day <= end:
+        while day <= last:
             planned += 1
             held += (entry["class_id"], day.isoformat()) in held_days
             day += timedelta(weeks=1)

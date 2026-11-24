@@ -112,11 +112,24 @@ def geo_verdict(school: Optional[Dict[str, Any]], lat: float, lon: float) -> Tup
 
 # ── Расписание → уроки по датам ───────────────────────────────────────────────
 
+def entry_bounds(entry: Dict[str, Any]) -> Tuple[Optional[date], Optional[date]]:
+    """Первый и последний день занятия. valid_from пустое — с того дня, как внесли;
+    None — без границы."""
+    return (_day(entry.get("valid_from")) or _day(entry.get("created_at")), _day(entry.get("valid_to")))
+
+
 def entry_active_on(entry: Dict[str, Any], day: date) -> bool:
-    """Действует ли занятие в этот день. valid_from пустое — с того дня, как внесли."""
-    start = _day(entry.get("valid_from")) or _day(entry.get("created_at"))
-    end = _day(entry.get("valid_to"))
+    """Действует ли занятие в этот день."""
+    start, end = entry_bounds(entry)
     return (start is None or start <= day) and (end is None or day <= end)
+
+
+def ranges_overlap(a: Tuple[Optional[date], Optional[date]], b: Tuple[Optional[date], Optional[date]]) -> bool:
+    """Пересекаются ли два срока действия (None — без границы)."""
+    a_start, a_end = a
+    b_start, b_end = b
+    return (a_end is None or b_start is None or b_start <= a_end) and \
+           (b_end is None or a_start is None or a_start <= b_end)
 
 
 def _covers(exception: Dict[str, Any], day: date) -> bool:
