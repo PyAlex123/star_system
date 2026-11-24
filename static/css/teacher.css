@@ -744,7 +744,28 @@ body.is-sadmin .editor-only { display: none !important; }
 .user-row { min-height: 56px; border-top: 1px solid var(--line-soft); }
 .user-row .n { font-weight: 600; }
 .user-row .acts { display: flex; justify-content: flex-end; gap: 6px; }
-.tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.tag-row .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-row .n { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.user-sub { display: flex; flex-wrap: wrap; gap: 4px; font-weight: 400; }
+
+/* ── Отметки преподавателей: подготовка ────────────────────── */
+
+.user-checkin { display: flex; flex-direction: column; gap: 4px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.user-checkin .check { align-items: flex-start; padding: 7px 10px; line-height: 20px; }
+.user-checkin .check input { flex: none; margin-top: 1px; }
+.user-checkin .field { margin-top: 8px; }
+.user-tg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; padding: 12px 14px;
+  border-radius: var(--r12); background: var(--surface-2); }
+.user-tg p { flex: 1 1 220px; margin: 0; font-size: 14px; line-height: 20px; }
+.invite-box { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px;
+  border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); }
+.invite-box b { flex: 1 1 220px; font: 500 14px/20px var(--font-mono); overflow-wrap: anywhere; }
+.menu-note { margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--muted); }
+.loc-row { display: flex; gap: 8px; }
+.loc-row input { flex: 1; min-width: 0; }
+.loc-map { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 14px; font-weight: 600;
+  color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
 
 /* ── Окна: классы, учителя, данные входа, тема ─────────────── */
 
@@ -766,7 +787,7 @@ body.is-sadmin .editor-only { display: none !important; }
 .check-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
 .check { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--r8); cursor: pointer; font-size: 14px; }
 .check:hover { background: var(--surface-2); }
-.check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.check input { flex: none; width: 18px; height: 18px; accent-color: var(--primary); }
 
 .info-body { font-size: 15px; line-height: 22px; color: var(--text); }
 .info-body p { margin-bottom: 10px; color: var(--muted); }
@@ -912,6 +933,12 @@ button.sch-card:hover { border-color: var(--line-strong); border-left-color: var
 .day-pick button.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .sch-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .sch-row .field { min-width: 0; }
+.sch-row.two { grid-template-columns: 1fr 1fr; }
+.sch-split { flex: none; align-self: flex-start; max-width: 100%; }
+.sch-valid { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--surface-3);
+  color: var(--muted); font: 600 11px/18px var(--font-ui); vertical-align: 1px; white-space: nowrap; }
+.week-nav { display: flex; align-items: center; gap: 6px; }
+.week-nav .btn { font-variant-numeric: tabular-nums; }
 input[type="time"] { width: 100%; min-width: 0; height: 44px; padding: 0 12px; border: var(--bw) solid var(--line-strong); border-radius: var(--r10);
   background: var(--field-bg); color: var(--text); font: 400 15px/20px var(--font-ui); font-variant-numeric: tabular-nums; }
 input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -971,6 +998,27 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
 }
 @media (max-width: 700px) {
   .week-grid { grid-template-columns: 1fr; }
+  .week-nav { width: 100%; }
+  .week-nav .btn { flex: 1; }
+  .week-nav .icon-btn { width: 44px; height: 44px; }
+  /* Сотрудник — карточкой: шесть колонок в телефон не помещаются */
+  .users-head { display: none; }
+  .user-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n acts" "login pw" "role role" "schools schools";
+    row-gap: 8px; padding: 14px 16px; }
+  .user-row > :nth-child(1) { grid-area: n; }
+  .user-row > :nth-child(2) { grid-area: login; }
+  .user-row > :nth-child(3) { grid-area: pw; justify-self: end; }
+  .user-row > :nth-child(4) { grid-area: role; }
+  .user-row > :nth-child(5) { grid-area: schools; }
+  .user-row > :nth-child(6) { grid-area: acts; align-self: start; }
+  .user-row .acts .icon-btn, .user-row .pw-cell .icon-btn { width: 44px; height: 44px; }
+  /* Новые кнопки на телефоне — не меньше 44 px под палец */
+  .user-tg .btn, .week-nav .btn { height: 44px; }
+  .sch-split { height: auto; min-height: 44px; white-space: normal; text-align: left; }
+  .user-checkin .check { min-height: 44px; align-items: center; }
+  .loc-map { min-height: 44px; }
+  .sch-row { grid-template-columns: 1fr 1fr; }
+  .sch-row > .field:nth-child(3) { grid-column: 1 / -1; }
   .day { min-height: 0; }
   #activityBody .tiles { grid-template-columns: 1fr 1fr; }
   .st-table.cls .st-row { grid-template-columns: minmax(0, 1fr) 56px 64px; }

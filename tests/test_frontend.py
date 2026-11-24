@@ -65,11 +65,14 @@ def test_syntax(name):
     assert r.returncode == 0, r.stderr
 
 
-def eval_common(expression: str):
+def eval_common(expression: str, extra=()):
+    """Выражение после common.js (и дополнительных скриптов без кода на верхнем уровне)."""
+    loads = "".join(f"vm.runInContext(fs.readFileSync({json.dumps(str(JS / name))}, 'utf8'), ctx);"
+                    for name in ("common.js", *extra))
     script = (
         "const vm = require('vm'), fs = require('fs');"
         "const ctx = vm.createContext({window: {APP_BASE: '/stars'}, document: {}});"
-        f"vm.runInContext(fs.readFileSync({json.dumps(str(JS / 'common.js'))}, 'utf8'), ctx);"
+        f"{loads}"
         f"console.log(JSON.stringify(vm.runInContext({json.dumps(expression)}, ctx)));"
     )
     r = run_node(script=script)
@@ -97,3 +100,60 @@ def test_error_text_handles_lists():
     """Иначе на экране оказалось бы «[object Object]»."""
     assert eval_common('errorText([{msg: "a"}, {msg: "b"}])') == "a; b"
     assert eval_common('errorText("Готово")') == "Готово"
+
+
+# ── Отметки преподавателей: помощники панели (static/js/checkin.js) ───────────
+
+CHECKIN = ("schedule.js", "checkin.js")
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("41.311081, 69.279737", {"lat": 41.311081, "lon": 69.279737}),
+    ("41.311081 69.279737", {"lat": 41.311081, "lon": 69.279737}),
+    ("  41.3;69.2 ", {"lat": 41.3, "lon": 69.2}),
+    ("41.311081° N, 69.279737° E", {"lat": 41.311081, "lon": 69.279737}),
+    ("https://www.google.com/maps/place/x/@41.3110811,69.2797372,17z/data=x", {"lat": 41.3110811, "lon": 69.2797372}),
+    ("", None),
+])
+def test_parse_coords(text, expected):
+    assert eval_common(f"parseCoords({json.dumps(text)})", CHECKIN) == expected
+
+
+@pytest.mark.parametrize("text", ["Ташкент", "41.3", "141.3, 69.2", "41.3, 200", "41,311 69,279"])
+def test_parse_coords_rejects(text):
+    result = eval_common(f"(() => {{ try {{ parseCoords({json.dumps(text)}); return 'ok'; }} "
+                         f"catch (e) {{ return e.message; }} }})()", CHECKIN)
+    assert result != "ok" and len(result) > 20, "понятное объяснение, а не молчание"
+
+
+def test_entry_active_on_matches_server_rule():
+    """Как backend/checkin/domain.entry_active_on: пустое «с» — с того дня, как внесли."""
+    entry = '{created_at: "2026-11-10", valid_from: null, valid_to: "2026-12-31"}'
+    assert eval_common(f"[entryActiveOn({entry}, '2026-11-09'), entryActiveOn({entry}, '2026-11-10'),"
+                       f" entryActiveOn({entry}, '2026-12-31'), entryActiveOn({entry}, '2027-01-01')]",
+                       CHECKIN) == [False, True, True, False]
+    assert eval_common("entryActiveOn({valid_from: '2026-12-01', created_at: '2026-11-30'}, '2026-11-30')",
+                       CHECKIN) is False
+    assert eval_common("entryActiveOn({weekday: 1}, '2000-01-01')", CHECKIN) is True
+
+
+def test_entry_bounds_label_and_day_before():
+    assert eval_common("entryBoundsLabel({valid_to: '2026-12-31'}, '2026-11-24')", CHECKIN).startswith("до 31.12")
+    assert eval_common("entryBoundsLabel({valid_from: '2026-12-01'}, '2026-11-24')", CHECKIN).startswith("с 01.12")
+    assert eval_common("entryBoundsLabel({valid_from: '2026-11-01'}, '2026-11-24')", CHECKIN) == "", \
+        "уже действующее «с» не показываем"
+    assert eval_common("dayBefore('2026-03-01')", CHECKIN) == "2026-02-28"
+    assert eval_common("dayBefore('2027-01-01')", CHECKIN) == "2026-12-31"
+
+
+def test_invite_state():
+    now = "Date.parse('2026-11-24T10:00:00Z')"
+    cases = {
+        "{tg_id: 900}": "bound",
+        "{tg_id: 900, tg_blocked_at: '2026-11-20'}": "blocked",
+        "{}": "none",
+        "{invite_code: 'x', invite_created_at: '2026-11-20T10:00:00+00:00'}": "pending",
+        "{invite_code: 'x', invite_created_at: '2026-11-16T10:00:00+00:00'}": "expired",
+    }
+    for user, expected in cases.items():
+        assert eval_common(f"inviteState({user}, {now})", CHECKIN) == expected, user

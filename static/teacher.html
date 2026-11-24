@@ -201,6 +201,13 @@
       <h1 class="page-title">Расписание</h1>
       <p class="page-sub">Занятия со звёздами по дням недели. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
     </div>
+    <div class="week-nav" role="group" aria-label="Неделя">
+      <button class="icon-btn boxed" onclick="shiftScheduleWeek(-1)" title="Предыдущая неделя" aria-label="Предыдущая неделя">
+        <svg class="ic ic-sm"><use href="#i-chevron-left"></use></svg></button>
+      <button class="btn btn-ghost btn-sm" id="weekLabel" onclick="shiftScheduleWeek(0)" title="К этой неделе">Эта неделя</button>
+      <button class="icon-btn boxed" onclick="shiftScheduleWeek(1)" title="Следующая неделя" aria-label="Следующая неделя">
+        <svg class="ic ic-sm"><use href="#i-chevron-right"></use></svg></button>
+    </div>
     <div class="seg class-seg" id="scheduleClasses" role="tablist" aria-label="Класс"></div>
     <button class="btn editor-only" onclick="openScheduleEntry()">
       <svg class="ic"><use href="#i-plus"></use></svg>Занятие
@@ -407,6 +414,43 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalLocation" onclick="if(event.target===this) closeModal('modalLocation')">
+  <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="locationTitle">
+    <div>
+      <div class="modal-title" id="locationTitle">Место на карте</div>
+      <p class="modal-sub">Школа <b id="locationSchool">—</b>. Преподаватель отмечается в боте геолокацией:
+        дальше радиуса от этой точки — отметка уйдёт на проверку.</p>
+    </div>
+    <div class="field">
+      <label for="locationCoords">Координаты</label>
+      <div class="loc-row">
+        <input type="text" id="locationCoords" class="input-mono" placeholder="41.311081, 69.279737"
+               autocomplete="off" spellcheck="false" oninput="updateLocationPreview()">
+        <button type="button" class="btn btn-ghost" id="locationHere" onclick="useMyLocation()">
+          <svg class="ic ic-sm"><use href="#i-target"></use></svg>Я в школе</button>
+      </div>
+      <p class="field-hint">В Google или Яндекс Картах нажмите на здание школы и подержите — появятся координаты.
+        Скопируйте и вставьте сюда.</p>
+      <p class="field-error" id="locationError" hidden></p>
+      <a class="loc-map" id="locationMap" href="#" target="_blank" rel="noopener" hidden>
+        <svg class="ic ic-sm"><use href="#i-pin"></use></svg>Проверить точку на карте</a>
+    </div>
+    <div class="field">
+      <label for="locationRadius">Радиус, метров</label>
+      <input type="number" id="locationRadius" min="30" max="2000" step="10" value="150" inputmode="numeric">
+      <p class="field-hint">Отметка внутри радиуса — «на месте». 150 м хватает на здание с двором.</p>
+    </div>
+    <div class="field">
+      <label for="locationAddress">Адрес <span class="muted">— по желанию</span></label>
+      <input type="text" id="locationAddress" maxlength="255" placeholder="Чиланзар, 5-й квартал, 12">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalLocation')">Отмена</button>
+      <button class="btn" onclick="saveSchoolLocation()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalClass" onclick="if(event.target===this) closeModal('modalClass')">
   <div class="modal" style="max-width:440px;">
     <div>
@@ -472,6 +516,18 @@
       <span class="field-label">Школы</span>
       <div class="check-list" id="userSchools"></div>
     </div>
+    <div class="user-checkin" id="userCheckinField">
+      <span class="field-label">Отметки в Telegram</span>
+      <label class="check"><input type="checkbox" id="userTracked">
+        <span>Отмечается в боте <span class="muted">— геолокация и кругляшок на уроках</span></span></label>
+      <label class="check" id="userManagerRow"><input type="checkbox" id="userManager">
+        <span>Ведёт раздел «Отметки» <span class="muted">— проверяет уроки и делает отчёт</span></span></label>
+      <div class="field">
+        <label for="userRate">Ставка, сум в час</label>
+        <input type="text" id="userRate" inputmode="numeric" autocomplete="off" placeholder="пусто — в отчёте только часы">
+      </div>
+      <div class="user-tg" id="userTelegram" hidden></div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalUser')">Отмена</button>
       <button class="btn" onclick="saveUser()">Сохранить</button>
@@ -502,6 +558,13 @@
       <label for="schTeacher">Учитель</label>
       <select id="schTeacher"></select>
     </div>
+    <div class="sch-row two">
+      <div class="field"><label for="schFrom" id="schFromLabel">Действует с</label><input type="date" id="schFrom"></div>
+      <div class="field"><label for="schTo">по</label><input type="date" id="schTo"></div>
+    </div>
+    <p class="field-hint" id="schDatesHint">Пусто — с сегодняшнего дня и без конца.</p>
+    <button type="button" class="btn btn-ghost btn-sm sch-split" id="schSplit" onclick="startScheduleSplit()" hidden>
+      <svg class="ic ic-sm"><use href="#i-calendar"></use></svg>Новое время или учитель с даты…</button>
     <div class="modal-actions">
       <button class="btn btn-danger-quiet" id="schDelete" onclick="removeScheduleEntry()" hidden>
         <svg class="ic ic-sm"><use href="#i-trash"></use></svg>Удалить</button>
@@ -640,5 +703,6 @@
 <script src="{{BASE}}/static/js/teacher.js"></script>
 <script src="{{BASE}}/static/js/schedule.js"></script>
 <script src="{{BASE}}/static/js/stats.js"></script>
+<script src="{{BASE}}/static/js/checkin.js"></script>
 </body>
 </html>
