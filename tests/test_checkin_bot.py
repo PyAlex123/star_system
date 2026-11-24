@@ -10,12 +10,13 @@ from typing import Any, Dict, List
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
-from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, SendMessage
-from aiogram.types import Chat, Message, Update
+from aiogram.exceptions import TelegramForbiddenError
+from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, GetMe, SendMessage
+from aiogram.types import Chat, Message, Update, User
 
 from backend import db
 from backend.checkin import clock, service, store
-from backend.checkin.handlers import build_router
+from backend.checkin.handlers import build_group_router, build_router
 from conftest import load_db
 
 MON = date(2026, 11, 23)
@@ -30,12 +31,22 @@ class FakeSession(BaseSession):
     def __init__(self):
         super().__init__()
         self.calls: List[Any] = []
+        self.message_ids: Dict[int, int] = {}       # номер вызова → номер отправленного сообщения
+        self.forbidden: set = set()                 # чаты, где бота заблокировали или выгнали
 
     async def make_request(self, bot, method, timeout=None):
         self.calls.append(method)
-        if isinstance(method, SendMessage):
-            return Message(message_id=1000 + len(self.calls), date=datetime.now(timezone.utc),
-                           chat=Chat(id=method.chat_id, type="private"), text=method.text)
+        chat_id = getattr(method, "chat_id", None)
+        if chat_id in self.forbidden:
+            raise TelegramForbiddenError(method=method, message="Forbidden: bot was blocked by the user")
+        if isinstance(method, GetMe):
+            return User(id=654321, is_bot=True, first_name="Отметки", username="test_checkin_bot")
+        if method.__returning__ is Message:
+            message_id = 1000 + len(self.calls)
+            self.message_ids[len(self.calls) - 1] = message_id
+            return Message(message_id=message_id, date=datetime.now(timezone.utc),
+                           chat=Chat(id=chat_id, type="private" if chat_id and chat_id > 0 else "supergroup"),
+                           text=getattr(method, "text", None))
         return True
 
     async def stream_content(self, *args, **kwargs):
@@ -54,6 +65,7 @@ class TeacherChat:
         self.bot = Bot(token="654321:CHECKIN-test-token", session=self.session)
         self.dp = Dispatcher()
         self.dp.include_router(build_router())
+        self.dp.include_router(build_group_router())      # как в настоящем боте
         self.tg_id = tg_id
         self.chat_type = chat_type
         self.update_id = 0
@@ -73,7 +85,8 @@ class TeacherChat:
     def send(self, at: datetime, **fields) -> List[str]:
         message = dict(self._base(at), **fields)
         calls = self._feed({"update_id": self.update_id, "message": message})
-        return [c.text for c in calls if isinstance(c, (SendMessage, EditMessageText))]
+        own_chat = message["chat"]["id"]
+        return [c.text for c in calls if isinstance(c, (SendMessage, EditMessageText)) and c.chat_id == own_chat]
 
     def text(self, value: str, at: datetime = None) -> List[str]:
         entities = [{"type": "bot_command", "offset": 0, "length": len(value.split()[0])}] \

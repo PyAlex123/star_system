@@ -17,7 +17,7 @@ from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, Update
 
 from .. import config
-from .handlers import build_router
+from .handlers import build_group_router, build_router
 
 log = logging.getLogger("stars.checkin.bot")
 
@@ -102,6 +102,7 @@ async def start() -> None:
     _bot = Bot(token=config.CHECKIN_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     _dispatcher = Dispatcher()
     _dispatcher.include_router(build_router())
+    _dispatcher.include_router(build_group_router())
     runner = _setup_webhook() if config.USE_WEBHOOK else _run_polling()
     _task = asyncio.create_task(runner, name="checkin-bot")
 

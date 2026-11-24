@@ -89,4 +89,11 @@ TEXTS = {
              "Qaror kutmoqda: {pending}\n"
              "Soatlar: {hours}",
     "unknown": "Tushunmadim. Quyidagi menyudan amalni tanlang.",
+
+    # Eslatma va administrator
+    "late_reminder": "⏰ Soat {time} dagi dars ({school}, {cls}) boshlandi, lekin belgi yoʻq. "
+                     "Agar joyida boʻlsangiz — «📍 Darsga keldim» tugmasini bosing va dumaloq video yozing.",
+    "admin_bound": "Telegram bogʻlandi, {name}. Siz davomat administratorisiz: bu botni yopiq «Отметки» "
+                   "guruhiga qoʻshing va u yerda /setchat buyrugʻini yuboring. U yerga belgilar va "
+                   "tugmali dars kartochkalari keladi.",
 }

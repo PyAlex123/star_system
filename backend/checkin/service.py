@@ -859,7 +859,7 @@ def bind_invite(code: str, tg_id: int, username: Optional[str],
             return db.NO_SAVE
         result["before"] = dict(user)
         user.update(tg_id=tg_id, tg_username=username, tg_bound_at=clock.iso(now), tg_blocked_at=None,
-                    invite_code=None, invite_created_at=None, checkin_tracked=True)
+                    invite_code=None, invite_created_at=None)
         result.update(status="ok", user=dict(user))
         return None
 
@@ -944,3 +944,222 @@ def month_for(user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
         "planned": 0, "confirmed": 0, "late": 0, "pending": 0, "minutes": 0, "hours": 0.0}
     return {"year": today.year, "month": today.month, **{k: row[k] for k in
                                                           ("planned", "confirmed", "late", "pending", "minutes", "hours")}}
+
+
+# ── Группа «Отметки»: очередь отправки, решения из группы, сводка ─────────────
+
+NOTIFY_MAX_AGE = timedelta(hours=12)     # старше — не шлём: после простоя или при первом включении без лавины
+REPORT_MAX_AGE = timedelta(hours=24)
+REASON_TTL = timedelta(hours=2)          # сколько ждём ответ администратора с причиной
+SUMMARY_HOUR = 9                         # сводка за прошлый месяц — 1-го числа после 09:00
+
+
+def chat_admin(tg_id: int) -> Optional[Dict[str, Any]]:
+    """Кто может решать уроки из группы: администратор или ответственный за отметки
+    с привязанным Telegram."""
+    user = user_by_tg(tg_id)
+    return user if user and db.can_manage_checkins(user) else None
+
+
+def set_report_chat(tg_id: int, chat_id: int, title: str = "") -> Optional[Dict[str, Any]]:
+    admin = chat_admin(tg_id)
+    if not admin:
+        with store.tx() as conn:
+            store.log_event(conn, "setchat_refused", None, tg_id, {"chat_id": chat_id})
+        return None
+    with store.tx() as conn:
+        before = store.get_settings(conn)["report_chat_id"]
+        store.set_setting(conn, "report_chat_id", chat_id)
+        if before != chat_id:
+            store.audit(conn, _actor(admin), "settings", None, "report_chat",
+                        {"report_chat_id": before}, {"report_chat_id": chat_id, "title": title})
+    return admin
+
+
+def migrate_report_chat(old_chat_id: int, new_chat_id: int) -> bool:
+    """Группа стала супергруппой — у неё новый номер, а отметки должны идти туда же."""
+    with store.tx() as conn:
+        if store.get_settings(conn)["report_chat_id"] != old_chat_id:
+            return False
+        store.set_setting(conn, "report_chat_id", new_chat_id)
+        store.log_event(conn, "report_chat_migrated", payload={"from": old_chat_id, "to": new_chat_id})
+    return True
+
+
+def drop_report_chat(chat_id: int) -> bool:
+    """Бота убрали из группы — больше туда не пишем; в панели будет видно «группа не подключена»."""
+    with store.tx() as conn:
+        if store.get_settings(conn)["report_chat_id"] != chat_id:
+            return False
+        store.set_setting(conn, "report_chat_id", 0)
+        store.log_event(conn, "report_chat_dropped", payload={"chat_id": chat_id})
+    return True
+
+
+def _checkin_lessons(conn, checkin: Dict[str, Any]) -> List[Dict[str, Any]]:
+    ids = store.loads(checkin.get("lesson_ids")) or []
+    if not ids:
+        return []
+    return store.rows(conn.execute(
+        f"SELECT * FROM planned_lessons WHERE id IN ({', '.join('?' * len(ids))}) ORDER BY starts_at", ids))
+
+
+def outbox(now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Что отправить: копии отметок, карточки уроков, напоминания, карточки к закрытию.
+
+    Слишком старое помечается пропущенным здесь же — после простоя сервера или при первом
+    включении группа не получит пачку вчерашних карточек.
+    """
+    now = now or clock.now_utc()
+    database = db.load_db()
+    users = {u["id"]: u for u in database.get("users", [])}
+    names = {uid: u.get("name", "") for uid, u in users.items()}
+    schools = {s["id"]: s.get("name", "") for s in database.get("schools", [])}
+    with store.tx() as conn:
+        chat_id = store.get_settings(conn)["report_chat_id"]
+        stamp = store.now()
+        oldest_report = clock.iso(now - REPORT_MAX_AGE)
+        conn.execute("UPDATE checkins SET report_message_id = 0, updated_at = ? WHERE report_message_id IS NULL "
+                     "AND status IN ('accepted', 'no_video') AND created_at < ?", (stamp, oldest_report))
+        conn.execute("UPDATE notifications SET status = 'skipped' WHERE status = 'pending' AND created_at < ?",
+                     (clock.iso(now - NOTIFY_MAX_AGE),))
+
+        reports = []
+        if chat_id:
+            for checkin in store.rows(conn.execute(
+                    "SELECT * FROM checkins WHERE report_message_id IS NULL AND status IN ('accepted', 'no_video') "
+                    "ORDER BY id LIMIT 30")):
+                lessons = _present_many(conn, _checkin_lessons(conn, checkin), database, now)
+                reports.append({"checkin": checkin, "teacher": names.get(checkin["user_id"], ""),
+                                "school": schools.get(checkin.get("school_id"), ""), "lessons": lessons})
+
+        notes = []
+        for note in store.rows(conn.execute(
+                "SELECT * FROM notifications WHERE status = 'pending' ORDER BY id LIMIT 60")):
+            lesson = store.row(conn.execute("SELECT * FROM planned_lessons WHERE id = ?",
+                                            (note["lesson_id"],)).fetchone())
+            if not lesson:
+                conn.execute("UPDATE notifications SET status = 'skipped' WHERE id = ?", (note["id"],))
+                continue
+            if note["kind"] == "review" and lesson["status"] not in d.AWAITING_DECISION:
+                conn.execute("UPDATE notifications SET status = 'skipped' WHERE id = ?", (note["id"],))
+                continue
+            if note["kind"] == "late_teacher" and (lesson["status"] != d.NO_CHECKIN
+                                                   or clock.parse(lesson["ends_at"]) <= now):
+                conn.execute("UPDATE notifications SET status = 'skipped' WHERE id = ?", (note["id"],))
+                continue
+            if note["kind"] == "review" and not chat_id:
+                continue                                  # ждём, пока подключат группу
+            teacher = users.get(lesson.get("user_id")) or {}
+            notes.append({"note": note, "lesson": _present_many(conn, [lesson], database, now)[0],
+                          "teacher": {k: teacher.get(k) for k in ("id", "name", "tg_id", "lang", "tg_blocked_at",
+                                                                  "consent_at")}})
+
+        closing = []
+        for note in store.rows(conn.execute(
+                "SELECT n.* FROM notifications n JOIN planned_lessons l ON l.id = n.lesson_id "
+                "WHERE n.kind = 'review' AND n.status = 'sent' AND l.status NOT IN (?, ?) LIMIT 60",
+                (d.NO_CHECKIN, d.NEEDS_REVIEW))):
+            lesson = store.row(conn.execute("SELECT * FROM planned_lessons WHERE id = ?",
+                                            (note["lesson_id"],)).fetchone())
+            closing.append({"note": note, "lesson": _present_many(conn, [lesson], database, now)[0]})
+    return {"chat_id": chat_id, "reports": reports, "notifications": notes, "closing": closing}
+
+
+def mark_report(checkin_id: int, chat_id: int, message_id: int, video_id: Optional[int]) -> None:
+    with store.tx() as conn:
+        conn.execute("UPDATE checkins SET report_chat_id = ?, report_message_id = ?, report_video_id = ?, "
+                     "updated_at = ? WHERE id = ?", (chat_id, message_id, video_id, store.now(), checkin_id))
+
+
+def mark_notification(note_id: int, status: str, chat_id: Optional[int] = None,
+                      message_id: Optional[int] = None) -> None:
+    with store.tx() as conn:
+        if status == "sent":
+            conn.execute("UPDATE notifications SET status = 'sent', chat_id = ?, message_id = ?, sent_at = ? "
+                         "WHERE id = ?", (chat_id, message_id, store.now(), note_id))
+        else:
+            conn.execute("UPDATE notifications SET status = ? WHERE id = ?", (status, note_id))
+
+
+def mark_blocked_by_user_id(user_id: int) -> None:
+    """Сообщение преподавателю не дошло — он заблокировал бота."""
+    user = _update_user(user_id, tg_blocked_at=clock.iso(clock.now_utc()))
+    if user:
+        with store.tx() as conn:
+            store.log_event(conn, "bot_blocked", user_id, user.get("tg_id"))
+
+
+def card_for(lesson_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Урок в том виде, в каком его показывает карточка в группе."""
+    now = now or clock.now_utc()
+    database = db.load_db()
+    with store.tx() as conn:
+        return _present_many(conn, [_lesson(conn, lesson_id)], database, now)[0]
+
+
+def close_cards(lesson_id: int) -> List[Dict[str, Any]]:
+    """Карточки урока в группе, которые пора закрыть после решения (их правит бот)."""
+    with store.tx() as conn:
+        notes = store.rows(conn.execute(
+            "SELECT * FROM notifications WHERE lesson_id = ? AND kind = 'review' AND status = 'sent'", (lesson_id,)))
+        conn.execute("UPDATE notifications SET status = 'closed' WHERE lesson_id = ? AND kind = 'review' "
+                     "AND status = 'sent'", (lesson_id,))
+    return notes
+
+
+def decide_from_chat(tg_id: int, lesson_id: int, action: str, reason: str) -> Dict[str, Any]:
+    """Решение кнопкой в группе — те же правила, что в панели, и тот же журнал правок."""
+    admin = chat_admin(tg_id)
+    if not admin:
+        raise CheckinError("Решать уроки могут только администратор и ответственный за отметки")
+    decide(_actor(admin) | {"role": admin.get("role")}, [lesson_id], action, reason)
+    return admin
+
+
+def ask_reason(chat_id: int, message_id: int, lesson_id: int, action: str, tg_id: int) -> None:
+    admin = chat_admin(tg_id)
+    if not admin:
+        return
+    with store.tx() as conn:
+        conn.execute("INSERT OR REPLACE INTO pending_actions (chat_id, message_id, lesson_id, action, user_id, "
+                     "created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                     (chat_id, message_id, lesson_id, action, admin["id"], store.now()))
+
+
+def take_reason(chat_id: int, reply_to_id: int, tg_id: int, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+    """Ответ с причиной на вопрос бота: только от того, кто нажал кнопку, и пока вопрос свежий."""
+    now = now or clock.now_utc()
+    admin = chat_admin(tg_id)
+    if not admin:
+        return None
+    with store.tx() as conn:
+        pending = store.row(conn.execute("SELECT * FROM pending_actions WHERE chat_id = ? AND message_id = ?",
+                                         (chat_id, reply_to_id)).fetchone())
+        if not pending or pending["user_id"] != admin["id"]:
+            return None
+        conn.execute("DELETE FROM pending_actions WHERE chat_id = ? AND message_id = ?", (chat_id, reply_to_id))
+        conn.execute("DELETE FROM pending_actions WHERE created_at < ?", (clock.iso(now - REASON_TTL),))
+    if now - clock.parse(pending["created_at"]) > REASON_TTL:
+        return None
+    return pending
+
+
+def summary_due(now: Optional[datetime] = None) -> Optional[tuple]:
+    """(год, месяц) прошлого месяца, если сегодня 1-е число после 09:00 и сводки ещё не было."""
+    now = now or clock.now_utc()
+    local = clock.local(now)
+    if local.day != 1 or local.hour < SUMMARY_HOUR:
+        return None
+    year, month = (local.year - 1, 12) if local.month == 1 else (local.year, local.month - 1)
+    with store.tx() as conn:
+        if not store.get_settings(conn)["report_chat_id"]:
+            return None
+        if store.job_value(conn, f"summary:{year:04d}-{month:02d}"):
+            return None
+    return year, month
+
+
+def mark_summary(year: int, month: int) -> None:
+    with store.tx() as conn:
+        store.set_job_value(conn, f"summary:{year:04d}-{month:02d}", store.now())

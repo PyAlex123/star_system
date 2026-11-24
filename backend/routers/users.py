@@ -106,7 +106,10 @@ def invite_to_checkins(user_id: int, me: Dict[str, Any] = Depends(require_supera
         before.update(user)
         user["invite_code"] = code
         user["invite_created_at"] = checkin_clock.iso(checkin_clock.now_utc())
-        user["checkin_tracked"] = True
+        # Администратору Telegram нужен для кнопок в группе «Отметки», а не для отметок:
+        # его занятия (он внёс их сам) в проверку не попадают
+        if not db.is_superadmin(user):
+            user["checkin_tracked"] = True
         return user
 
     user = db.transaction(_apply)

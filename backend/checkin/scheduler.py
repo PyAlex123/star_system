@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Optional
 
-from . import clock, service
+from . import clock, notify, service
 
 log = logging.getLogger("stars.checkin")
 
@@ -33,6 +33,7 @@ def run_once() -> Dict[str, Any]:
 
 
 async def _loop() -> None:
+    from . import bot as checkin_bot              # бот подключается позже планировщика
     while True:
         try:
             await asyncio.to_thread(run_once)
@@ -40,6 +41,12 @@ async def _loop() -> None:
             raise
         except Exception:
             log.exception("Отметки: тик планировщика не удался")
+        try:
+            await notify.drain(checkin_bot.get_bot())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Отметки: отправка в Telegram не удалась")
         await asyncio.sleep(INTERVAL_SEC)
 
 

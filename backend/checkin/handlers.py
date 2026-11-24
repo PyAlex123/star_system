@@ -17,10 +17,11 @@ from typing import Any, Dict, Optional
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import (CallbackQuery, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup,
-                           KeyboardButton, Message, ReplyKeyboardMarkup)
+from aiogram.types import (CallbackQuery, ChatMemberUpdated, ForceReply, InlineKeyboardButton, InlineKeyboardMarkup,
+                           KeyboardButton, Message, ReplyKeyboardMarkup, ReplyParameters)
 
-from . import service, store
+from .. import db
+from . import notify, service, store
 from .locales import LANGS, day_title, lang_of, minutes, month_title, t
 
 log = logging.getLogger("stars.checkin.bot")
@@ -73,6 +74,14 @@ async def _call(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
 
+def _not_tracked_text(user: Dict[str, Any]) -> str:
+    """Администратору отметок Telegram нужен для группы, а не для отметок — подсказываем, что делать."""
+    lang = lang_of(user.get("lang"))
+    if db.can_manage_checkins(user):
+        return t(lang, "admin_bound", name=esc(user.get("name")))
+    return t(lang, "not_tracked")
+
+
 async def _ready_user(message: Message) -> Optional[Dict[str, Any]]:
     """Сотрудник, который может отмечаться, или None — тогда человек уже получил объяснение."""
     user = await _call(service.user_by_tg, message.from_user.id)
@@ -81,7 +90,7 @@ async def _ready_user(message: Message) -> Optional[Dict[str, Any]]:
         return None
     lang = lang_of(user.get("lang"))
     if not user.get("checkin_tracked"):
-        await message.answer(t(lang, "not_tracked"))
+        await message.answer(_not_tracked_text(user))
         return None
     if not user.get("consent_at"):
         await message.answer(t(lang, "consent"), reply_markup=consent_keyboard(lang))
@@ -172,6 +181,9 @@ def build_router() -> Router:
                 return
             if status == "ok":
                 lang = lang_of(user.get("lang"))
+                if not user.get("checkin_tracked"):
+                    await message.answer(_not_tracked_text(user))
+                    return
                 await message.answer(t(lang, "invite_ok", name=esc(user.get("name"))))
                 await message.answer(t(lang, "choose_lang"), reply_markup=lang_keyboard())
                 return
@@ -181,7 +193,7 @@ def build_router() -> Router:
             return
         lang = lang_of(user.get("lang"))
         if not user.get("checkin_tracked"):
-            await message.answer(t(lang, "not_tracked"))
+            await message.answer(_not_tracked_text(user))
         elif not user.get("consent_at"):
             await message.answer(t(lang, "consent"), reply_markup=consent_keyboard(lang))
         else:
@@ -249,6 +261,8 @@ def build_router() -> Router:
                              note.file_id if note else None, note.file_unique_id if note else None,
                              _when(message), message.message_id)
         await message.answer(video_reply(lang, result), reply_markup=menu_keyboard(lang))
+        if result["result"] == "accepted" or result.get("problem") == "late":
+            await notify.drain(message.bot)              # копия в группу — сразу, а не через минуту
 
     @router.message(F.text)
     async def on_text(message: Message) -> None:
@@ -276,12 +290,102 @@ def build_router() -> Router:
         else:
             await message.answer(t(lang, "unknown"), reply_markup=menu_keyboard(lang))
 
-    @router.my_chat_member()
+    @router.my_chat_member(F.chat.type == "private")
     async def on_member(update: ChatMemberUpdated) -> None:
         """Преподаватель остановил бота — администратор увидит «заблокировал бота»."""
-        if update.chat.type != "private":
-            return
         blocked = update.new_chat_member.status == "kicked"
         await _call(service.set_blocked, update.from_user.id, blocked)
+
+    return router
+
+
+# ── Группа «Отметки» ──────────────────────────────────────────────────────────
+
+GROUPS = {"group", "supergroup"}
+NOT_ADMIN = ("Решать уроки могут только администратор и ответственный за отметки. "
+             "Привяжите Telegram по ссылке-приглашению из панели.")
+
+
+def build_group_router() -> Router:
+    """Закрытая группа администраторов: копии отметок, карточки уроков и кнопки решений.
+    Нажимать кнопки может только администратор или ответственный за отметки."""
+    router = Router(name="checkin-group")
+    router.message.filter(F.chat.type.in_(GROUPS))
+
+    @router.message(Command("setchat"))
+    async def on_setchat(message: Message) -> None:
+        admin = await _call(service.set_report_chat, message.from_user.id, message.chat.id, message.chat.title or "")
+        if admin:
+            await message.reply("✅ Готово: сюда будут приходить отметки преподавателей и карточки уроков "
+                                "без отметки. Решать по карточкам могут администратор и ответственные за отметки.")
+        else:
+            await message.reply("Эта команда — для администратора отметок. Сначала привяжите Telegram "
+                                "по ссылке-приглашению из панели (раздел «Сотрудники»).")
+
+    @router.message(F.migrate_to_chat_id)
+    async def on_migrate(message: Message) -> None:
+        await _call(service.migrate_report_chat, message.chat.id, message.migrate_to_chat_id)
+
+    @router.message(F.reply_to_message)
+    async def on_reason(message: Message) -> None:
+        """Ответ администратора с причиной «Не засчитывать»."""
+        pending = await _call(service.take_reason, message.chat.id, message.reply_to_message.message_id,
+                              message.from_user.id)
+        if not pending:
+            return
+        reason = (message.text or "").strip()
+        if not reason:
+            await _call(service.ask_reason, message.chat.id, message.reply_to_message.message_id,
+                        pending["lesson_id"], pending["action"], message.from_user.id)
+            await message.reply("Нужна причина текстом — ответьте на вопрос ещё раз.")
+            return
+        try:
+            await _call(service.decide_from_chat, message.from_user.id, pending["lesson_id"], pending["action"],
+                        reason)
+        except service.CheckinError as exc:
+            await message.reply(esc(exc))
+            return
+        await notify.refresh_card(message.bot, pending["lesson_id"], reason)
+        await message.reply("Готово: урок не засчитан, причина записана.")
+
+    @router.callback_query(F.data.startswith("ck:"))
+    async def on_card(callback: CallbackQuery) -> None:
+        try:
+            _, action, raw_id = callback.data.split(":")
+            lesson_id = int(raw_id)
+        except ValueError:
+            await callback.answer()
+            return
+        admin = await _call(service.chat_admin, callback.from_user.id)
+        if not admin:
+            await callback.answer(NOT_ADMIN, show_alert=True)
+            return
+        if action == "approve":
+            try:
+                await _call(service.decide_from_chat, callback.from_user.id, lesson_id, "approve",
+                            "Засчитано в группе «Отметки»")
+            except service.CheckinError as exc:
+                await callback.answer(str(exc), show_alert=True)
+                return
+            await callback.answer("Засчитано")
+            await notify.refresh_card(callback.bot, lesson_id, extra_message=callback.message)
+        elif action == "reject" and callback.message:
+            lesson = await _call(service.card_for, lesson_id)
+            mention = f'<a href="tg://user?id={callback.from_user.id}">{esc(admin.get("name"))}</a>'
+            prompt = await callback.message.answer(
+                f"{mention}, почему не засчитываем урок {lesson['start']} ({esc(lesson['teacher'])})? "
+                "Ответьте на это сообщение — причина попадёт в историю правок.",
+                reply_markup=ForceReply(selective=True),
+                reply_parameters=ReplyParameters(message_id=callback.message.message_id))
+            await _call(service.ask_reason, prompt.chat.id, prompt.message_id, lesson_id, "reject",
+                        callback.from_user.id)
+            await callback.answer()
+        else:
+            await callback.answer()
+
+    @router.my_chat_member(F.chat.type.in_(GROUPS))
+    async def on_group_member(update: ChatMemberUpdated) -> None:
+        if update.new_chat_member.status in ("left", "kicked"):
+            await _call(service.drop_report_chat, update.chat.id)
 
     return router

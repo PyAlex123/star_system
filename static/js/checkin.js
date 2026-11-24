@@ -197,15 +197,17 @@ async function inviteUser(id) {
     await loadState();
     const user = (state.users || []).find((u) => u.id === id) || result.user;
     if ($("modalUser").classList.contains("open") && userTarget === id) {
-      $("userTracked").checked = true;          // приглашение включает отметки — не выключить при сохранении
+      // Приглашение включает отметки (кроме администратора) — не выключить их при сохранении окна
+      if (user.role !== "superadmin") $("userTracked").checked = true;
       renderUserTelegram(user);
     }
     lastInviteLink = result.link || "";
     const name = escapeHtml(user.name);
     if (!result.link) {
       showInfo("Бот отметок ещё не подключён",
-        `<p>${name} теперь отмечается: уроки появятся в отметках. Ссылка-приглашение будет доступна,
-         когда к сайту подключат бот отметок — попросите того, кто обслуживает сервер.</p>`);
+        `<p>${user.role === "superadmin" ? "" : `${name} теперь отмечается: уроки появятся в отметках. `}
+         Ссылка-приглашение будет доступна, когда к сайту подключат бот отметок —
+         попросите того, кто обслуживает сервер.</p>`);
       return;
     }
     showInfo("Ссылка-приглашение",
