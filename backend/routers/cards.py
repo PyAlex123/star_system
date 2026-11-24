@@ -20,6 +20,11 @@ from .common import class_or_404, student_or_404
 router = APIRouter(tags=["cards"])
 
 ICONS_FILE = config.STATIC_DIR / "img" / "icons.svg"
+# Значок вкладки — тот же, что в static/*.html. Без него браузер просит /favicon.ico
+# из корня домена, а на подпути чужого сайта это чужой файл.
+FAVICON = ('<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 '
+           'viewBox=%270 0 24 24%27%3E%3Cpolygon fill=%27%23E3A21A%27 points=%2712 2 15.09 8.26 22 9.27 '
+           '17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2%27/%3E%3C/svg%3E">')
 CARDS_PER_SHEET = 8
 
 
@@ -175,6 +180,7 @@ def class_cards(class_id: int, request: Request):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Карточки: {title}</title>
+{FAVICON}
 <link rel="stylesheet" href="{base}{assets.versioned('css/tokens.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/theme.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/cards.css')}">

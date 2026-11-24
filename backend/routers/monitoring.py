@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse, Response
 from .. import assets, config, db, excel, schemas, themes
 from ..monitoring import library, logic, store
 from ..security import panel_user, require_editor_page, require_teacher
-from .cards import ICONS_FILE, _qr_png
+from .cards import FAVICON, ICONS_FILE, _qr_png
 from .common import bad_request, not_found, school_or_404
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
@@ -358,6 +358,7 @@ def poster(school_id: int, request: Request):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Опрос на уроке — {name}</title>
+{FAVICON}
 <link rel="stylesheet" href="{base}{assets.versioned('css/tokens.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/theme.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/cards.css')}">
