@@ -50,6 +50,61 @@ def test_webhook_secret_derived_from_token():
     assert config.webhook_url() == f"http://localhost:8000/telegram/{config.WEBHOOK_SECRET}"
 
 
+# ── Webhook бота отметок ─────────────────────────────────────────────────────
+
+CHECKIN_SECRET = "c" * 40
+
+
+@pytest.fixture
+def checkin_webhook_on(monkeypatch):
+    from backend.checkin import bot as checkin_bot
+    received = []
+
+    async def fake_feed(payload):
+        received.append(payload)
+
+    monkeypatch.setattr(config, "USE_WEBHOOK", True)
+    monkeypatch.setattr(config, "CHECKIN_WEBHOOK_SECRET", CHECKIN_SECRET)
+    monkeypatch.setattr(checkin_bot, "feed_webhook_update", fake_feed)
+    return received
+
+
+def test_checkin_webhook_hidden_without_bot(client, monkeypatch):
+    monkeypatch.setattr(config, "USE_WEBHOOK", True)
+    assert config.CHECKIN_WEBHOOK_SECRET == "", "в тестах бот отметок не подключён"
+    assert client.post("/telegram/checkin/anything", json={}).status_code == 404
+
+
+def test_checkin_webhook_protections(client, checkin_webhook_on):
+    good = {"X-Telegram-Bot-Api-Secret-Token": CHECKIN_SECRET}
+    assert client.post("/telegram/checkin/wrong", json={}, headers=good).status_code == 404
+    assert client.post(f"/telegram/checkin/{CHECKIN_SECRET}", json={}).status_code == 403
+    assert client.post(f"/telegram/checkin/{CHECKIN_SECRET}", json={"update_id": 1},
+                       headers={"X-Telegram-Bot-Api-Secret-Token": config.WEBHOOK_SECRET}).status_code == 403, \
+        "секрет бота учеников к боту отметок не подходит"
+    assert client.post(f"/telegram/checkin/{CHECKIN_SECRET}", content=b"x", headers=good).status_code == 400
+    r = client.post(f"/telegram/checkin/{CHECKIN_SECRET}", json={"update_id": 7}, headers=good)
+    assert r.status_code == 200 and checkin_webhook_on == [{"update_id": 7}]
+
+
+def test_checkin_webhook_survives_broken_update(monkeypatch):
+    """Ошибка в обработке не должна превращаться в 500 — Telegram слал бы обновление снова."""
+    import asyncio
+
+    from backend.checkin import bot as checkin_bot
+    monkeypatch.setattr(checkin_bot, "_bot", object())
+    monkeypatch.setattr(checkin_bot, "_dispatcher", object())
+    asyncio.run(checkin_bot.feed_webhook_update({"update_id": "не число"}))
+
+
+def test_checkin_bot_not_started_without_token():
+    import asyncio
+
+    from backend.checkin import bot as checkin_bot
+    asyncio.run(checkin_bot.start())
+    assert checkin_bot.get_bot() is None and checkin_bot.status()["bot_enabled"] is False
+
+
 # ── Подпуть ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture

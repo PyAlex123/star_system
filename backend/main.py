@@ -11,7 +11,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
-from .checkin import scheduler as checkin_scheduler, store as checkin_store
+from .checkin import bot as checkin_bot, scheduler as checkin_scheduler, store as checkin_store
 from .routers import (auth, cards, checkin, excel, lessons, me, prizes, schedule, schools, stats, students,
                       telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
@@ -56,11 +56,13 @@ async def lifespan(app: FastAPI):
     _startup_banner()
     checkin_store.restore_if_missing()
     await start_bot()
+    await checkin_bot.start()
     checkin_scheduler.start()
     try:
         yield
     finally:
         await checkin_scheduler.stop()
+        await checkin_bot.stop()
         await stop_bot()
 
 
@@ -311,5 +313,5 @@ def healthz():
         "bot_mode": ("webhook" if config.USE_WEBHOOK else "polling") if config.BOT_ENABLED else None,
         "bot_username": config.BOT_USERNAME or None,
         "base_url": config.site_url("/"),
-        "checkin": {"bot_enabled": config.CHECKIN_BOT_ENABLED, **checkin_scheduler.status()},
+        "checkin": {**checkin_bot.status(), **checkin_scheduler.status()},
     }

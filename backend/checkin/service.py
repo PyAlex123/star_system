@@ -820,3 +820,127 @@ def month_report(year: int, month: int, now: Optional[datetime] = None) -> Dict[
     report["month"] = f"{year:04d}-{month:02d}"
     report["lessons"] = items
     return report
+
+
+# ── Бот преподавателя: привязка, язык, согласие, «мои уроки» ──────────────────
+
+def user_by_tg(tg_id: int) -> Optional[Dict[str, Any]]:
+    """Сотрудник по Telegram-аккаунту (копия записи из JSON-базы)."""
+    return next((u for u in db.load_db().get("users", []) if u.get("tg_id") == tg_id), None)
+
+
+def _actor(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {"id": user["id"], "name": user.get("name", "")}
+
+
+def bind_invite(code: str, tg_id: int, username: Optional[str],
+                now: Optional[datetime] = None) -> tuple:
+    """Привязка Telegram по ссылке-приглашению. Код одноразовый и живёт неделю.
+
+    Итог (статус, сотрудник): ok | already_me | not_found | expired | other_user.
+    """
+    now = now or clock.now_utc()
+    result: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        users = database.get("users", [])
+        mine = next((u for u in users if u.get("tg_id") == tg_id), None)
+        user = next((u for u in users if code and u.get("invite_code") == code), None)
+        if not user:
+            # Повторный переход по уже сработавшей ссылке — просто пускаем своего
+            result.update(status="already_me" if mine else "not_found", user=mine)
+            return db.NO_SAVE
+        created = clock.parse(user.get("invite_created_at"))
+        if created is None or now - created > timedelta(days=config.CHECKIN_INVITE_DAYS):
+            result.update(status="expired", user=None)
+            return db.NO_SAVE
+        if mine and mine["id"] != user["id"]:
+            result.update(status="other_user", user=None)
+            return db.NO_SAVE
+        result["before"] = dict(user)
+        user.update(tg_id=tg_id, tg_username=username, tg_bound_at=clock.iso(now), tg_blocked_at=None,
+                    invite_code=None, invite_created_at=None, checkin_tracked=True)
+        result.update(status="ok", user=dict(user))
+        return None
+
+    db.transaction(_apply)
+    status, user = result["status"], result.get("user")
+    with store.tx() as conn:
+        store.log_event(conn, f"invite_{status}", (user or {}).get("id"), tg_id)
+    if status == "ok":
+        audit_staff(_actor(user), user["id"], "telegram_bound", result["before"], user)
+    return status, user
+
+
+def _update_user(user_id: int, **fields: Any) -> Optional[Dict[str, Any]]:
+    result: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        user = db.find_user(database, user_id)
+        if not user:
+            return db.NO_SAVE
+        if all(user.get(k) == v for k, v in fields.items()):
+            result["user"] = dict(user)
+            return db.NO_SAVE
+        user.update(fields)
+        result["user"] = dict(user)
+        return None
+
+    db.transaction(_apply)
+    return result.get("user")
+
+
+def set_lang(user_id: int, lang: str) -> Optional[Dict[str, Any]]:
+    from .locales import lang_of
+    return _update_user(user_id, lang=lang_of(lang))
+
+
+def give_consent(user_id: int, now: Optional[datetime] = None) -> Optional[Dict[str, Any]]:
+    user = _update_user(user_id, consent_at=clock.iso(now or clock.now_utc()))
+    if user:
+        with store.tx() as conn:
+            store.log_event(conn, "consent", user_id, user.get("tg_id"))
+    return user
+
+
+def set_blocked(tg_id: int, blocked: bool, now: Optional[datetime] = None) -> None:
+    """Преподаватель заблокировал бота (или разблокировал) — видно администратору."""
+    user = user_by_tg(tg_id)
+    if not user:
+        return
+    stamp = clock.iso(now or clock.now_utc()) if blocked else None
+    if bool(user.get("tg_blocked_at")) == blocked:
+        return
+    _update_user(user["id"], tg_blocked_at=stamp)
+    with store.tx() as conn:
+        store.log_event(conn, "bot_blocked" if blocked else "bot_unblocked", user["id"], tg_id)
+
+
+def today_for(user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Уроки преподавателя на сегодня по часам школ — для «Мои уроки сегодня»."""
+    now = now or clock.now_utc()
+    reconcile(now)
+    day = clock.today(now)
+    with store.tx() as conn:
+        lessons = store.rows(conn.execute(
+            "SELECT * FROM planned_lessons WHERE user_id = ? AND date = ? ORDER BY starts_at, id",
+            (user_id, day.isoformat())))
+    return {"date": day, "lessons": [dict(_summary(l), late_minutes=l.get("late_minutes")) for l in lessons]}
+
+
+def month_for(user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Свой месяц: уроки, подтверждено, опоздания, часы. Сумм здесь нет — их видит администратор."""
+    now = now or clock.now_utc()
+    today = clock.today(now)
+    first, last = clock.month_bounds(today.year, today.month)
+    database = db.load_db()
+    with store.tx() as conn:
+        settings = store.get_settings(conn)
+        lessons = store.rows(conn.execute(
+            "SELECT * FROM planned_lessons WHERE user_id = ? AND date >= ? AND date <= ?",
+            (user_id, first.isoformat(), last.isoformat())))
+    report = d.report(lessons, database.get("users", []), first, last, now, settings["grace_minutes"])
+    row = report["teachers"][0] if report["teachers"] else {
+        "planned": 0, "confirmed": 0, "late": 0, "pending": 0, "minutes": 0, "hours": 0.0}
+    return {"year": today.year, "month": today.month, **{k: row[k] for k in
+                                                          ("planned", "confirmed", "late", "pending", "minutes", "hours")}}
