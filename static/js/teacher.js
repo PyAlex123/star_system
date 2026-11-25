@@ -293,6 +293,7 @@ function openClassMenu(event) {
   }
   menu.innerHTML = `
     <button role="menuitem" onclick="renameClass()">${icon("pencil", "ic ic-sm")}Переименовать класс</button>
+    <button role="menuitem" class="danger" onclick="clearClass()">${icon("users", "ic ic-sm")}Удалить всех учеников…</button>
     <button role="menuitem" class="danger" onclick="removeClass()">${icon("trash", "ic ic-sm")}Удалить класс…</button>`;
   const rect = event.currentTarget.getBoundingClientRect();
   menu.style.left = `${Math.max(8, rect.left - 8)}px`;
@@ -443,6 +444,23 @@ async function saveClassName() {
   } catch (error) {
     toast(error.message, "error");
   }
+}
+
+/** Все ученики класса — разом: класс, его расписание и карточки других классов остаются. */
+function clearClass() {
+  closeMenus();
+  const cls = classById(activeClass);
+  if (!cls) return;
+  const count = classStudents().length;
+  if (!count) return toast(`В классе ${cls.name} нет учеников`, "error");
+  confirmAction(`Удалить всех учеников ${cls.name}?`,
+    `${count} ${plural(count, "ученик", "ученика", "учеников")} — вместе со звёздами и историей. ` +
+    "Класс и его расписание останутся, учеников можно загрузить заново. Это нельзя отменить.",
+    async () => {
+      const r = await api(`/api/classes/${cls.id}/students`, { method: "DELETE" });
+      await loadState();
+      toast(`Удалено: ${r.removed} ${plural(r.removed, "ученик", "ученика", "учеников")}`, "success");
+    }, "Удалить всех");
 }
 
 function removeClass() {

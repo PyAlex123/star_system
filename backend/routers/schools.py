@@ -159,6 +159,28 @@ def update_class(class_id: int, item: schemas.ClassUpdate,
     return {"ok": True, "class": db.transaction(_apply)}
 
 
+@router.delete("/classes/{class_id}/students")
+def clear_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
+    """Удаляет всех учеников класса с их фото; сам класс и его расписание остаются —
+    например, чтобы заново загрузить неправильно заполненный список."""
+    removed: Dict[str, list] = {"photos": []}
+
+    def _apply(database: Dict[str, Any]):
+        class_or_404(database, class_id, user)
+        gone = [s for s in database["students"] if s.get("class_id") == class_id]
+        if not gone:
+            return db.NO_SAVE
+        removed["photos"] = [images.avatar_upload_url(s) for s in gone]
+        database["students"] = [s for s in database["students"] if s.get("class_id") != class_id]
+        return len(gone)
+
+    result = db.transaction(_apply)
+    if result is db.NO_SAVE:
+        return {"ok": True, "removed": 0}
+    drop_photos(removed["photos"])
+    return {"ok": True, "removed": result}
+
+
 @router.delete("/classes/{class_id}")
 def delete_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     """Удаляет класс вместе с учениками и их фото."""
