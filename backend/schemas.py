@@ -171,11 +171,16 @@ class SchoolBells(BaseModel):
 
 
 class ScheduleCell(BaseModel):
-    """Ячейка таблицы расписания: день недели + номер урока. class_id = null — убрать занятие."""
+    """Ячейка таблицы расписания: день недели + номер урока.
+
+    В ячейке один урок; в нём один класс или несколько (объединённые классы).
+    class_ids — классы урока целиком (пустой список — убрать урок);
+    class_id — один класс вместо прежних (null — убрать). Если пришли оба, главный class_ids."""
     school_id: int
     weekday: Annotated[int, Field(ge=1, le=7)]
     lesson: Annotated[int, Field(ge=1, le=12)]
     class_id: Optional[int] = None
+    class_ids: Optional[List[int]] = Field(default=None, max_length=30)
     user_id: Optional[int] = None
 
 

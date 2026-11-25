@@ -1927,8 +1927,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("newStudentName").addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
+  // Путь события, а не e.target.closest(): окошко ячейки перерисовывается по клику,
+  // и к этому моменту нажатая кнопка уже вне страницы — closest() её «потерял» бы.
+  const insidePop = ".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop";
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop")) closeMenus();
+    if (!e.composedPath().some((el) => el.matches?.(insidePop))) closeMenus();
   });
   // Окошки строки и ячейки стоят поверх страницы — при прокрутке и смене размера закрываем их
   window.addEventListener("scroll", () => { if (anyPopOpen()) closeMenus(); }, { passive: true });

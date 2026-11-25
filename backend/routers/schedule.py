@@ -5,7 +5,9 @@
 
 Панель показывает расписание таблицей: столбцы — дни недели, строки — уроки школы
 (school.bells). Занятие, время которого совпадает с уроком, стоит в его ячейке
-(entry.lesson = номер урока); в ячейке один класс. Остальные занятия — «в другое время»
+(entry.lesson = номер урока). В ячейке один урок: один класс или несколько объединённых —
+тогда это несколько занятий (по одному на класс) с общими учителем и кабинетом. Так кабинет
+ученика и журнал работают с объединённым уроком как с обычным. Остальные занятия — «в другое время»
 (lesson = None). Время занятия (start, end) хранится всегда: по нему живут кабинет
 ученика, полоска «сегодня» в журнале и статистика.
 """
@@ -54,11 +56,11 @@ def _school_entries(database: Dict[str, Any], school_id: int) -> List[Dict[str, 
     return [e for e in database.get("schedule", []) if e.get("class_id") in class_ids]
 
 
-def _cell_entry(database: Dict[str, Any], school_id: int, weekday: int, lesson: int,
-                skip_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
-    """Занятие, которое стоит в ячейке таблицы школы (день + номер урока)."""
-    return next((e for e in _school_entries(database, school_id)
-                 if e["weekday"] == weekday and e.get("lesson") == lesson and e.get("id") != skip_id), None)
+def _cell_entries(database: Dict[str, Any], school_id: int, weekday: int, lesson: int,
+                  skip_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Занятия в ячейке таблицы школы (день + номер урока): один класс или объединённые."""
+    return [e for e in _school_entries(database, school_id)
+            if e["weekday"] == weekday and e.get("lesson") == lesson and e.get("id") != skip_id]
 
 
 def _class_clash(schedule: Iterable[Dict[str, Any]], class_id: int, weekday: int, start: str, end: str,
@@ -76,15 +78,9 @@ def _clash_error(database: Dict[str, Any], class_id: int, clash: Dict[str, Any])
 
 def _place(database: Dict[str, Any], entry: Dict[str, Any], school_id: int) -> None:
     """Ставит занятие в ячейку таблицы, если его время совпало с уроком школы.
-    В ячейке один класс: занятая другим классом ячейка — ошибка."""
+    Если в ячейке уже есть другой класс, классы объединяются в один урок."""
     bells = db.school_bells(db.find_school(database, school_id))
-    number = db.bell_number(bells, entry["start"], entry["end"])
-    if number:
-        other = _cell_entry(database, school_id, entry["weekday"], number, skip_id=entry.get("id"))
-        if other:
-            raise bad_request(f"{number}-й урок {WEEKDAY_IN[entry['weekday'] - 1]} уже занят: "
-                              f"{_class_name(database, other['class_id'])}")
-    entry["lesson"] = number
+    entry["lesson"] = db.bell_number(bells, entry["start"], entry["end"])
 
 
 @router.post("")
@@ -156,50 +152,69 @@ def set_bells(school_id: int, item: schemas.SchoolBells, user: Dict[str, Any] = 
 
 @router.put("/cell")
 def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_teacher)):
-    """Ячейка таблицы: поставить класс, заменить его другим или убрать (class_id = null).
-    Учитель — переданный, иначе прежний учитель ячейки, иначе тот, кто нажал."""
+    """Ячейка таблицы: поставить класс, заменить его другим, объединить несколько классов
+    в один урок или убрать урок. Учитель — переданный, иначе прежний учитель ячейки,
+    иначе тот, кто нажал; у всех классов урока он общий.
+    Классы, которые остаются в уроке, сохраняют свои записи (кабинет, дату добавления);
+    присоединённые получают кабинет урока. Один новый класс вместо прежнего — кабинет пустой."""
     def _apply(database: Dict[str, Any]):
         school = school_or_404(database, item.school_id, user)
         bells = db.school_bells(school)
         if item.lesson > len(bells):
             raise bad_request("Такого урока нет во времени уроков школы")
-        current = _cell_entry(database, item.school_id, item.weekday, item.lesson)
+        current = _cell_entries(database, item.school_id, item.weekday, item.lesson)
         schedule = database.setdefault("schedule", [])
+        if item.class_ids is not None:
+            wanted_ids = list(dict.fromkeys(item.class_ids))
+        else:
+            wanted_ids = [] if item.class_id is None else [item.class_id]
 
-        if item.class_id is None:
+        if not wanted_ids:
             if not current:
                 return db.NO_SAVE
-            database["schedule"] = [e for e in schedule if e.get("id") != current["id"]]
-            return {"entry": None}
+            gone = {e["id"] for e in current}
+            database["schedule"] = [e for e in schedule if e.get("id") not in gone]
+            return {"entries": []}
 
-        cls = class_or_404(database, item.class_id, user)
-        if cls["school_id"] != item.school_id:
-            raise not_found("Класс не найден")
+        for class_id in wanted_ids:
+            if class_or_404(database, class_id, user)["school_id"] != item.school_id:
+                raise not_found("Класс не найден")
         wanted = (item.user_id if "user_id" in item.model_fields_set
-                  else current["user_id"] if current else user["id"])
+                  else current[0]["user_id"] if current else user["id"])
         teacher = _check_teacher(database, wanted, item.school_id)
 
-        if current and current["class_id"] == cls["id"]:
-            if current.get("user_id") == teacher:
-                return db.NO_SAVE
-            current["user_id"] = teacher
-            return {"entry": current}
+        keep = [e for e in current if e["class_id"] in wanted_ids]
+        drop = [e for e in current if e["class_id"] not in wanted_ids]
+        kept_ids = {e["class_id"] for e in keep}
+        new_ids = [c for c in wanted_ids if c not in kept_ids]
+        if not drop and not new_ids and all(e.get("user_id") == teacher for e in keep):
+            return db.NO_SAVE
 
         bell = bells[item.lesson - 1]
-        clash = _class_clash(schedule, cls["id"], item.weekday, bell["start"], bell["end"],
-                             skip_ids=[current["id"]] if current else [])
-        if clash:
-            raise _clash_error(database, cls["id"], clash)
-        if current:
-            schedule.remove(current)
-        entry = {"id": db.next_id(schedule), "class_id": cls["id"], "weekday": item.weekday,
-                 "start": bell["start"], "end": bell["end"], "room": "", "user_id": teacher,
-                 "created_at": db.today(), "lesson": item.lesson}
-        schedule.append(entry)
-        return {"entry": entry}
+        for class_id in new_ids:
+            clash = _class_clash(schedule, class_id, item.weekday, bell["start"], bell["end"],
+                                 skip_ids=[e["id"] for e in current])
+            if clash:
+                raise _clash_error(database, class_id, clash)
+        room = keep[0].get("room", "") if keep else ""
+        for entry in drop:
+            schedule.remove(entry)
+        for entry in keep:
+            entry["user_id"] = teacher
+        for class_id in new_ids:
+            entry = {"id": db.next_id(schedule), "class_id": class_id, "weekday": item.weekday,
+                     "start": bell["start"], "end": bell["end"], "room": room, "user_id": teacher,
+                     "created_at": db.today(), "lesson": item.lesson}
+            schedule.append(entry)
+            keep.append(entry)
+        order = {c: i for i, c in enumerate(wanted_ids)}
+        return {"entries": sorted(keep, key=lambda e: order[e["class_id"]])}
 
     result = db.transaction(_apply)
-    return {"ok": True, **({"entry": None, "unchanged": True} if result is db.NO_SAVE else result)}
+    if result is db.NO_SAVE:
+        return {"ok": True, "entry": None, "entries": [], "unchanged": True}
+    entries = result["entries"]
+    return {"ok": True, "entries": entries, "entry": entries[0] if entries else None}
 
 
 @router.patch("/{entry_id}")
@@ -207,6 +222,9 @@ def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, A
     def _apply(database: Dict[str, Any]):
         entry = _entry_or_404(database, entry_id, user)
         cls = db.find_class(database, entry["class_id"])
+        cell = (entry["weekday"], entry.get("lesson"))
+        partners = (_cell_entries(database, cls["school_id"], entry["weekday"], entry["lesson"], skip_id=entry_id)
+                    if entry.get("lesson") else [])
         if item.weekday is not None:
             entry["weekday"] = item.weekday
         if item.start is not None:
@@ -223,6 +241,13 @@ def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, A
             entry["room"] = item.room.strip()
         if "user_id" in item.model_fields_set:
             entry["user_id"] = _check_teacher(database, item.user_id, cls["school_id"])
+        # Объединённый урок остался в своей ячейке — кабинет и учитель у классов общие.
+        if (entry["weekday"], entry.get("lesson")) == cell:
+            for partner in partners:
+                if item.room is not None:
+                    partner["room"] = entry["room"]
+                if "user_id" in item.model_fields_set:
+                    partner["user_id"] = entry["user_id"]
         return entry
 
     return {"ok": True, "entry": db.transaction(_apply)}

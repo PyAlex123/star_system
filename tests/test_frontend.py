@@ -127,6 +127,14 @@ def test_visible_days():
     assert eval_schedule("visibleDays(6, [{weekday: 2}])") == 6
 
 
+def test_combined_name():
+    """Объединённые классы в клетке таблицы — коротко, как пишут в школьном расписании."""
+    assert eval_schedule('combinedName(["5-А"])') == "5-А"
+    assert eval_schedule('combinedName(["8-А", "8-Б", "8-В"])') == "8-АБВ"
+    assert eval_schedule('combinedName(["7-А", "7-В", "9-Б"])') == "7-АВ + 9-Б"
+    assert eval_schedule('combinedName(["10А", "Кружок робототехники"])') == "10-А + Кружок робототехники"
+
+
 def test_error_text_handles_lists():
     """Иначе на экране оказалось бы «[object Object]»."""
     assert eval_common('errorText([{msg: "a"}, {msg: "b"}])') == "a; b"

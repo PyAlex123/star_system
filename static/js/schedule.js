@@ -5,7 +5,9 @@
    администрация школы только смотрит (сервер проверяет сам).
 
    Занятие стоит в ячейке таблицы, если его время совпало с уроком школы:
-   entry.lesson — номер урока (с 1), иначе null — «в другое время». */
+   entry.lesson — номер урока (с 1), иначе null — «в другое время».
+   В ячейке один урок; объединённые классы — несколько занятий в одной ячейке
+   (по одному на класс) с общими учителем и кабинетом. */
 
 const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const WEEKDAYS_FULL = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
@@ -14,7 +16,8 @@ const MAX_BELLS = 12;
 let scheduleClass = null;     // фильтр на вкладке «Расписание»: null — все классы
 let scheduleTarget = null;    // занятие в окне правки; null — новое
 let scheduleDays = new Set();
-let cellPick = null;          // открытая ячейка таблицы: { school, weekday, lesson }
+let cellPick = null;          // открытая ячейка: { school, weekday, lesson, combine, draft }
+                              // combine — выбор нескольких классов, draft — отмеченные id
 let bellsDraft = [];          // время уроков в окне «Время уроков»
 
 /** День недели ISO-даты: 1 — понедельник … 7 — воскресенье. */
@@ -72,6 +75,24 @@ function bellsError(bells) {
   return "";
 }
 
+/** Короткое имя объединённых классов: «7-А», «8-АБВ», «7-АВ + 9-Б».
+ *  Классы вида «число-буква» одной параллели сливаются, остальные — как есть. */
+function combinedName(names) {
+  const parts = [];
+  const grades = new Map();
+  for (const name of names) {
+    const m = /^(\d{1,2})\s*-?\s*([А-ЯЁA-Z])$/i.exec(String(name).trim());
+    if (!m) { parts.push(name); continue; }
+    if (!grades.has(m[1])) {
+      grades.set(m[1], []);
+      parts.push(grades.get(m[1]));
+    }
+    grades.get(m[1]).push(m[2]);
+    grades.get(m[1]).grade = m[1];
+  }
+  return parts.map((p) => (typeof p === "string" ? p : `${p.grade}-${p.join("")}`)).join(" + ");
+}
+
 /** Сколько дней показать: учебные дни школы, но не меньше дня, на котором уже есть занятия. */
 function visibleDays(days, entries) {
   return Math.max(days || 5, ...entries.map((e) => e.weekday));
@@ -89,8 +110,15 @@ function schoolBells() {
   return schoolById(activeSchool)?.bells || [];
 }
 
-function cellEntry(weekday, lesson) {
-  return schoolSchedule().find((e) => e.weekday === weekday && e.lesson === lesson) || null;
+/** Занятия ячейки — классы урока в порядке списка классов. */
+function cellEntries(weekday, lesson, all = schoolSchedule()) {
+  const order = new Map(sortedClasses(activeSchool).map((c, i) => [c.id, i]));
+  return all.filter((e) => e.weekday === weekday && e.lesson === lesson)
+    .sort((a, b) => (order.get(a.class_id) ?? 0) - (order.get(b.class_id) ?? 0));
+}
+
+function entriesName(entries) {
+  return combinedName(entries.map((e) => classById(e.class_id)?.name || ""));
 }
 
 function lessonHeld(classId, day) {
@@ -181,22 +209,28 @@ function renderSchedule() {
 }
 
 function scheduleCell(weekday, lesson, all, date, today) {
-  const entry = all.find((e) => e.weekday === weekday && e.lesson === lesson);
+  const entries = cellEntries(weekday, lesson, all);
   const where = `${WEEKDAYS_FULL[weekday - 1]}, ${lesson}-й урок`;
   const open = cellPick?.weekday === weekday && cellPick?.lesson === lesson;
-  const dim = scheduleClass !== null && entry?.class_id !== scheduleClass;
+  const dim = scheduleClass !== null && !entries.some((e) => e.class_id === scheduleClass);
   let inner;
   let label;
-  if (entry) {
-    const name = classById(entry.class_id)?.name || "";
-    const { done, missed } = entryState(entry, date, today);
-    const meta = [entry.room ? `каб. ${escapeHtml(entry.room)}` : "", escapeHtml(staffName(entry.user_id))].filter(Boolean).join(" · ");
+  if (entries.length) {
+    const name = entriesName(entries);
+    const full = entries.map((e) => classById(e.class_id)?.name || "").join(", ");
+    // Объединённый урок проведён, когда отмечены все его классы
+    const states = entries.map((e) => entryState(e, date, today));
+    const done = states.every((s) => s.done);
+    const missed = !done && states.some((s) => s.missed);
+    const room = entries.find((e) => e.room)?.room || "";
+    const teachers = [...new Set(entries.map((e) => staffName(e.user_id)).filter(Boolean))].join(", ");
+    const meta = [room ? `каб. ${escapeHtml(room)}` : "", escapeHtml(teachers)].filter(Boolean).join(" · ");
     inner = `<span class="sg-fill ${done ? "done" : ""}">
-      <b class="sg-class">${escapeHtml(name)}</b>
+      <b class="sg-class ${entries.length > 1 ? "joint" : ""}" title="${escapeHtml(full)}">${escapeHtml(name)}</b>
       ${meta ? `<span class="sg-meta">${meta}</span>` : ""}
       ${done ? `<span class="sg-state ok">${icon("check", "ic ic-xs")}проведён</span>`
         : missed ? `<span class="sg-state">не отмечен</span>` : ""}</span>`;
-    label = `${where}: ${name}${done ? ", проведён" : ""}`;
+    label = `${where}: ${entries.length > 1 ? "вместе " : ""}${full}${done ? ", проведён" : ""}`;
   } else {
     inner = canEdit() ? `<span class="sg-add">${icon("plus", "ic ic-sm")}</span>` : "";
     label = `${where}: свободно`;
@@ -239,7 +273,8 @@ function openCell(event, weekday, lesson) {
   if (cellPick?.weekday === weekday && cellPick?.lesson === lesson) return closeCellPop();
   closeMenus();
   if (!sortedClasses(activeSchool).length) return toast("Сначала добавьте классы", "error");
-  cellPick = { school: activeSchool, weekday, lesson };
+  const ids = cellEntries(weekday, lesson).map((e) => e.class_id);
+  cellPick = { school: activeSchool, weekday, lesson, combine: ids.length > 1, draft: new Set(ids) };
   document.querySelectorAll("#weekGrid .sg-cell[aria-expanded]").forEach((b) =>
     b.setAttribute("aria-expanded", String(b.dataset.cell === `${weekday}-${lesson}`)));
   renderCellPop();
@@ -257,22 +292,37 @@ function closeCellPop() {
 
 function renderCellPop() {
   const pop = $("cellPop");
-  const { weekday, lesson } = cellPick;
+  const { weekday, lesson, combine, draft } = cellPick;
   const bell = schoolBells()[lesson - 1];
   if (!bell) return closeCellPop();
-  const entry = cellEntry(weekday, lesson);
+  const entries = cellEntries(weekday, lesson);
+  const entry = entries[0] || null;
   const teachers = scheduleTeachers();
   const mine = teachers.some((u) => u.id === state.me?.id) ? state.me.id : null;
   const teacherId = entry ? entry.user_id : mine;
+  const classes = sortedClasses(activeSchool);
+  const buttons = combine
+    ? classes.map((c) => `<button type="button" role="checkbox" aria-checked="${draft.has(c.id)}" data-class="${c.id}"
+          title="${escapeHtml(c.name)}" onclick="toggleCellClass(${c.id})">${escapeHtml(c.name)}</button>`)
+    : classes.map((c) => `<button type="button" role="radio" aria-checked="${entry?.class_id === c.id}" data-class="${c.id}"
+          title="${escapeHtml(c.name)}" onclick="pickCellClass(${c.id})">${escapeHtml(c.name)}</button>`);
+  const picked = classes.filter((c) => draft.has(c.id)).map((c) => c.name);
+  const changed = combine && !sameIds(draft, entries.map((e) => e.class_id));
+  const comboFoot = `<div class="cp-combo">
+      <span class="cp-hint">${picked.length > 1 ? `Вместе: <b>${escapeHtml(combinedName(picked))}</b>`
+        : picked.length ? "Отметьте ещё класс, который занимается вместе с этим." : "Отметьте классы, которые занимаются вместе."}</span>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveCellCombo()" ${changed ? "" : "disabled"}>${icon("check", "ic ic-sm")}Сохранить</button>
+    </div>`;
   pop.innerHTML = `
     <div class="cp-head"><b id="cellPopTitle">${WEEKDAYS[weekday - 1]} · ${lesson}-й урок</b>
       <span>${escapeHtml(bell.start)}–${escapeHtml(bell.end)}</span></div>
-    <div class="cp-classes" role="radiogroup" aria-label="Класс">
-      ${sortedClasses(activeSchool).map((c) => `<button type="button" role="radio" aria-checked="${entry?.class_id === c.id}"
-          title="${escapeHtml(c.name)}" onclick="pickCellClass(${c.id})">${escapeHtml(c.name)}</button>`).join("")}
+    <div class="cp-classes" role="${combine ? "group" : "radiogroup"}" aria-label="${combine ? "Классы урока" : "Класс"}">
+      ${buttons.join("")}
     </div>
+    ${combine ? comboFoot : classes.length > 1
+      ? `<button type="button" class="btn btn-link btn-sm cp-join" onclick="startCombine()">${icon("users", "ic ic-sm")}Объединить классы</button>` : ""}
     <div class="field">
-      <label for="cpTeacher">Учитель</label>
+      <label for="cpTeacher">Учитель${entries.length > 1 ? " (общий)" : ""}</label>
       <select id="cpTeacher" onchange="pickCellTeacher()">
         <option value="">не указан</option>
         ${teachers.map((u) => `<option value="${u.id}" ${u.id === teacherId ? "selected" : ""}>${escapeHtml(u.name)}</option>`).join("")}
@@ -281,9 +331,46 @@ function renderCellPop() {
     ${entry ? `<div class="cp-foot">
       <button type="button" class="btn btn-link btn-sm" onclick="editCellEntry(${entry.id})">${icon("pencil", "ic ic-sm")}Кабинет и другое…</button>
       <button type="button" class="btn btn-danger-quiet btn-sm" onclick="pickCellClass(null)">${icon("trash", "ic ic-sm")}Убрать</button>
-    </div>` : `<p class="cp-hint">Выберите класс — урок сохранится сразу.</p>`}`;
+    </div>` : combine ? "" : `<p class="cp-hint">Выберите класс — урок сохранится сразу.</p>`}`;
   pop.hidden = false;
   placeCellPop();
+}
+
+function sameIds(set, ids) {
+  return set.size === new Set(ids).size && ids.every((id) => set.has(id));
+}
+
+/** Режим «несколько классов»: отмечаем классы, потом «Сохранить». */
+function startCombine() {
+  if (!cellPick) return;
+  cellPick.combine = true;
+  renderCellPop();
+  $("cellPop").querySelector(".cp-classes button")?.focus({ preventScroll: true });
+}
+
+function toggleCellClass(classId) {
+  if (!cellPick) return;
+  const { draft } = cellPick;
+  if (draft.has(classId)) draft.delete(classId);
+  else draft.add(classId);
+  renderCellPop();
+  $("cellPop").querySelector(`.cp-classes [data-class="${classId}"]`)?.focus({ preventScroll: true });
+}
+
+async function saveCellCombo() {
+  if (!cellPick) return;
+  const { weekday, lesson, draft } = cellPick;
+  const classes = sortedClasses(activeSchool).filter((c) => draft.has(c.id));
+  const value = $("cpTeacher")?.value;
+  try {
+    await saveCell(classes.map((c) => c.id), value ? parseInt(value) : null);
+    closeCellPop();
+    await loadState();
+    toast(classes.length ? `${combinedName(classes.map((c) => c.name))}: ${WEEKDAYS_FULL[weekday - 1]}, ${lesson}-й урок`
+      : `Урок убран: ${WEEKDAYS_FULL[weekday - 1]}, ${lesson}-й`, "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
 /** Окошко — у нажатой ячейки: снизу, а если не помещается — сверху; в пределах экрана. */
@@ -304,22 +391,23 @@ function placeCellPop() {
   pop.style.left = `${left}px`;
 }
 
-async function saveCell(classId, teacherId) {
+/** Классы урока целиком: [] — убрать урок. */
+async function saveCell(classIds, teacherId) {
   const { weekday, lesson } = cellPick;
   await api("/api/schedule/cell", {
     method: "PUT",
-    json: { school_id: activeSchool, weekday, lesson, class_id: classId, user_id: teacherId },
+    json: { school_id: activeSchool, weekday, lesson, class_ids: classIds, user_id: teacherId },
   });
 }
 
 async function pickCellClass(classId) {
   if (!cellPick) return;
   const { weekday, lesson } = cellPick;
-  const entry = cellEntry(weekday, lesson);
-  if (entry && entry.class_id === classId) return closeCellPop();
+  const entries = cellEntries(weekday, lesson);
+  if (entries.length === 1 && entries[0].class_id === classId) return closeCellPop();
   const value = $("cpTeacher")?.value;
   try {
-    await saveCell(classId, value ? parseInt(value) : null);
+    await saveCell(classId ? [classId] : [], value ? parseInt(value) : null);
     closeCellPop();
     await loadState();
     toast(classId ? `${classById(classId)?.name || "Класс"}: ${WEEKDAYS_FULL[weekday - 1]}, ${lesson}-й урок`
@@ -331,11 +419,11 @@ async function pickCellClass(classId) {
 
 async function pickCellTeacher() {
   if (!cellPick) return;
-  const entry = cellEntry(cellPick.weekday, cellPick.lesson);
-  if (!entry) return;                       // ячейка пустая — учитель запомнится с выбором класса
+  const entries = cellEntries(cellPick.weekday, cellPick.lesson);
+  if (!entries.length) return;              // ячейка пустая — учитель запомнится с выбором класса
   const value = $("cpTeacher").value;
   try {
-    await saveCell(entry.class_id, value ? parseInt(value) : null);
+    await saveCell(entries.map((e) => e.class_id), value ? parseInt(value) : null);
     await loadState();
     toast("Учитель сохранён", "success");
   } catch (error) {
@@ -475,7 +563,10 @@ function openScheduleEntry(id = null) {
   scheduleTarget = id;
   const entry = id ? (state.schedule || []).find((e) => e.id === id) : null;
   $("scheduleTitle").textContent = entry ? "Занятие" : "Занятие в другое время";
-  $("scheduleSub").textContent = entry ? "Изменения увидят ученики класса в своём кабинете."
+  const together = entry?.lesson ? cellEntries(entry.weekday, entry.lesson) : [];
+  $("scheduleSub").textContent = together.length > 1
+    ? `Объединённый урок: ${together.map((e) => classById(e.class_id)?.name || "").join(", ")}. Кабинет и учитель у классов общие.`
+    : entry ? "Изменения увидят ученики класса в своём кабинете."
     : "Для уроков не по звонкам. Если время совпадёт с уроком школы, занятие встанет в таблицу.";
   $("schClass").innerHTML = classes.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("");
   $("schClass").value = String(entry?.class_id || scheduleClass || activeClass || classes[0].id);

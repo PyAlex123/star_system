@@ -971,6 +971,10 @@ button.sg-cell[aria-expanded="true"] .sg-fill { border-color: var(--accent); }
 .cp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
 .cp-foot .btn-link { margin-left: -8px; padding: 0 8px; }
 .cp-hint { margin: 0; font-size: 13px; line-height: 18px; color: var(--muted); }
+.cp-hint b { color: var(--text); }
+.cp-join { align-self: flex-start; margin: -4px 0 -4px -8px; padding: 0 8px; }
+.cp-combo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sg-class.joint { white-space: normal; overflow-wrap: anywhere; }
 
 /* Занятия в другое время */
 .sched-extra { margin-top: 24px; }

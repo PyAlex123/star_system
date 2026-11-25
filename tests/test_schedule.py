@@ -148,6 +148,56 @@ def test_cell_holds_one_class(teacher):
     assert [(e["class_id"], e["lesson"]) for e in schedule] == [(2, 1)], "класс в ячейке заменён"
 
 
+def cell_classes(weekday=1, lesson=1):
+    return sorted(e["class_id"] for e in load_db()["schedule"]
+                  if e["weekday"] == weekday and e.get("lesson") == lesson)
+
+
+def test_cell_combines_classes(teacher):
+    third = teacher.post("/api/classes", json={"school_id": 1, "name": "7-В"}).json()["class"]["id"]
+    cell(teacher, class_id=1)
+    teacher.patch(f"/api/schedule/{load_db()['schedule'][0]['id']}", json={"room": "12"})
+    first_id = load_db()["schedule"][0]["id"]
+    r = cell(teacher, class_ids=[1, third])
+    assert r.status_code == 200, r.text
+    assert [e["class_id"] for e in r.json()["entries"]] == [1, third]
+    assert cell_classes() == [1, third]
+    schedule = load_db()["schedule"]
+    assert first_id in {e["id"] for e in schedule}, "оставшийся класс сохраняет свою запись"
+    assert {e["room"] for e in schedule} == {"12"}, "присоединённый класс — в кабинете урока"
+    assert {(e["start"], e["end"]) for e in schedule} == {("08:00", "08:45")}
+
+    assert cell(teacher, class_ids=[third, 1]).json().get("unchanged") is True
+    cell(teacher, class_ids=[2, third])
+    assert cell_classes() == sorted([2, third]), "5-А убран из урока, 6-А добавлен"
+    assert cell(teacher, class_ids=[]).json()["entries"] == []
+    assert cell_classes() == []
+
+
+def test_combined_lesson_shares_teacher_and_room(teacher):
+    uid = teacher.post("/api/users", json={"login": "petrova", "name": "Петрова", "school_ids": [1]}).json()["user"]["id"]
+    cell(teacher, class_ids=[1, 2])
+    assert cell(teacher, class_ids=[1, 2], user_id=uid).status_code == 200
+    assert {e["user_id"] for e in load_db()["schedule"]} == {uid}, "учитель общий"
+    first = load_db()["schedule"][0]
+    teacher.patch(f"/api/schedule/{first['id']}", json={"room": "Актовый"})
+    assert {e["room"] for e in load_db()["schedule"]} == {"Актовый"}, "кабинет общий"
+    # Класс увели в другое время — он больше не в уроке, остальные не меняются
+    teacher.patch(f"/api/schedule/{first['id']}", json={"start": "15:00", "end": "15:45", "room": "1"})
+    rooms = {e["class_id"]: e["room"] for e in load_db()["schedule"]}
+    assert rooms[first["class_id"]] == "1" and list(rooms.values()).count("Актовый") == 1
+
+
+def test_combined_cell_checks(teacher, school_teacher):
+    add(teacher, class_id=2, weekdays=[1], start="08:30", end="09:00")
+    r = cell(teacher, class_ids=[1, 2])
+    assert r.status_code == 400 and "уже есть занятие 08:30–09:00" in r.json()["detail"]
+    assert cell_classes() == [], "ничего не сохранилось"
+    assert cell(teacher, class_ids=[1, school_teacher.other["class"]]).status_code == 404
+    assert cell(teacher, class_ids=[1, 1]).json()["entries"][0]["class_id"] == 1
+    assert cell_classes() == [1], "повтор класса не удваивает занятие"
+
+
 def test_cell_teacher_kept_and_changed(teacher):
     uid = teacher.post("/api/users", json={"login": "petrova", "name": "Петрова", "school_ids": [1]}).json()["user"]["id"]
     cell(teacher, class_id=1, user_id=uid)
@@ -184,8 +234,8 @@ def test_form_entry_lands_in_grid_or_aside(teacher):
     on_bell = add(teacher, weekdays=[1], start="08:55", end="09:40").json()["created"][0]
     aside = add(teacher, weekdays=[1], start="14:00", end="14:45").json()["created"][0]
     assert on_bell["lesson"] == 2 and aside["lesson"] is None
-    r = add(teacher, class_id=2, weekdays=[1], start="08:55", end="09:40")
-    assert r.status_code == 400 and "2-й урок в понедельник уже занят: 5-А" in r.json()["detail"]
+    joined = add(teacher, class_id=2, weekdays=[1], start="08:55", end="09:40").json()["created"][0]
+    assert joined["lesson"] == 2, "второй класс в то же время — объединённый урок"
     moved = teacher.patch(f"/api/schedule/{aside['id']}", json={"start": "08:00", "end": "08:45"}).json()["entry"]
     assert moved["lesson"] == 1, "новое время совпало с уроком — встало в таблицу"
     gone = teacher.patch(f"/api/schedule/{on_bell['id']}", json={"start": "15:00", "end": "15:45"}).json()["entry"]
