@@ -139,3 +139,28 @@ def test_error_text_handles_lists():
     """Иначе на экране оказалось бы «[object Object]»."""
     assert eval_common('errorText([{msg: "a"}, {msg: "b"}])') == "a; b"
     assert eval_common('errorText("Готово")') == "Готово"
+
+
+def test_parallel_of_matches_server():
+    """Плитки классов делят классы на параллели по тому же правилу, что статистика сервера."""
+    from backend import stats
+    for name in ["5-А", "5 Б", "10-Ф1", " 7 Б", "Робототехника", "123", "11А", ""]:
+        assert eval_common(f"parallelOf({json.dumps(name)})") == stats.parallel_of(name), name
+
+
+def test_group_by_parallel():
+    groups = eval_common('groupByParallel([{name: "10-А"}, {name: "Кружок"}, {name: "2-Б"}, {name: "2-А"}, {name: "9-В"}])'
+                         '.map(g => [g.parallel, g.classes.map(c => c.name)])')
+    assert groups == [[2, ["2-Б", "2-А"]], [9, ["9-В"]], [10, ["10-А"]], [None, ["Кружок"]]]
+
+
+def test_lesson_tile_state():
+    day = "2026-11-26"
+    call = lambda date, now, held=False: eval_schedule(
+        f'lessonTileState("10:00", "10:45", "{date}", "{day}", {now}, {str(held).lower()})')
+    assert call(day, 9 * 60) == "later"
+    assert call(day, 10 * 60 + 5) == "now"
+    assert call(day, 11 * 60) == "past", "время прошло, урок не отмечен"
+    assert call(day, 11 * 60, held=True) == "done"
+    assert call("2026-11-25", 9 * 60) == "past"
+    assert call("2026-11-27", 23 * 60) == "later"
