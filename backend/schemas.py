@@ -69,7 +69,10 @@ class LessonAward(BaseModel):
 
 
 class LessonComplete(BaseModel):
+    """Звёзды за урок. class_ids — общий урок объединённых классов: один банк на всех,
+    а запись урока — у каждого класса своя. Без class_ids урок одного класса class_id."""
     class_id: int
+    class_ids: Optional[List[int]] = Field(default=None, max_length=12)
     date: str
     awards: List[LessonAward] = Field(max_length=200)
 

@@ -292,12 +292,21 @@ def school_stats(database: Dict[str, Any], school_id: int, days: Optional[int]) 
             "avatar": s.get("avatar"),
         })
 
+    # Общий урок объединённых классов — по записи у каждого класса (group общий);
+    # у класса это урок, а у учителя и школы — один урок, а не несколько.
+    def lesson_key(index: int, lesson: Dict[str, Any]) -> Any:
+        return ("group", lesson["group"]) if lesson.get("group") else ("one", index)
+
+    lesson_count = len({lesson_key(i, l) for i, l in enumerate(lessons)})
     names = {u["id"]: u.get("name", "") for u in database.get("users", [])}
     teachers: Dict[Any, Dict[str, Any]] = {}
-    for l in lessons:
+    counted = set()
+    for i, l in enumerate(lessons):
         key = l.get("user_id")
         row = teachers.setdefault(key, {"user_id": key, "name": names.get(key, "") if key else "", "lessons": 0, "stars": 0})
-        row["lessons"] += 1
+        if lesson_key(i, l) not in counted:
+            counted.add(lesson_key(i, l))
+            row["lessons"] += 1
         row["stars"] += int(l.get("total_stars", 0))
 
     return {
@@ -307,7 +316,7 @@ def school_stats(database: Dict[str, Any], school_id: int, days: Optional[int]) 
         "to": now.isoformat(),
         "totals": {
             "students": len(students), "active": len(active_ids), "awarded": awarded, "spent": spent,
-            "prizes": prizes, "lessons": len(lessons), "seen": seen,
+            "prizes": prizes, "lessons": lesson_count, "seen": seen,
             **schedule_plan(database, class_ids, start, now),
         },
         "weeks": weeks,

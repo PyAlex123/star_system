@@ -273,6 +273,12 @@ body.is-sadmin .editor-only { display: none !important; }
 .jt-row.picked, .jt-row.menu-open { background: var(--accent-soft); }
 .jt-row.menu-open { z-index: 20; }
 .jt-row:focus-visible { outline: 3px solid var(--star); outline-offset: -3px; }
+/* Общий урок: заголовок класса перед его учениками — строка той же сетки, что и ученики */
+.jt-group { display: grid; grid-template-columns: var(--cols); padding: 0 16px; border-top: 1px solid var(--line); background: var(--surface-3); }
+.jt-group > span { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 36px; color: var(--muted); font-size: 13px; }
+.jt-group b { font: var(--nw) 16px/1 var(--font-num); color: var(--accent-text); }
+.jt-group .ic { color: var(--accent-text); }
+.class-tab.joint > span[role="tab"] { display: inline-flex; align-items: center; gap: 6px; }
 
 .cell-num { font: var(--nw) 16px/1 var(--font-num); color: var(--muted); }
 .cell-name { display: flex; align-items: center; gap: 10px; min-width: 0; }

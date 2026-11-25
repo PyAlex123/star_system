@@ -141,7 +141,7 @@
               title="Пароли скрыты, чтобы их не увидел класс, если экран выведен на доску">
         <svg class="ic ic-sm"><use href="#i-eye"></use></svg><span>Показать пароли</span>
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="openCards()">
+      <button class="btn btn-ghost btn-sm" id="cardsBtn" onclick="openCards()">
         <svg class="ic ic-sm"><use href="#i-printer"></use></svg>Карточки класса
       </button>
     </div>
@@ -686,6 +686,22 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalPaste')">Отмена</button>
       <button class="btn" onclick="processPaste()">Добавить в журнал</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalJoint" onclick="if(event.target===this) closeModal('modalJoint')">
+  <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="jointTitle">
+    <div>
+      <div class="modal-title" id="jointTitle">Общий урок</div>
+      <p class="modal-sub">Отметьте классы, которые занимаются вместе. В журнале будут ученики всех этих классов, а банк звёзд — один на урок.</p>
+    </div>
+    <div class="cp-classes joint-list" id="jointList" role="group" aria-label="Классы урока"></div>
+    <p class="cp-hint" id="jointHint"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalJoint')">Отмена</button>
+      <button class="btn" id="jointOpen" onclick="confirmJoint()" disabled>
+        <svg class="ic ic-sm"><use href="#i-users"></use></svg>Открыть общий журнал</button>
     </div>
   </div>
 </div>

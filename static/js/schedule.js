@@ -142,15 +142,32 @@ function renderTodayStrip() {
   const entries = schoolSchedule().filter((e) => e.weekday === isoWeekday(day));
   host.hidden = !entries.length || !canEdit();
   if (host.hidden) return;
-  host.innerHTML = `<span class="caps">По расписанию на ${escapeHtml(dotted(day))}</span>` + entries.map((e) => {
-    const cls = classById(e.class_id);
-    const done = lessonHeld(e.class_id, day);
-    return `<button class="ts-chip ${e.class_id === activeClass ? "on" : ""} ${done ? "done" : ""}"
-        onclick="selectClass(${e.class_id})" title="${done ? "Урок проведён" : "Открыть журнал класса"}">
-      <span class="ts-time">${escapeHtml(e.start)}</span><b>${escapeHtml(cls?.name || "")}</b>
-      ${e.room ? `<span class="ts-room">каб. ${escapeHtml(e.room)}</span>` : ""}
+  const joint = typeof jointClasses !== "undefined" ? jointClasses : null;
+  host.innerHTML = `<span class="caps">По расписанию на ${escapeHtml(dotted(day))}</span>` + todayLessons(entries).map((group) => {
+    const ids = group.map((e) => e.class_id);
+    const done = ids.every((id) => lessonHeld(id, day));
+    const room = group.find((e) => e.room)?.room || "";
+    const together = ids.length > 1;
+    const on = together ? joint?.join() === ids.join() : !joint && ids[0] === activeClass;
+    const names = group.map((e) => classById(e.class_id)?.name || "").join(", ");
+    return `<button class="ts-chip ${on ? "on" : ""} ${done ? "done" : ""}"
+        onclick="${together ? `openJoint([${ids.join(",")}])` : `selectClass(${ids[0]})`}"
+        title="${done ? "Урок проведён" : together ? `Открыть общий журнал: ${escapeHtml(names)}` : "Открыть журнал класса"}">
+      <span class="ts-time">${escapeHtml(group[0].start)}</span>${together ? icon("users", "ic ic-xs") : ""}<b>${escapeHtml(entriesName(group))}</b>
+      ${room ? `<span class="ts-room">каб. ${escapeHtml(room)}</span>` : ""}
       ${done ? icon("check", "ic ic-xs") : ""}</button>`;
   }).join("");
+}
+
+/** Занятия дня по урокам: объединённые классы одной клетки таблицы — вместе. */
+function todayLessons(entries) {
+  const groups = [];
+  for (const e of entries) {
+    const same = e.lesson ? groups.find((g) => g[0].lesson === e.lesson) : null;
+    if (same) same.push(e);
+    else groups.push([e]);
+  }
+  return groups.map((g) => (g.length > 1 ? cellEntries(g[0].weekday, g[0].lesson, g) : g));
 }
 
 /* ── Вкладка «Расписание» ─────────────────────────────────── */
@@ -311,7 +328,7 @@ function renderCellPop() {
   const comboFoot = `<div class="cp-combo">
       <span class="cp-hint">${picked.length > 1 ? `Вместе: <b>${escapeHtml(combinedName(picked))}</b>`
         : picked.length ? "Отметьте ещё класс, который занимается вместе с этим." : "Отметьте классы, которые занимаются вместе."}</span>
-      <button type="button" class="btn btn-primary btn-sm" onclick="saveCellCombo()" ${changed ? "" : "disabled"}>${icon("check", "ic ic-sm")}Сохранить</button>
+      <button type="button" class="btn btn-sm" onclick="saveCellCombo()" ${changed ? "" : "disabled"}>${icon("check", "ic ic-sm")}Сохранить</button>
     </div>`;
   pop.innerHTML = `
     <div class="cp-head"><b id="cellPopTitle">${WEEKDAYS[weekday - 1]} · ${lesson}-й урок</b>
