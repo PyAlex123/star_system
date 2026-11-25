@@ -204,14 +204,24 @@
   <div class="page-head">
     <div>
       <h1 class="page-title">Расписание</h1>
-      <p class="page-sub">Занятия со звёздами по дням недели. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
+      <p class="page-sub" id="scheduleHint">Нажмите на клетку, чтобы поставить класс на урок. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
     </div>
     <div class="seg class-seg" id="scheduleClasses" role="tablist" aria-label="Класс"></div>
-    <button class="btn editor-only" onclick="openScheduleEntry()">
-      <svg class="ic"><use href="#i-plus"></use></svg>Занятие
+    <button class="btn btn-ghost editor-only" onclick="openBells()">
+      <svg class="ic"><use href="#i-clock"></use></svg>Время уроков
     </button>
   </div>
-  <div class="week-grid" id="weekGrid"></div>
+  <div class="card sched" id="weekGrid" role="table" aria-label="Расписание по урокам"></div>
+  <section class="sched-extra" id="schedExtra">
+    <div class="sched-extra-head">
+      <h2 class="sched-extra-title">Занятия в другое время</h2>
+      <button class="btn btn-ghost btn-sm editor-only" onclick="openScheduleEntry()">
+        <svg class="ic ic-sm"><use href="#i-plus"></use></svg>Занятие
+      </button>
+    </div>
+    <div class="sched-extra-list" id="extraList"></div>
+  </section>
+  <div class="cell-pop" id="cellPop" role="dialog" aria-labelledby="cellPopTitle" hidden></div>
 </main>
 
 <!-- ── Мониторинг ──────────────────────────────────────────── -->
@@ -526,6 +536,36 @@
       <span class="grow"></span>
       <button class="btn btn-ghost" onclick="closeModal('modalSchedule')">Отмена</button>
       <button class="btn" onclick="saveScheduleEntry()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalBells" onclick="if(event.target===this) closeModal('modalBells')">
+  <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="bellsTitle">
+    <div>
+      <div class="modal-title" id="bellsTitle">Время уроков</div>
+      <p class="modal-sub">Школа <b id="bellsSchool">—</b>. Одинаковое во все учебные дни. Занятия в таблице переедут на новое время своего урока.</p>
+    </div>
+    <div class="bells-quick">
+      <span class="field-label">Заполнить по порядку</span>
+      <div class="bells-quick-row">
+        <div class="field"><label for="bqFirst">Первый урок</label><input type="time" id="bqFirst" value="08:00"></div>
+        <div class="field"><label for="bqLength">Урок, мин</label><input type="number" id="bqLength" min="10" max="180" value="45" inputmode="numeric"></div>
+        <div class="field"><label for="bqPause">Перемена, мин</label><input type="number" id="bqPause" min="0" max="120" value="10" inputmode="numeric"></div>
+        <div class="field"><label for="bqCount">Уроков</label><input type="number" id="bqCount" min="1" max="12" value="7" inputmode="numeric"></div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fillBells()">
+        <svg class="ic ic-sm"><use href="#i-refresh"></use></svg>Заполнить</button>
+    </div>
+    <div class="bells-list" id="bellsList" role="group" aria-label="Уроки"></div>
+    <div class="bells-more">
+      <button type="button" class="btn btn-ghost btn-sm" id="bellsAdd" onclick="addBell()">
+        <svg class="ic ic-sm"><use href="#i-plus"></use></svg>Урок</button>
+      <label class="check"><input type="checkbox" id="bellsSaturday">Суббота — учебный день</label>
+    </div>
+    <div class="modal-actions ruled">
+      <button class="btn btn-ghost" onclick="closeModal('modalBells')">Отмена</button>
+      <button class="btn" onclick="saveBells()">Сохранить</button>
     </div>
   </div>
 </div>

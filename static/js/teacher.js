@@ -1663,6 +1663,11 @@ function closeMenus(withRows = true) {
   if (classMenu) { classMenu.style.display = "none"; classMenu.classList.remove("shown"); }
   if (withRows && rowPop) { rowPop = null; renderTable(); }
   if (!rowPop) document.querySelectorAll("body > .row-float").forEach((el) => el.remove());
+  if (typeof closeCellPop === "function") closeCellPop();      // окошко ячейки расписания
+}
+
+function anyPopOpen() {
+  return Boolean(rowPop) || (typeof cellPopOpen === "function" && cellPopOpen());
 }
 
 /** Скачивание файла с сервера: cookie сессии уходит сама, как у обычной ссылки. */
@@ -1721,22 +1726,27 @@ function showInfo(title, html) {
 
 /* ── Учителя (только администратор) ──────────────────────── */
 
-let shownStaffPasswords = new Set();
-
+/** Пароль сотрудника виден администратору сразу, пока сотрудник не сменит его сам. */
 function staffPassword(user) {
   if (user.role === "superadmin") return `<span class="muted">—</span>`;
   if (!user.password_shown) {
-    return `<span class="muted pw-unknown" title="Сотрудник сменил пароль сам или запись создана до обновления">свой пароль</span>`;
+    return `<span class="pw-unknown"><span class="muted">свой пароль</span>
+      <small class="muted">новый — значком ключа</small></span>`;
   }
-  const open = shownStaffPasswords.has(user.id);
-  const label = open ? "Скрыть пароль" : "Показать пароль";
-  return `<span class="pw-cell"><span class="mono ${open ? "" : "masked"}">${open ? escapeHtml(user.password_shown) : "•••••••••"}</span>
-    <button class="icon-btn" title="${label}" aria-label="${label}" onclick="toggleStaffPassword(${user.id})">${icon(open ? "eye-off" : "eye", "ic ic-sm")}</button></span>`;
+  return `<span class="pw-cell"><span class="mono">${escapeHtml(user.password_shown)}</span>
+    <button class="icon-btn" title="Скопировать пароль" aria-label="Скопировать пароль: ${escapeHtml(user.name)}"
+            onclick="copyStaffPassword(${user.id})">${icon("copy", "ic ic-sm")}</button></span>`;
 }
 
-function toggleStaffPassword(id) {
-  if (shownStaffPasswords.has(id)) shownStaffPasswords.delete(id); else shownStaffPasswords.add(id);
-  renderUsers();
+async function copyStaffPassword(id) {
+  const user = (state.users || []).find((u) => u.id === id);
+  if (!user?.password_shown) return;
+  try {
+    await navigator.clipboard.writeText(user.password_shown);
+    toast("Пароль скопирован", "success");
+  } catch {
+    toast(`Пароль: ${user.password_shown}`, "success", "key");
+  }
 }
 
 function renderUsers() {
@@ -1918,17 +1928,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float")) closeMenus();
+    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop")) closeMenus();
   });
-  // Окошко строки стоит поверх страницы — при прокрутке и смене размера закрываем его
-  window.addEventListener("scroll", () => { if (rowPop) closeMenus(); }, { passive: true });
-  window.addEventListener("resize", () => { if (rowPop) closeMenus(); });
+  // Окошки строки и ячейки стоят поверх страницы — при прокрутке и смене размера закрываем их
+  window.addEventListener("scroll", () => { if (anyPopOpen()) closeMenus(); }, { passive: true });
+  window.addEventListener("resize", () => { if (anyPopOpen()) closeMenus(); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const modal = topModal();
       if (!modal && liveRunId) return closeLive();
       if (modal) return closeModal(modal.id);
-      if (rowPop || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
+      if (anyPopOpen() || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
       if (panelId) return closePanel();
     }
     // Ctrl+Enter — итог урока из любого места журнала

@@ -12,7 +12,7 @@ import tempfile
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from . import config, passwords
 from .config import DB_FILE
@@ -36,7 +36,10 @@ _lock = threading.RLock()
 # 7 -> 8: расписание (schedule), роль «администрация школы» (school_admin), открытый
 #         пароль сотрудника до первой смены (password_shown), автор урока (lesson.user_id),
 #         последний заход ученика в кабинет (last_seen).
-DB_VERSION = 8
+# 8 -> 9: расписание таблицей. У школы время уроков (bells: [{start, end}], номер урока —
+#         место в списке) и учебные дни (days: 5 — Пн–Пт, 6 — с субботой); у занятия —
+#         номер урока в таблице (lesson) или None, если оно идёт в другое время.
+DB_VERSION = 9
 
 # Категории призов как в макетах: небольшой, средний, большой
 PRIZE_CATEGORIES = ("small", "medium", "large")
@@ -281,6 +284,57 @@ def _bootstrap_users(db: Dict[str, Any]) -> bool:
     return True
 
 
+# ── Время уроков школы ───────────────────────────────────────────────────────
+
+SCHOOL_DAYS = (5, 6)      # Пн–Пт или Пн–Сб
+MAX_BELLS = 12
+
+
+def _hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def default_bells() -> List[Dict[str, str]]:
+    """Время уроков новой школы: 7 уроков с 08:00, по 45 минут, перемены по 10."""
+    first, length, pause = 8 * 60, 45, 10
+    return [{"start": _hhmm(first + i * (length + pause)), "end": _hhmm(first + i * (length + pause) + length)}
+            for i in range(7)]
+
+
+def school_bells(school: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    return (school or {}).get("bells") or default_bells()
+
+
+def bell_number(bells: List[Dict[str, str]], start: str, end: str) -> Optional[int]:
+    """Номер урока (с 1), время которого точно совпадает с занятием; иначе None."""
+    return next((n for n, bell in enumerate(bells, 1) if bell["start"] == start and bell["end"] == end), None)
+
+
+def class_school_ids(db: Dict[str, Any]) -> Dict[int, int]:
+    return {c["id"]: c["school_id"] for c in db.get("classes", [])}
+
+
+def link_schedule_to_bells(db: Dict[str, Any], school_id: Optional[int] = None) -> bool:
+    """Занятиям «в другое время», чьё время совпало с уроком школы, — место в таблице,
+    если эта ячейка (день + номер урока) в школе ещё свободна. Возвращает True, если что-то
+    привязалось."""
+    schools = {s["id"]: s for s in db.get("schools", [])}
+    owner = class_school_ids(db)
+    taken = {(owner.get(e["class_id"]), e["weekday"], e["lesson"]) for e in db.get("schedule", [])
+             if e.get("lesson")}
+    changed = False
+    for entry in db.get("schedule", []):
+        sid = owner.get(entry.get("class_id"))
+        if entry.get("lesson") or sid is None or (school_id is not None and sid != school_id):
+            continue
+        number = bell_number(school_bells(schools.get(sid)), entry["start"], entry["end"])
+        if number and (sid, entry["weekday"], number) not in taken:
+            entry["lesson"] = number
+            taken.add((sid, entry["weekday"], number))
+            changed = True
+    return changed
+
+
 def default_avatar(student_id: int) -> Dict[str, str]:
     """Пока ребёнок не выбрал аватар — выдаём стабильный пресет по его id."""
     return {"type": "preset", "value": AVATAR_PRESETS[student_id % len(AVATAR_PRESETS)]}
@@ -399,6 +453,20 @@ def migrate(db: Dict[str, Any]) -> bool:
         if not clean_theme(school.get("theme")):
             school["theme"] = DEFAULT_THEME
             changed = True
+        if not school.get("bells"):
+            school["bells"] = default_bells()
+            changed = True
+        if school.get("days") not in SCHOOL_DAYS:
+            school["days"] = SCHOOL_DAYS[0]
+            changed = True
+
+    # Расписание таблицей: занятие, совпавшее по времени с уроком школы, встаёт в его ячейку
+    fresh = [e for e in db["schedule"] if "lesson" not in e]
+    for entry in fresh:
+        entry["lesson"] = None
+    if fresh:
+        link_schedule_to_bells(db)
+        changed = True
 
     # Урокам — постоянный номер: по нему учитель отменяет ошибочное начисление
     settings = db["settings"]

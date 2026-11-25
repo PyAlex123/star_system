@@ -3,7 +3,7 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
-from backend import stats
+from backend import db, stats
 from backend.main import app
 from conftest import load_db
 
@@ -108,3 +108,131 @@ def test_held_counts_only_scheduled_days(teacher):
     ]
     plan = stats.schedule_plan(database, [1], date(2026, 10, 1), date(2026, 11, 15))
     assert plan == {"planned": 4, "held": 2}
+
+
+# ── Таблица: время уроков школы и ячейки ─────────────────────────────────────
+
+def cell(client, weekday=1, lesson=1, class_id=1, **kw):
+    return client.put("/api/schedule/cell", json={"school_id": 1, "weekday": weekday, "lesson": lesson,
+                                                 "class_id": class_id, **kw})
+
+
+def bells(client, items, days=5, school_id=1):
+    return client.put(f"/api/schedule/bells/{school_id}",
+                      json={"bells": [{"start": s, "end": e} for s, e in items], "days": days})
+
+
+def test_school_has_default_bells(teacher):
+    school = teacher.get("/api/state").json()["schools"][0]
+    assert school["days"] == 5
+    assert school["bells"][:2] == [{"start": "08:00", "end": "08:45"}, {"start": "08:55", "end": "09:40"}]
+    assert len(school["bells"]) == 7
+    new = teacher.post("/api/schools", json={"name": "Новая"}).json()["school"]
+    assert new["bells"] == db.default_bells() and new["days"] == 5
+
+
+def test_cell_puts_class_at_bell_time(teacher):
+    r = cell(teacher, weekday=2, lesson=3, class_id=2)
+    assert r.status_code == 200, r.text
+    entry = r.json()["entry"]
+    assert (entry["weekday"], entry["lesson"], entry["start"], entry["end"]) == (2, 3, "09:50", "10:35")
+    assert entry["user_id"] is not None, "учитель по умолчанию — кто поставил"
+    assert load_db()["schedule"] == [entry]
+
+
+def test_cell_holds_one_class(teacher):
+    cell(teacher, class_id=1)
+    r = cell(teacher, class_id=2)
+    assert r.status_code == 200
+    schedule = load_db()["schedule"]
+    assert [(e["class_id"], e["lesson"]) for e in schedule] == [(2, 1)], "класс в ячейке заменён"
+
+
+def test_cell_teacher_kept_and_changed(teacher):
+    uid = teacher.post("/api/users", json={"login": "petrova", "name": "Петрова", "school_ids": [1]}).json()["user"]["id"]
+    cell(teacher, class_id=1, user_id=uid)
+    assert cell(teacher, class_id=2).json()["entry"]["user_id"] == uid, "новый класс — прежний учитель ячейки"
+    assert cell(teacher, class_id=2, user_id=None).json()["entry"]["user_id"] is None
+    assert cell(teacher, class_id=2, user_id=None).json().get("unchanged") is True
+
+
+def test_cell_clear(teacher):
+    cell(teacher)
+    r = cell(teacher, class_id=None)
+    assert r.status_code == 200 and r.json()["entry"] is None
+    assert load_db()["schedule"] == []
+    assert cell(teacher, class_id=None).json().get("unchanged") is True
+
+
+def test_cell_checks(teacher, school_teacher):
+    assert cell(teacher, lesson=8).status_code == 400, "у школы 7 уроков"
+    assert cell(teacher, lesson=13).status_code == 422
+    assert cell(teacher, class_id=school_teacher.other["class"]).status_code == 404, "класс другой школы"
+    assert cell(school_teacher, class_id=1).status_code == 200
+    r = school_teacher.put("/api/schedule/cell", json={"school_id": school_teacher.other["school"], "weekday": 1,
+                                                       "lesson": 1, "class_id": school_teacher.other["class"]})
+    assert r.status_code == 404, "чужая школа — как несуществующая"
+
+
+def test_cell_clashes_with_lesson_at_other_time(teacher):
+    add(teacher, weekdays=[1], start="08:30", end="09:00")             # «в другое время»
+    r = cell(teacher, weekday=1, lesson=1, class_id=1)                 # 08:00–08:45
+    assert r.status_code == 400 and "уже есть занятие 08:30–09:00" in r.json()["detail"]
+
+
+def test_form_entry_lands_in_grid_or_aside(teacher):
+    on_bell = add(teacher, weekdays=[1], start="08:55", end="09:40").json()["created"][0]
+    aside = add(teacher, weekdays=[1], start="14:00", end="14:45").json()["created"][0]
+    assert on_bell["lesson"] == 2 and aside["lesson"] is None
+    r = add(teacher, class_id=2, weekdays=[1], start="08:55", end="09:40")
+    assert r.status_code == 400 and "2-й урок в понедельник уже занят: 5-А" in r.json()["detail"]
+    moved = teacher.patch(f"/api/schedule/{aside['id']}", json={"start": "08:00", "end": "08:45"}).json()["entry"]
+    assert moved["lesson"] == 1, "новое время совпало с уроком — встало в таблицу"
+    gone = teacher.patch(f"/api/schedule/{on_bell['id']}", json={"start": "15:00", "end": "15:45"}).json()["entry"]
+    assert gone["lesson"] is None
+
+
+def test_patch_rejects_overlap(teacher):
+    add(teacher, weekdays=[3], start="14:00", end="14:45")
+    other = add(teacher, weekdays=[3], start="15:00", end="15:45").json()["created"][0]
+    r = teacher.patch(f"/api/schedule/{other['id']}", json={"start": "14:30", "end": "15:15"})
+    assert r.status_code == 400
+
+
+def test_bells_move_lessons(teacher, student_headers):
+    cell(teacher, weekday=5, lesson=2, class_id=1)
+    r = bells(teacher, [("09:00", "09:40"), ("09:50", "10:30"), ("10:40", "11:20")], days=6)
+    assert r.status_code == 200, r.text
+    assert r.json()["days"] == 6
+    entry = load_db()["schedule"][0]
+    assert (entry["lesson"], entry["start"], entry["end"]) == (2, "09:50", "10:30")
+    me = TestClient(app).get("/api/me", headers=student_headers(101)).json()
+    assert me["schedule"][0]["start"] == "09:50", "ученик видит новое время"
+
+
+def test_bells_link_matching_lessons(teacher):
+    aside = add(teacher, weekdays=[2], start="14:00", end="14:45").json()["created"][0]
+    assert aside["lesson"] is None
+    bells(teacher, [("13:10", "13:55"), ("14:00", "14:45")])
+    assert load_db()["schedule"][0]["lesson"] == 2, "время совпало с новым уроком — занятие в таблице"
+
+
+def test_bells_checks(teacher, school_teacher):
+    assert bells(teacher, [("09:00", "08:00")]).status_code == 400
+    r = bells(teacher, [("08:00", "08:45"), ("08:30", "09:15")])
+    assert r.status_code == 400 and "2-й урок начинается раньше" in r.json()["detail"]
+    assert bells(teacher, []).status_code == 422
+    assert bells(teacher, [("08:00", "08:45")] * 13).status_code == 422
+    assert bells(teacher, [("08:00", "08:45")], days=7).status_code == 422
+    cell(teacher, weekday=1, lesson=3, class_id=1)
+    r = bells(teacher, [("08:00", "08:45"), ("08:55", "09:40")])
+    assert r.status_code == 400 and "5-А" in r.json()["detail"], "нельзя убрать урок, на котором стоят занятия"
+    assert bells(school_teacher, [("08:00", "08:45")], school_id=school_teacher.other["school"]).status_code == 404
+
+
+def test_bells_refuse_overlap_with_other_time(teacher):
+    cell(teacher, weekday=1, lesson=1, class_id=1)                          # 08:00–08:45
+    add(teacher, weekdays=[1], start="09:00", end="09:30")
+    r = bells(teacher, [("08:30", "09:15")])
+    assert r.status_code == 400 and "пересечётся" in r.json()["detail"]
+    assert load_db()["schedule"][0]["start"] == "08:00", "ничего не поменялось"

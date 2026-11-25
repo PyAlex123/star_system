@@ -117,6 +117,24 @@ def test_v2_prizes_get_defaults():
     assert prize["active"] is True and prize["category"] == "small" and "image" in prize
 
 
+def test_v8_schedule_gets_bells_and_cells():
+    """Схема 9: у школы время уроков и учебные дни; занятие, совпавшее с уроком, — в его ячейке,
+    остальное — «в другое время». Вторая запись в ту же ячейку остаётся в стороне."""
+    data = json.loads(json.dumps(db.DEFAULT_DB))
+    data["version"] = 8
+    data["schedule"] = [
+        {"id": 1, "class_id": 1, "weekday": 1, "start": "08:00", "end": "08:45", "room": "", "user_id": None},
+        {"id": 2, "class_id": 2, "weekday": 1, "start": "08:00", "end": "08:45", "room": "", "user_id": None},
+        {"id": 3, "class_id": 1, "weekday": 3, "start": "14:00", "end": "14:45", "room": "", "user_id": None},
+    ]
+    write_raw(data)
+    migrated = db.load_db()
+    school = migrated["schools"][0]
+    assert school["bells"] == db.default_bells() and school["days"] == 5
+    assert [e["lesson"] for e in migrated["schedule"]] == [1, None, None]
+    assert migrated["version"] == db.DB_VERSION == 9
+
+
 def test_migration_is_idempotent():
     write_raw(OLD_V2)
     first = db.load_db()

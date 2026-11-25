@@ -159,6 +159,26 @@ class ScheduleUpdate(BaseModel):
     user_id: Optional[int] = None
 
 
+class Bell(BaseModel):
+    start: Clock
+    end: Clock
+
+
+class SchoolBells(BaseModel):
+    """Время уроков школы (номер урока — место в списке) и учебные дни: 5 — Пн–Пт, 6 — Пн–Сб."""
+    bells: List[Bell] = Field(min_length=1, max_length=12)
+    days: Annotated[int, Field(ge=5, le=6)] = 5
+
+
+class ScheduleCell(BaseModel):
+    """Ячейка таблицы расписания: день недели + номер урока. class_id = null — убрать занятие."""
+    school_id: int
+    weekday: Annotated[int, Field(ge=1, le=7)]
+    lesson: Annotated[int, Field(ge=1, le=12)]
+    class_id: Optional[int] = None
+    user_id: Optional[int] = None
+
+
 class StudentLogin(BaseModel):
     """Вход через сайт — для детей без Telegram."""
     login: Annotated[str, Field(max_length=64)]
