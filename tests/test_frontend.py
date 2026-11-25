@@ -157,3 +157,40 @@ def test_invite_state():
     }
     for user, expected in cases.items():
         assert eval_common(f"inviteState({user}, {now})", CHECKIN) == expected, user
+
+
+# ── Раздел «Отметки» (static/js/checkin-page.js) ─────────────────────────────
+
+PAGE = ("schedule.js", "checkin.js", "checkin-page.js")
+
+
+def test_tg_message_link_only_for_supergroups():
+    assert eval_common("tgMessageLink(-1001234567890, 42)", PAGE) == "https://t.me/c/1234567890/42"
+    assert eval_common("tgMessageLink('-1001234567890', 42)", PAGE) == "https://t.me/c/1234567890/42"
+    assert eval_common("tgMessageLink(-4321, 42)", PAGE) == "", "у обычной группы ссылки на сообщение нет"
+    assert eval_common("tgMessageLink(-1001234567890, 0)", PAGE) == ""
+
+
+def test_month_and_day_shift():
+    assert eval_common("[shiftMonth('2026-12', 1), shiftMonth('2026-01', -1), shiftMonth('2026-11', 0)]", PAGE) == \
+        ["2027-01", "2025-12", "2026-11"]
+    assert eval_common("[shiftDay('2026-12-31', 1), shiftDay('2026-03-01', -1)]", PAGE) == ["2027-01-01", "2026-02-28"]
+    assert eval_common("monthLabel('2026-11')", PAGE) == "ноябрь 2026"
+
+
+def test_state_labels_and_hours():
+    assert eval_common("[ckStateLabel('missing'), ckStateLabel('review'), ckStateLabel('x')]", PAGE) == \
+        ["нет отметки", "на проверке", "x"]
+    assert eval_common("[ckHours(0.75), ckHours(2), ckHours(0.8333)]", PAGE) == ["0,75", "2", "0,83"]
+
+
+def test_audit_summary_in_words():
+    item = ("{entity: 'lesson', action: 'approve', before: {status: 'no_checkin', hours_override: null},"
+            " after: {status: 'approved', hours_override: null}}")
+    assert eval_common(f"auditSummary({item})", PAGE) == {
+        "what": "засчитал урок", "changes": ["статус: нет отметки → засчитан"]}
+    rate = "{entity: 'user', action: 'update', before: {hourly_rate: 80000}, after: {hourly_rate: 90000}}"
+    summary = eval_common(f"auditSummary({rate})", PAGE)
+    assert summary["what"] == "изменил сотрудника" and summary["changes"][0].startswith("ставка: 80")
+    unknown = "{entity: 'x', action: 'y', before: null, after: null}"
+    assert eval_common(f"auditSummary({unknown})", PAGE) == {"what": "x: y", "changes": []}

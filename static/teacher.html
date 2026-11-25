@@ -39,6 +39,9 @@
       <button data-page="stats" onclick="switchPage('stats')">
         <svg class="ic"><use href="#i-chart"></use></svg>Статистика
       </button>
+      <button data-page="checkin" class="checkin-only" onclick="switchPage('checkin')">
+        <svg class="ic"><use href="#i-check-circle"></use></svg>Отметки<span class="nav-count" id="checkinNavCount" hidden></span>
+      </button>
       <button data-page="users" class="admin-only" onclick="switchPage('users')">
         <svg class="ic"><use href="#i-users"></use></svg>Сотрудники
       </button>
@@ -231,6 +234,25 @@
     </div>
   </div>
   <div id="statsHost"></div>
+</main>
+
+<!-- ── Отметки преподавателей (администратор и ответственный) ─ -->
+<main class="page" id="page-checkin">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Отметки преподавателей</h1>
+      <p class="page-sub">Кто приехал на урок и вовремя ли. Спорные уроки решаете вы, часы считаются по расписанию.</p>
+    </div>
+    <div class="seg ck-tabs" role="tablist" aria-label="Раздел отметок" id="checkinTabs">
+      <button role="tab" data-tab="today" onclick="setCheckinTab('today')">Сегодня</button>
+      <button role="tab" data-tab="queue" onclick="setCheckinTab('queue')">Очередь<span class="nav-count" id="checkinQueueCount" hidden></span></button>
+      <button role="tab" data-tab="report" onclick="setCheckinTab('report')">Отчёт</button>
+      <button role="tab" data-tab="calendar" onclick="setCheckinTab('calendar')">Календарь</button>
+      <button role="tab" data-tab="audit" onclick="setCheckinTab('audit')">Журнал</button>
+      <button role="tab" data-tab="settings" onclick="setCheckinTab('settings')">Настройки</button>
+    </div>
+  </div>
+  <div id="checkinHost"></div>
 </main>
 
 <!-- ── Сотрудники (только администратор) ───────────────────── -->
@@ -575,6 +597,117 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalCheckinLesson" onclick="if(event.target===this) closeModal('modalCheckinLesson')">
+  <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="ckLessonTitle">
+    <div>
+      <div class="modal-title" id="ckLessonTitle">Урок</div>
+      <p class="modal-sub" id="ckLessonSub"></p>
+    </div>
+    <div id="ckLessonBody"></div>
+    <div class="modal-actions ck-lesson-actions" id="ckLessonActions"></div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalCheckinDecide" onclick="if(event.target===this) closeModal('modalCheckinDecide')">
+  <div class="modal" style="max-width:460px;" role="dialog" aria-labelledby="ckDecideTitle">
+    <div>
+      <div class="modal-title" id="ckDecideTitle">Решение</div>
+      <p class="modal-sub" id="ckDecideSub"></p>
+    </div>
+    <div class="field" id="ckDecideHoursField" hidden>
+      <label for="ckDecideHours">Часы за урок</label>
+      <input type="number" id="ckDecideHours" min="0" max="12" step="0.25" inputmode="decimal">
+      <p class="field-hint">Пусто — часы по расписанию. Шаг — четверть часа.</p>
+    </div>
+    <div class="field">
+      <label for="ckDecideReason">Причина</label>
+      <textarea id="ckDecideReason" rows="3" maxlength="300" placeholder="Например: директор подтвердил, что урок был"></textarea>
+      <p class="field-hint">Попадёт в журнал правок вместе с вашим именем.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalCheckinDecide')">Отмена</button>
+      <button class="btn" id="ckDecideSubmit" onclick="submitCheckinDecision()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalCheckinException" onclick="if(event.target===this) closeModal('modalCheckinException')">
+  <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="ckExTitle">
+    <div>
+      <div class="modal-title" id="ckExTitle">Праздник, отмена или замена</div>
+      <p class="modal-sub">Уроки на эти даты пересчитаются сразу. Уже начавшиеся и решённые не меняются.</p>
+    </div>
+    <div class="seg seg-fill" role="radiogroup" aria-label="Что случилось" id="ckExKind">
+      <button type="button" role="radio" data-kind="holiday" onclick="pickCheckinExKind('holiday')">Праздник</button>
+      <button type="button" role="radio" data-kind="cancel" onclick="pickCheckinExKind('cancel')">Отмена</button>
+      <button type="button" role="radio" data-kind="substitute" onclick="pickCheckinExKind('substitute')">Замена</button>
+    </div>
+    <p class="field-hint" id="ckExHint"></p>
+    <div class="sch-row two">
+      <div class="field"><label for="ckExFrom">С</label><input type="date" id="ckExFrom"></div>
+      <div class="field"><label for="ckExTo">По</label><input type="date" id="ckExTo"></div>
+    </div>
+    <div class="field" id="ckExSchoolField">
+      <label for="ckExSchool">Школа</label>
+      <select id="ckExSchool" onchange="renderCheckinEntryOptions()"></select>
+    </div>
+    <div class="field" id="ckExTeacherField">
+      <label for="ckExTeacher" id="ckExTeacherLabel">Преподаватель</label>
+      <select id="ckExTeacher" onchange="renderCheckinEntryOptions()"></select>
+    </div>
+    <div class="field" id="ckExEntryField">
+      <label for="ckExEntry">Занятие</label>
+      <select id="ckExEntry"></select>
+    </div>
+    <div class="field" id="ckExSubField">
+      <label for="ckExSub">Кто заменяет</label>
+      <select id="ckExSub"></select>
+    </div>
+    <div class="field">
+      <label for="ckExReason">Причина</label>
+      <input type="text" id="ckExReason" maxlength="300" placeholder="Навруз, карантин, болеет…">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalCheckinException')">Отмена</button>
+      <button class="btn" onclick="saveCheckinException()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalCheckinOneOff" onclick="if(event.target===this) closeModal('modalCheckinOneOff')">
+  <div class="modal" style="max-width:500px;" role="dialog" aria-labelledby="ckOneTitle">
+    <div>
+      <div class="modal-title" id="ckOneTitle">Разовый урок</div>
+      <p class="modal-sub">Перенос или дополнительное занятие вне расписания. Преподаватель отметится на него в боте как обычно.</p>
+    </div>
+    <div class="field">
+      <label for="ckOneTeacher">Преподаватель</label>
+      <select id="ckOneTeacher"></select>
+    </div>
+    <div class="field">
+      <label for="ckOneClass">Класс</label>
+      <select id="ckOneClass"></select>
+    </div>
+    <div class="sch-row">
+      <div class="field"><label for="ckOneDate">Дата</label><input type="date" id="ckOneDate"></div>
+      <div class="field"><label for="ckOneStart">Начало</label><input type="time" id="ckOneStart" value="14:00"></div>
+      <div class="field"><label for="ckOneEnd">Конец</label><input type="time" id="ckOneEnd" value="14:45"></div>
+    </div>
+    <div class="field">
+      <label for="ckOneRoom">Кабинет <span class="muted">— по желанию</span></label>
+      <input type="text" id="ckOneRoom" maxlength="40">
+    </div>
+    <div class="field">
+      <label for="ckOneReason">Причина</label>
+      <input type="text" id="ckOneReason" maxlength="300" placeholder="Перенос с пятницы">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalCheckinOneOff')">Отмена</button>
+      <button class="btn" onclick="saveCheckinOneOff()">Добавить урок</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalActivity" onclick="if(event.target===this) closeModal('modalActivity')">
   <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="activityName">
     <div class="act-head">
@@ -704,5 +837,6 @@
 <script src="{{BASE}}/static/js/schedule.js"></script>
 <script src="{{BASE}}/static/js/stats.js"></script>
 <script src="{{BASE}}/static/js/checkin.js"></script>
+<script src="{{BASE}}/static/js/checkin-page.js"></script>
 </body>
 </html>

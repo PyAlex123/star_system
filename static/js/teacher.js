@@ -199,12 +199,14 @@ function applyRole() {
   document.body.classList.toggle("is-admin", isAdmin());
   document.body.classList.toggle("is-teacher", state.me?.role === "teacher");
   document.body.classList.toggle("is-sadmin", isSchoolAdmin());
+  document.body.classList.toggle("can-checkin", canManageCheckins());
   const me = state.me;
   // «Иванова М. С. · учитель»; если имя и есть роль («Учитель») — без повтора
   const role = ROLE_NAMES[me?.role] || "учитель";
   $("brandSub").textContent = !me ? ""
     : me.name.trim().toLowerCase() === role ? me.name : `${me.name} · ${role}`;
   if (!isAdmin() && currentPage() === "users") switchPage(canEdit() ? "journal" : "stats");
+  if (!canManageCheckins() && currentPage() === "checkin") switchPage(canEdit() ? "journal" : "stats");
   if (!canEdit() && ["journal", "prizes"].includes(currentPage())) switchPage("stats");
 }
 
@@ -219,6 +221,8 @@ function renderAll() {
   renderTodayStrip();
   renderSchedule();
   if (currentPage() === "stats") loadStats();
+  if (currentPage() === "checkin") loadCheckin();
+  else refreshCheckinBadge();
   if (isAdmin()) renderUsers();
 }
 
@@ -1925,6 +1929,7 @@ function switchPage(name) {
   renderPanel();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
+  if (name === "checkin") loadCheckin();
   window.scrollTo(0, 0);
 }
 
@@ -1968,9 +1973,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Вернулись на вкладку — проверим, не сменился ли вход в другой вкладке
   document.addEventListener("visibilitychange", () => { if (!document.hidden) sessionSwitched(); });
 
+  // Кнопка «Открыть в панели» из группы «Отметки» ведёт на /teacher#checkin-lesson-<номер>
+  window.addEventListener("hashchange", openCheckinFromHash);
+
   try {
     await loadState();
     reportSwitchedLogin();
+    openCheckinFromHash();
   } catch (error) {
     toast(error.message, "error");
   }
