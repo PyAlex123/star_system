@@ -390,8 +390,11 @@ function showDone(me) {
     <div class="m-card m-center">
       <span class="m-ring ok" aria-hidden="true">${icon("check", "ic ic-xl")}</span>
       <h1 class="m-title">Спасибо! Ответы отправлены</h1>
+      ${me.stars_given ? `<p class="m-stars"><b class="num">+${fmt(me.stars_given)}</b>${icon("star", "ic ic-lg")}<span>начислено в кабинет</span></p>` : ""}
       ${result}
-      <button class="btn btn-ghost btn-lg btn-block" type="button" onclick="nextStudent()">${icon("users")}Следующий ученик</button>
+      ${me.verified
+        ? `<a class="btn btn-lg btn-block" href="${BASE}/app">${icon("arrow-left")}Вернуться в кабинет</a>`
+        : `<button class="btn btn-ghost btn-lg btn-block" type="button" onclick="nextStudent()">${icon("users")}Следующий ученик</button>`}
     </div>`;
 }
 
@@ -439,6 +442,15 @@ function leaveRun() {
   forget("token", "queue");
   screen = "loading";
   apply({ ...data, me: null });
+}
+
+// Пришли из кабинета: /m/<код>?p=<участие> — запоминаем участие и убираем его из адреса
+{
+  const fromCabinet = new URLSearchParams(location.search).get("p");
+  if (fromCabinet) {
+    remember({ token: fromCabinet, queue: [] });
+    history.replaceState(null, "", location.pathname);
+  }
 }
 
 window.addEventListener("online", () => { setOnline(true); poll(); });

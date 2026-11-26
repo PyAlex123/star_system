@@ -133,6 +133,44 @@ function entryState(entry, date, today) {
   return { done, missed };
 }
 
+/* ── Кто изменил ──────────────────────────────────────────── */
+
+/** Расписание меняют все сотрудники школы: учитель, администратор, администрация школы. */
+function scheduleEditable() { return Boolean(state.me); }
+
+const AUTHOR_ROLES = { superadmin: "администратор", teacher: "учитель", school_admin: "администрация школы" };
+
+/** «26.11, 14:05» — по часам этого компьютера (на сервере время с часовым поясом). */
+function changedAt(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date();
+  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === today.toDateString()) return `сегодня, ${time}`;
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}, ${time}`;
+}
+
+/** «Изменил: Каримова (администрация школы), сегодня, 14:05» — у занятия, если его меняли. */
+function entryAuthor(entry) {
+  if (!entry?.updated_by_name) return "";
+  const role = AUTHOR_ROLES[entry.updated_by_role] || "";
+  return `Изменено: ${entry.updated_by_name}${role ? ` (${role})` : ""}, ${changedAt(entry.updated_at)}`;
+}
+
+function openScheduleLog() {
+  const school = schoolById(activeSchool);
+  const rows = (state.schedule_log || []).filter((r) => r.school_id === activeSchool);
+  $("schedLogSub").textContent = `${school?.name || ""} · последние изменения, новые сверху. Кто, когда и что было → что стало.`;
+  $("schedLogList").innerHTML = rows.length ? rows.map((r) => `
+    <div class="sched-log-row">
+      <span class="sl-when">${escapeHtml(changedAt(r.at))}</span>
+      <span class="sl-text">${escapeHtml(r.text)}</span>
+      <span class="sl-who">${escapeHtml(r.user_name)}${AUTHOR_ROLES[r.role] ? ` · ${AUTHOR_ROLES[r.role]}` : ""}</span>
+    </div>`).join("")
+    : `<p class="muted">Изменений пока нет. Здесь появится каждая правка: кто поставил, заменил или убрал урок.</p>`;
+  openModal("modalScheduleLog");
+}
+
 /* ── Полоска в журнале ────────────────────────────────────── */
 
 function renderTodayStrip() {
@@ -193,7 +231,7 @@ function renderSchedule() {
     .concat(classes.map((c) => `<button role="tab" aria-selected="${c.id === scheduleClass}" onclick="pickScheduleClass(${c.id})">${escapeHtml(c.name)}</button>`))
     .join("");
   $("scheduleClasses").hidden = classes.length < 2;
-  $("scheduleHint").textContent = canEdit()
+  $("scheduleHint").textContent = scheduleEditable()
     ? "Нажмите на клетку, чтобы поставить класс на урок. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок."
     : "Уроки школы по дням недели.";
 
@@ -228,7 +266,7 @@ function renderSchedule() {
   grid.innerHTML = head + rows;
 
   const extra = all.filter((e) => !e.lesson && (scheduleClass === null || e.class_id === scheduleClass));
-  $("schedExtra").hidden = !extra.length && !canEdit();
+  $("schedExtra").hidden = !extra.length && !scheduleEditable();
   $("extraList").innerHTML = extra.length
     ? extra.map((e) => scheduleCard(e, dates[e.weekday - 1], today)).join("")
     : `<p class="sched-extra-empty">Если занятие не совпадает со временем уроков школы, добавьте его здесь.</p>`;
@@ -260,11 +298,11 @@ function scheduleCell(weekday, lesson, all, date, today) {
         : missed ? `<span class="sg-state">не отмечен</span>` : ""}</span>`;
     label = `${where}: ${entries.length > 1 ? "вместе " : ""}${full}${done ? ", проведён" : ""}`;
   } else {
-    inner = canEdit() ? `<span class="sg-add">${icon("plus", "ic ic-sm")}</span>` : "";
+    inner = scheduleEditable() ? `<span class="sg-add">${icon("plus", "ic ic-sm")}</span>` : "";
     label = `${where}: свободно`;
   }
   const cls = `sg-cell ${dim ? "dim" : ""}`;
-  const body = canEdit()
+  const body = scheduleEditable()
     ? `<button type="button" class="${cls}" data-cell="${weekday}-${lesson}" aria-label="${escapeHtml(label)}"
          aria-haspopup="dialog" aria-expanded="${open}" onclick="openCell(event, ${weekday}, ${lesson})">${inner}</button>`
     : `<div class="${cls}" aria-label="${escapeHtml(label)}">${inner}</div>`;
@@ -282,7 +320,7 @@ function scheduleCard(entry, date, today) {
     <span class="sch-class">${escapeHtml(cls?.name || "")}</span>
     <span class="sch-meta">${entry.room ? `каб. ${escapeHtml(entry.room)}` : ""}${entry.room && teacher ? " · " : ""}${escapeHtml(teacher)}</span>
     ${tag}`;
-  return canEdit()
+  return scheduleEditable()
     ? `<button class="sch-card ${done ? "done" : ""}" onclick="openScheduleEntry(${entry.id})" title="Изменить занятие">${inner}</button>`
     : `<div class="sch-card ${done ? "done" : ""}">${inner}</div>`;
 }
@@ -356,6 +394,7 @@ function renderCellPop() {
         ${teachers.map((u) => `<option value="${u.id}" ${u.id === teacherId ? "selected" : ""}>${escapeHtml(u.name)}</option>`).join("")}
       </select>
     </div>
+    ${entry && entryAuthor(entry) ? `<p class="cp-author">${icon("history", "ic ic-xs")}${escapeHtml(entryAuthor(entry))}</p>` : ""}
     ${entry ? `<div class="cp-foot">
       <button type="button" class="btn btn-link btn-sm" onclick="editCellEntry(${entry.id})">${icon("pencil", "ic ic-sm")}Кабинет и другое…</button>
       <button type="button" class="btn btn-danger-quiet btn-sm" onclick="pickCellClass(null)">${icon("trash", "ic ic-sm")}Убрать</button>
@@ -592,6 +631,8 @@ function openScheduleEntry(id = null) {
   const entry = id ? (state.schedule || []).find((e) => e.id === id) : null;
   $("scheduleTitle").textContent = entry ? "Занятие" : "Занятие в другое время";
   const together = entry?.lesson ? cellEntries(entry.weekday, entry.lesson) : [];
+  $("scheduleAuthor").textContent = entryAuthor(entry);
+  $("scheduleAuthor").hidden = !entryAuthor(entry);
   $("scheduleSub").textContent = together.length > 1
     ? `Объединённый урок: ${together.map((e) => classById(e.class_id)?.name || "").join(", ")}. Кабинет и учитель у классов общие.`
     : entry ? "Изменения увидят ученики класса в своём кабинете."

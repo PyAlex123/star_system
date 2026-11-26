@@ -44,7 +44,8 @@ def test_route_list_is_not_empty():
 
 
 # Что администрации школы можно менять — проверяется отдельными тестами ниже
-SCHOOL_ADMIN_MAY = {"/api/schools/1/theme", "/api/prizes", "/api/prizes/1", "/api/prizes/1/photo"}
+SCHOOL_ADMIN_MAY = {"/api/schools/1/theme", "/api/prizes", "/api/prizes/1", "/api/prizes/1/photo",
+                    "/api/schedule", "/api/schedule/1", "/api/schedule/cell", "/api/schedule/bells/1"}
 
 
 def test_school_admin_cannot_change_anything(school_admin):
@@ -243,3 +244,18 @@ def test_prize_of_other_school_invisible(teacher, school_admin):
 
 def test_teacher_still_cannot_edit_prizes(school_teacher):
     assert school_teacher.post("/api/prizes", json={"name": "Приз", "cost": 5}).status_code == 403
+
+
+
+# ── Расписание: администрация школы меняет, всё подписано ────────────────────
+
+def test_school_admin_edits_schedule_and_is_named(school_admin, teacher):
+    r = school_admin.put("/api/schedule/cell", json={"school_id": 1, "weekday": 1, "lesson": 2, "class_id": 1})
+    assert r.status_code == 200, r.text
+    entry = r.json()["entry"]
+    assert entry["user_id"] is None, "администрация школы уроков не ведёт — учитель не подставляется"
+    assert entry["updated_by_name"] == "Директор Иванова" and entry["updated_by_role"] == "school_admin"
+    assert entry["updated_at"]
+    log = teacher.get("/api/state").json()["schedule_log"]
+    assert log[0]["user_name"] == "Директор Иванова" and log[0]["text"] == "Пн, 2-й урок: поставлен 5-А, учитель — без учителя"
+    assert school_admin.get("/api/state").json()["schedule_log"][0] == log[0], "администрация видит журнал своей школы"

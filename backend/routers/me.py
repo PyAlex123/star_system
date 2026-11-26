@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from .. import config, db, images, passwords, schemas, security, stats, themes
+from .. import config, db, images, passwords, ratelimit, schemas, security, stats, themes
 from ..security import require_student
 
 router = APIRouter(prefix="/api/me", tags=["student"])
@@ -72,6 +72,23 @@ def build_prizes(database: Dict[str, Any], stars: int, school_id: Optional[int] 
             "from_school": prize.get("school_id") is not None,   # пометка «от администрации школы»
         })
     return sorted(result, key=lambda p: (not p["affordable"], p["left"], p["cost"]))
+
+
+@router.get("/poll")
+def my_poll(student: Dict[str, Any] = Depends(require_student)):
+    """Идёт ли сейчас опрос у моего класса. Кабинет спрашивает раз в 20 секунд."""
+    from . import m_public
+    return {"poll": m_public.student_poll(db.load_db(), student)}
+
+
+@router.post("/poll/join")
+def join_poll(payload: schemas.PollJoin, request: Request, student: Dict[str, Any] = Depends(require_student)):
+    """Пройти опрос класса из кабинета: участие сразу записано на ученика,
+    звёзды за опрос (если учитель их назначил) — после ответа на все вопросы."""
+    _forbid_preview(request, "Это предпросмотр кабинета — пройти опрос за ученика нельзя.")
+    from . import m_public
+    joined = m_public.join_from_cabinet(db.load_db(), student, payload.code or "", ratelimit.client_key(request))
+    return {"ok": True, "url": f"{config.URL_PREFIX}/m/{joined['link']}?p={joined['token']}"}
 
 
 @router.get("")

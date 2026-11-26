@@ -16,6 +16,8 @@ from fastapi import APIRouter, HTTPException, Request, status
 from .. import config, db, ratelimit, schemas
 from ..monitoring import logic, store
 
+STARS_REASON = "Опрос «{title}»"
+
 router = APIRouter(prefix="/api/m", tags=["monitoring-public"])
 
 ratelimit.LIMITS.setdefault("m-link", 60)      # неизвестные ссылки с одного адреса
@@ -87,6 +89,10 @@ def _me(conn, participant) -> Dict[str, Any]:
                        else run["questions"])],
         "answers": store.answers_of(conn, participant["id"]),
         "ended_ago": None if ended is None else store.now() - ended,
+        # Звёзды за опрос: сколько обещано (только вошедшим из кабинета) и сколько начислено
+        "stars": int(run["settings"].get("stars") or 0) if participant["verified"] else 0,
+        "stars_given": participant["stars_given"],
+        "verified": bool(participant["verified"]),
     }
     after = run["settings"].get("after", "none")
     if state == "done" and after != "none" and any(q.get("correct") for q in run["questions"]):
@@ -196,6 +202,41 @@ def answer(item: schemas.MonitorAnswer):
     return {"ok": True}
 
 
+def award_stars(participant_id: int) -> int:
+    """Звёзды за пройденный опрос — ученику, вошедшему из кабинета, один раз.
+    Сначала отмечаем начисление в SQLite (повтор не даст второй раз), потом — звёзды
+    в основной базе. Блокировки не вкладываются одна в другую."""
+    with store.write() as conn:
+        p = conn.execute("SELECT * FROM participants WHERE id = ?", (participant_id,)).fetchone()
+        if not p or not p["verified"] or p["student_id"] is None or p["finished_at"] is None \
+                or p["stars_given"] is not None:
+            return 0
+        run = store.get_run(conn, p["run_id"])
+        stars = int(run["settings"].get("stars") or 0)
+        if stars <= 0:
+            return 0
+        conn.execute("UPDATE participants SET stars_given = ? WHERE id = ?", (stars, participant_id))
+        title = run["title"]
+
+    def _apply(database: Dict[str, Any]):
+        student = db.find_student(database, p["student_id"])
+        if not student:
+            return db.NO_SAVE
+        student["total_stars"] = int(student.get("total_stars", 0)) + stars
+        student.setdefault("history", []).insert(0, {
+            "date": db.today(), "delta": stars, "reason": STARS_REASON.format(title=title),
+        })
+        return None
+
+    try:
+        db.transaction(_apply)
+    except Exception:
+        with store.write() as conn:      # звёзды не дошли — снимаем отметку, начисление повторится
+            conn.execute("UPDATE participants SET stars_given = NULL WHERE id = ?", (participant_id,))
+        raise
+    return stars
+
+
 @router.post("/finish")
 def finish(item: schemas.MonitorToken):
     with store.write() as conn:
@@ -210,5 +251,73 @@ def finish(item: schemas.MonitorToken):
                                  (participant["id"],)).fetchone()[0]
         conn.execute("UPDATE participants SET finished_at = ?, score = ? WHERE id = ?",
                      (store.now(), score, participant["id"]))
+    award_stars(participant["id"])
+    with store.read() as conn:
         me = _me(conn, store.participant_by_token(conn, item.token))
     return {"ok": True, "me": me}
+
+
+# ── Опрос из кабинета ученика ─────────────────────────────────────────────────
+
+def run_for_class(conn, school_id: int, class_id: int) -> Optional[Dict[str, Any]]:
+    """Опрос, который сейчас идёт у этого класса (у класса одновременно — не больше одного)."""
+    runs = store.open_runs(conn, school_id)
+    classes = store.run_classes(conn, [r["id"] for r in runs])
+    return next((r for r in runs if any(c["id"] == class_id for c in classes[r["id"]])), None)
+
+
+def student_poll(database: Dict[str, Any], student: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Что показать в кабинете: опрос класса сейчас — название, звёзды, пройден ли."""
+    cls = db.find_class(database, student.get("class_id"))
+    if not cls:
+        return None
+    with store.read() as conn:
+        run = run_for_class(conn, cls["school_id"], cls["id"])
+        if not run:
+            return None
+        mine = conn.execute("SELECT finished_at, stars_given FROM participants WHERE run_id = ? AND student_id = ? "
+                            "AND verified = 1 ORDER BY id DESC LIMIT 1", (run["id"], student["id"])).fetchone()
+    return {"run_id": run["id"], "title": run["title"], "stars": int(run["settings"].get("stars") or 0),
+            "code": bool(run["code"]), "started": mine is not None,
+            "done": bool(mine and mine["finished_at"] is not None),
+            "stars_given": mine["stars_given"] if mine else None}
+
+
+def join_from_cabinet(database: Dict[str, Any], student: Dict[str, Any], code: str, ip: str) -> Dict[str, Any]:
+    """Ученик из своего кабинета входит в опрос своего класса — без ввода имени.
+    Уже входил в этот опрос — возвращаем то же участие (продолжить с того же вопроса)."""
+    cls = db.find_class(database, student.get("class_id"))
+    if not cls:
+        raise _error(status.HTTP_409_CONFLICT, "Для твоего класса опрос сейчас не идёт")
+    words = (student.get("name") or "").split()
+    last, first = (words + ["", ""])[:2]
+    with store.write() as conn:
+        link = store.school_link(conn, cls["school_id"], db.school_name_of_class(database, cls["id"]))
+        run = run_for_class(conn, cls["school_id"], cls["id"])
+        if not run:
+            raise _error(status.HTTP_409_CONFLICT, "Для твоего класса опрос сейчас не идёт")
+        mine = conn.execute("SELECT token FROM participants WHERE run_id = ? AND student_id = ? AND verified = 1 "
+                            "ORDER BY id DESC LIMIT 1", (run["id"], student["id"])).fetchone()
+        if mine:
+            return {"token": mine["token"], "link": link}
+        if run["code"]:
+            key = f"{ip}:{run['id']}"
+            wait = ratelimit.retry_after("m-code", key)
+            if wait:
+                raise _too_many(wait)
+            given = (code or "").strip()
+            if not given:
+                raise _error(status.HTTP_400_BAD_REQUEST, "Введи код урока — 4 цифры на экране класса")
+            if given != run["code"]:
+                ratelimit.register_failure("m-code", key)
+                raise _error(status.HTTP_400_BAD_REQUEST, "Неверный код урока — посмотри на экран класса")
+        count = conn.execute("SELECT COUNT(*) FROM participants WHERE run_id = ?", (run["id"],)).fetchone()[0]
+        if count >= store.MAX_PARTICIPANTS:
+            raise _error(status.HTTP_400_BAD_REQUEST, "В опросе уже слишком много участников")
+        token = store.new_token()
+        conn.execute(
+            "INSERT INTO participants (run_id, token, last_name, first_name, class_id, class_name, student_id, "
+            "name_key, joined_at, verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+            (run["id"], token, logic.clean_person(last) or "—", logic.clean_person(first) or "—",
+             cls["id"], cls["name"], student["id"], logic.name_key(last, first), store.now()))
+    return {"token": token, "link": link}

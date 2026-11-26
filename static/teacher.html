@@ -240,7 +240,10 @@
       <p class="page-sub" id="scheduleHint">Нажмите на клетку, чтобы поставить класс на урок. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
     </div>
     <div class="seg class-seg" id="scheduleClasses" role="tablist" aria-label="Класс"></div>
-    <button class="btn btn-ghost editor-only" onclick="openBells()">
+    <button class="btn btn-ghost" onclick="openScheduleLog()">
+      <svg class="ic"><use href="#i-history"></use></svg>Изменения
+    </button>
+    <button class="btn btn-ghost" onclick="openBells()">
       <svg class="ic"><use href="#i-clock"></use></svg>Время уроков
     </button>
   </div>
@@ -248,7 +251,7 @@
   <section class="sched-extra" id="schedExtra">
     <div class="sched-extra-head">
       <h2 class="sched-extra-title">Занятия в другое время</h2>
-      <button class="btn btn-ghost btn-sm editor-only" onclick="openScheduleEntry()">
+      <button class="btn btn-ghost btn-sm" onclick="openScheduleEntry()">
         <svg class="ic ic-sm"><use href="#i-plus"></use></svg>Занятие
       </button>
     </div>
@@ -580,11 +583,25 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalScheduleLog" onclick="if(event.target===this) closeModal('modalScheduleLog')">
+  <div class="modal" style="max-width:600px;" role="dialog" aria-labelledby="schedLogTitle">
+    <div>
+      <div class="modal-title" id="schedLogTitle">Изменения расписания</div>
+      <p class="modal-sub" id="schedLogSub"></p>
+    </div>
+    <div class="sched-log" id="schedLogList"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalScheduleLog')">Закрыть</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalSchedule" onclick="if(event.target===this) closeModal('modalSchedule')">
   <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="scheduleTitle">
     <div>
       <div class="modal-title" id="scheduleTitle">Новое занятие</div>
       <p class="modal-sub" id="scheduleSub">Можно отметить сразу несколько дней недели.</p>
+      <p class="sch-author" id="scheduleAuthor" hidden></p>
     </div>
     <div class="field">
       <label for="schClass">Класс</label>
@@ -684,6 +701,11 @@
     <div class="field">
       <span class="field-label">Сколько идёт опрос</span>
       <div class="seg launch-time" id="launchTime" role="radiogroup" aria-label="Время"></div>
+    </div>
+    <div class="field">
+      <span class="field-label">Звёзды за опрос</span>
+      <div class="seg launch-time" id="launchStars" role="radiogroup" aria-label="Звёзды за опрос"></div>
+      <p class="field-hint" id="launchStarsHint"></p>
     </div>
     <label class="check launch-code"><input type="checkbox" id="launchCode">
       <span>Код урока: 4 цифры на экране класса — ответят только те, кто на уроке</span></label>

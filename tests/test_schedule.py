@@ -286,3 +286,47 @@ def test_bells_refuse_overlap_with_other_time(teacher):
     r = bells(teacher, [("08:30", "09:15")])
     assert r.status_code == 400 and "пересечётся" in r.json()["detail"]
     assert load_db()["schedule"][0]["start"] == "08:00", "ничего не поменялось"
+
+
+
+# ── Кто изменил: подпись у занятия и журнал изменений ────────────────────────
+
+def test_schedule_changes_are_signed_and_logged(teacher, school_teacher):
+    uid = teacher.post("/api/users", json={"login": "petrova", "name": "Петрова", "school_ids": [1]}).json()["user"]["id"]
+    cell(teacher, weekday=2, lesson=1, class_id=1)
+    cell(teacher, weekday=2, lesson=1, class_ids=[1, 2])
+    cell(teacher, weekday=2, lesson=1, class_ids=[1, 2], user_id=uid)
+    entry = next(e for e in load_db()["schedule"] if e["class_id"] == 1)
+    assert entry["updated_by_name"] == "Администратор" and entry["updated_by_role"] == "superadmin"
+    teacher.patch(f"/api/schedule/{entry['id']}", json={"room": "12"})
+    aside = add(teacher, weekdays=[3], start="15:00", end="15:45").json()["created"][0]
+    teacher.patch(f"/api/schedule/{aside['id']}", json={"start": "15:10", "end": "15:55"})
+    teacher.delete(f"/api/schedule/{aside['id']}")
+    cell(teacher, weekday=2, lesson=1, class_ids=[])
+    bells(teacher, [("09:00", "09:40"), ("09:50", "10:30")], days=6)
+    texts = [r["text"] for r in teacher.get("/api/state").json()["schedule_log"]]
+    assert texts == [
+        "Время уроков: 2 урока, первый 09:00–09:40; суббота — учебный день",
+        "Вт, 1-й урок: убран 5-А + 5-Б",
+        "Удалено занятие 5-А: Ср 15:10–15:55",
+        "Занятие 5-А: Ср 15:00–15:45 → Ср 15:10–15:55",
+        "Добавлено занятие 5-А: Ср 15:00–15:45, каб. 12, учитель — Администратор",
+        "Занятие 5-А: кабинет — → 12",
+        "Вт, 1-й урок, 5-А + 5-Б: учитель Администратор → Петрова",
+        "Вт, 1-й урок: 5-А → 5-А + 5-Б",
+        "Вт, 1-й урок: поставлен 5-А, учитель — Администратор",
+    ], texts
+    assert all(r["user_name"] == "Администратор" for r in teacher.get("/api/state").json()["schedule_log"])
+    # Учитель видит журнал своей школы, чужой — нет
+    assert school_teacher.get("/api/state").json()["schedule_log"][0]["text"].startswith("Время уроков")
+    other = school_teacher.other
+    teacher.put("/api/schedule/cell", json={"school_id": other["school"], "weekday": 1, "lesson": 1, "class_id": other["class"]})
+    assert all(r["school_id"] == 1 for r in school_teacher.get("/api/state").json()["schedule_log"])
+
+
+def test_unchanged_edit_is_not_logged(teacher):
+    cell(teacher, weekday=1, lesson=1, class_id=1)
+    cell(teacher, weekday=1, lesson=1, class_id=1)
+    entry = load_db()["schedule"][0]
+    teacher.patch(f"/api/schedule/{entry['id']}", json={"room": ""})
+    assert len(load_db()["schedule_log"]) == 1

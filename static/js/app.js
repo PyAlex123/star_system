@@ -984,6 +984,58 @@ function updateMini() {
   $("mini").classList.toggle("shown", show);
 }
 
+/* ── Опрос класса ─────────────────────────────────────────── */
+
+let poll = null;              // опрос, который сейчас идёт у класса: { run_id, title, stars, code, started, done }
+
+async function loadPoll() {
+  if (!token) return;
+  try {
+    poll = (await api("/api/me/poll")).poll;
+  } catch (_) {
+    return;                   // нет связи — карточку не трогаем
+  }
+  renderPoll();
+}
+
+/** Карточка опроса: название, звёзды за ответы, «Пройти» (и код урока, если учитель его включил).
+ *  Пройденный опрос карточку убирает — звёзды придут уведомлением. */
+function renderPoll() {
+  const bar = $("pollBar");
+  const show = Boolean(poll && !poll.done);
+  bar.hidden = !show;
+  document.body.classList.toggle("has-poll", show);
+  if (!show) return;
+  const needCode = poll.code && !poll.started;
+  bar.innerHTML = `
+    <div class="poll-in">
+      <span class="poll-mark" aria-hidden="true">${icon("activity")}</span>
+      <span class="poll-text">
+        <b>${poll.started ? "Продолжи опрос" : "Идёт опрос класса"}${poll.stars
+          ? ` <span class="poll-stars" title="Звёзды за ответы на все вопросы">+${poll.stars}${starIc("ic ic-xs")}</span>` : ""}</b>
+        <span>${escapeHtml(poll.title)}</span>
+      </span>
+      ${needCode ? `<input class="poll-code" id="pollCode" inputmode="numeric" maxlength="4" autocomplete="off"
+          placeholder="Код" aria-label="Код урока — 4 цифры на экране класса">` : ""}
+      <button class="btn poll-go" type="button" onclick="joinPoll()" ${isPreview ? "disabled title=\"В предпросмотре пройти опрос нельзя\"" : ""}>
+        ${poll.started ? "Продолжить" : "Пройти"}</button>
+    </div>`;
+}
+
+async function joinPoll() {
+  if (!poll || isPreview) return;
+  const code = $("pollCode")?.value.trim() || "";
+  try {
+    const result = await api("/api/me/poll/join", { method: "POST", json: { code } });
+    haptic();
+    location.href = result.url;
+  } catch (error) {
+    haptic("error");
+    toast(error.message, "error");
+    if (error.status === 409) loadPoll();
+  }
+}
+
 async function refresh() {
   if (!token) return;
   data = await api("/api/me");
@@ -1117,7 +1169,10 @@ function closeCabinet() {
 
   // Пока кабинет открыт — подтягиваем свежие звёзды (учитель мог начислить прямо сейчас)
   refreshTimer = setInterval(() => { refresh().catch(() => {}); }, 45000);
+  // Опрос класса — чаще: учитель запустил, и карточка появляется почти сразу
+  loadPoll();
+  setInterval(() => { if (!document.hidden) loadPoll(); }, 20000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) refresh().catch(() => {});
+    if (!document.hidden) { refresh().catch(() => {}); loadPoll(); }
   });
 })();

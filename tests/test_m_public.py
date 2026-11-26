@@ -192,3 +192,131 @@ def test_validate_answer_types():
     with pytest.raises(logic.AnswerError):
         logic.validate_answer(scale, {"v": True})
     assert logic.validate_answer({"type": "long", "required": False}, {"t": "  "}) is None
+
+
+# ── Опрос из кабинета ученика и звёзды за опрос ──────────────────────────────
+
+def _finish(kid, token):
+    for qid, value in (("c2", {"v": 4}), ("c5", {"v": "yellow"}), ("c9", {"o": "b"})):
+        assert kid.post("/api/m/answer", json={"token": token, "question_id": qid, "value": value}).status_code == 200
+    r = kid.post("/api/m/finish", json={"token": token})
+    assert r.status_code == 200, r.text
+    return r.json()["me"]
+
+
+def test_cabinet_sees_class_poll_and_gets_stars(teacher, link, student_headers):
+    from conftest import student_record
+    h = student_headers(101)                                  # Иванов Артём, 5-А
+    kid = TestClient(app)
+    assert kid.get("/api/me/poll", headers=h).json()["poll"] is None, "опроса нет — в кабинете пусто"
+
+    start(teacher, stars=3)
+    poll = kid.get("/api/me/poll", headers=h).json()["poll"]
+    assert poll["title"] == "Пульс за 30 секунд" and poll["stars"] == 3 and not poll["done"] and not poll["started"]
+    assert kid.get("/api/me/poll", headers=student_headers(103)).json()["poll"] is None, "у 5-Б опроса нет"
+
+    r = kid.post("/api/me/poll/join", json={}, headers=h)
+    assert r.status_code == 200, r.text
+    url = r.json()["url"]
+    assert url.startswith(f"/m/{link}?p=")
+    token = url.split("?p=")[1]
+    me = kid.get(f"/api/m/{link}/state?p={token}").json()["me"]
+    assert me["last_name"] == "Иванов" and me["first_name"] == "Артём" and me["verified"] and me["stars"] == 3
+    again = kid.post("/api/me/poll/join", json={}, headers=h).json()["url"]
+    assert again == url, "повторный вход — то же участие"
+
+    before = student_record(101)["total_stars"]
+    done = _finish(kid, token)
+    assert done["stars_given"] == 3
+    student = student_record(101)
+    assert student["total_stars"] == before + 3
+    assert student["history"][0]["reason"] == "Опрос «Пульс за 30 секунд»" and student["history"][0]["delta"] == 3
+    poll = kid.get("/api/me/poll", headers=h).json()["poll"]
+    assert poll["done"] and poll["stars_given"] == 3
+
+    from backend.routers import m_public
+    with store.read() as conn:
+        participant_id = store.participant_by_token(conn, token)["id"]
+    assert m_public.award_stars(participant_id) == 0, "второй раз звёзды не начисляются"
+    assert student_record(101)["total_stars"] == before + 3
+
+    run_id = teacher.get("/api/monitoring/runs?school_id=1").json()["open"][0]["id"]
+    live = teacher.get(f"/api/monitoring/runs/{run_id}").json()
+    assert live["stars"] == 3
+    person = next(p for p in live["participants"] if p["name"] == "Иванов Артём")
+    assert person["verified"] and person["stars"] == 3 and person["guest"] is False
+
+
+def test_link_guest_gets_no_stars(teacher, link):
+    from conftest import student_record
+    start(teacher, stars=2)
+    kid = TestClient(app)
+    token = join(kid, link).json()["token"]                    # по ссылке, с именем — без проверки личности
+    before = student_record(101)["total_stars"]
+    done = _finish(kid, token)
+    assert done["stars"] == 0 and done["stars_given"] is None
+    assert student_record(101)["total_stars"] == before
+
+
+def test_poll_without_stars(teacher, student_headers):
+    from conftest import student_record
+    start(teacher)
+    kid = TestClient(app)
+    h = student_headers(101)
+    assert kid.get("/api/me/poll", headers=h).json()["poll"]["stars"] == 0
+    token = kid.post("/api/me/poll/join", json={}, headers=h).json()["url"].split("?p=")[1]
+    before = student_record(101)["total_stars"]
+    assert _finish(kid, token)["stars_given"] is None
+    assert student_record(101)["total_stars"] == before
+
+
+def test_cabinet_join_needs_lesson_code(teacher, student_headers):
+    start(teacher, use_code=True, stars=1)
+    kid = TestClient(app)
+    h = student_headers(101)
+    assert kid.get("/api/me/poll", headers=h).json()["poll"]["code"] is True
+    r = kid.post("/api/me/poll/join", json={}, headers=h)
+    assert r.status_code == 400 and "код урока" in r.json()["detail"]
+    assert kid.post("/api/me/poll/join", json={"code": "0000x"}, headers=h).status_code in (400, 422)
+    run = teacher.get("/api/monitoring/runs?school_id=1").json()["open"][0]
+    assert kid.post("/api/me/poll/join", json={"code": run["code"]}, headers=h).status_code == 200
+
+
+def test_cabinet_join_when_no_poll(student_headers):
+    kid = TestClient(app)
+    r = kid.post("/api/me/poll/join", json={}, headers=student_headers(101))
+    assert r.status_code == 409
+
+
+def test_teacher_preview_cannot_take_poll(teacher):
+    start(teacher)
+    token = teacher.post("/api/auth/preview?student_id=101").json()["token"]
+    r = TestClient(app).post("/api/me/poll/join", json={}, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403
+
+
+def test_old_monitoring_base_gets_new_columns():
+    """База опросов версии 1 (до звёзд за опрос): столбцы дописываются, данные остаются."""
+    import sqlite3
+    path = store.db_file()
+    store.forget()
+    path.unlink(missing_ok=True)
+    old = sqlite3.connect(str(path))
+    old.executescript(store.SCHEMA.replace(
+        "    score       REAL,\n    verified    INTEGER NOT NULL DEFAULT 0,   -- вошёл из своего кабинета: кто это — точно известно\n"
+        "    stars_given INTEGER                       -- звёзды за опрос уже начислены (сколько)\n",
+        "    score       REAL\n"))
+    assert "verified" not in {r[1] for r in old.execute("PRAGMA table_info(participants)")}, "собрали старую схему"
+    old.execute("INSERT INTO runs (school_id, school_name, owner_id, owner_name, title, questions, lesson_date, started_at) "
+                "VALUES (1, 'Школа', 1, 'Учитель', 'Старый', '[]', '2026-11-20', 1)")
+    old.execute("INSERT INTO participants (run_id, token, last_name, first_name, class_id, class_name, name_key, joined_at) "
+                "VALUES (1, 'tok', 'Иванов', 'Артём', 1, '5-А', 'k', 1)")
+    old.execute("PRAGMA user_version = 1")
+    old.commit()
+    old.close()
+    with store.read() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(participants)")}
+        assert {"verified", "stars_given"} <= cols
+        row = store.participant_by_token(conn, "tok")
+        assert row["verified"] == 0 and row["stars_given"] is None
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == store.SCHEMA_VERSION

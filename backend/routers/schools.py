@@ -83,6 +83,7 @@ def delete_school(school_id: int):
         database["lessons"] = [lesson for lesson in database["lessons"]
                                if lesson.get("class_id") not in class_ids]
         database["schedule"] = [e for e in database.get("schedule", []) if e.get("class_id") not in class_ids]
+        database["schedule_log"] = [r for r in database.get("schedule_log", []) if r.get("school_id") != school_id]
         database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
         for user in database.get("users", []):
             if school_id in (user.get("school_ids") or []):

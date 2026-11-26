@@ -247,6 +247,7 @@ class MonitorRunCreate(BaseModel):
     goals: List[MonitorText] = Field(default_factory=list, max_length=5)
     minutes: Optional[int] = Field(default=None, ge=1, le=90)
     use_code: bool = False
+    stars: int = Field(default=0, ge=0, le=10)     # звёзды за опрос вошедшим из кабинета; 0 — без звёзд
 
 
 class MonitorFormCreate(BaseModel):
@@ -280,6 +281,11 @@ class MonitorAnswer(BaseModel):
     token: Annotated[str, Field(max_length=64)]
     question_id: Annotated[str, Field(max_length=20)]
     value: dict
+
+
+class PollJoin(BaseModel):
+    """Ученик открывает опрос из своего кабинета. code — код урока, если учитель его включил."""
+    code: Optional[Annotated[str, Field(max_length=8)]] = None
 
 
 class MonitorToken(BaseModel):

@@ -232,6 +232,8 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
                        if lesson.get("class_id") in class_ids]
     copy["schedule"] = [e for e in copy.get("schedule", []) if e.get("class_id") in class_ids]
     copy["prizes"] = [p for p in copy.get("prizes", []) if prize_for_school(p, schools)]
+    # Журнал изменений расписания — своих школ, последние 200
+    copy["schedule_log"] = [r for r in copy.get("schedule_log", []) if r.get("school_id") in schools][:200]
     users = copy.pop("users", [])
     copy["telegram_login"] = telegram_login(db)
     copy.pop("settings", None)

@@ -28,6 +28,8 @@ let monForms = [];
 let launchSet = null;
 let launchClasses = new Set();
 let launchMinutes = 5;
+let launchStars = 0;              // звёзды за опрос: 0 — без звёзд
+const LAUNCH_STARS = [0, 1, 2, 3, 5];
 
 let liveRunId = null;
 let liveData = null;
@@ -275,7 +277,7 @@ function monRecentRow(run) {
   return `<div class="mon-row">
     <span class="mon-date">${escapeHtml(formatDay(run.lesson_date, { year: false }))}</span>
     <span class="mon-row-title"><b>${escapeHtml(run.title)}</b>
-      <small class="muted">${escapeHtml(monClasses(run))}${isAdmin() ? ` · ${escapeHtml(run.owner_name)}` : ""}</small></span>
+      <small class="muted">${escapeHtml(monClasses(run))}${run.stars ? ` · +${run.stars} ★ за ответы` : ""}${isAdmin() ? ` · ${escapeHtml(run.owner_name)}` : ""}</small></span>
     <span class="mon-row-n"><b class="num">${run.finished}</b> <span class="muted">${plural(run.finished, "ответил", "ответили", "ответили")}</span></span>
     <button class="btn btn-ghost btn-sm" onclick="openMonResults(${run.id})">${icon("chart", "ic ic-sm")}Итоги</button>
   </div>`;
@@ -313,8 +315,10 @@ function openLaunch(key, source = null) {
   $("launchTopic").value = "";
   $("launchGoals").value = "";
   $("launchCode").checked = false;
+  launchStars = 0;
   renderLaunchClasses();
   renderLaunchTime();
+  renderLaunchStars();
   openModal("modalLaunch");
 }
 
@@ -344,6 +348,19 @@ function renderLaunchTime() {
     onclick="pickLaunchTime(${m})">${m ? `${m} мин` : "До закрытия"}</button>`).join("");
 }
 
+function renderLaunchStars() {
+  $("launchStars").innerHTML = LAUNCH_STARS.map((n) => `<button type="button" role="radio" aria-checked="${n === launchStars}"
+    onclick="pickLaunchStars(${n})">${n ? `${n} ★` : "Без звёзд"}</button>`).join("");
+  $("launchStarsHint").textContent = launchStars
+    ? `Каждый, кто ответит на все вопросы, получит ${launchStars} ${stars(launchStars)}. Только ученики, открывшие опрос из своего кабинета — там точно известно, кто это.`
+    : "Опрос пройдёт без начисления звёзд.";
+}
+
+function pickLaunchStars(n) {
+  launchStars = n;
+  renderLaunchStars();
+}
+
 function pickLaunchTime(minutes) {
   launchMinutes = minutes;
   renderLaunchTime();
@@ -364,7 +381,7 @@ async function launchRun() {
         school_id: activeSchool, ...(launchSet.formId ? { form_id: launchSet.formId } : { set_key: launchSet.key }),
         class_ids: [...launchClasses],
         topic: launchSet.uses_topic ? $("launchTopic").value.trim() : "", goals: goals.slice(0, 5),
-        minutes: launchMinutes, use_code: $("launchCode").checked,
+        minutes: launchMinutes, use_code: $("launchCode").checked, stars: launchStars,
       },
     });
     closeModal("modalLaunch");
@@ -509,8 +526,10 @@ function livePerson(p, total) {
   return `<div class="live-p ${p.finished ? "done" : ""} ${p.duplicate ? "dup" : ""}">
     <span class="live-p-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
     <span class="live-p-meta">${escapeHtml(p.class_name)}
-      ${p.guest ? `<span class="tag" title="Нет в списке класса">гость</span>` : ""}
-      ${p.duplicate ? `<span class="tag tag-star" title="Это имя вошло несколько раз">повтор</span>` : ""}</span>
+      ${p.verified ? `<span class="tag tag-accent" title="Открыл опрос из своего кабинета">из кабинета</span>`
+        : p.guest ? `<span class="tag" title="Нет в списке класса">гость</span>` : ""}
+      ${p.duplicate ? `<span class="tag tag-star" title="Это имя вошло несколько раз">повтор</span>` : ""}
+      ${p.stars ? `<span class="tag tag-star" title="Начислено за опрос">+${p.stars} ★</span>` : ""}</span>
     <span class="live-p-state" title="${p.finished ? "Ответы отправлены" : `Ответил на ${p.answered} из ${total}`}">
       ${p.finished ? icon("check", "ic ic-sm") : `${p.answered}/${total}`}</span>
     <button class="icon-btn" title="Убрать из опроса" aria-label="Убрать ${escapeHtml(p.name)} из опроса"

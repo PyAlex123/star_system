@@ -51,6 +51,7 @@ def _brief(run: Dict[str, Any], classes: List[Dict[str, Any]], counts: Dict[str,
         "seconds_left": None if run["closes_at"] is None or ended is not None else run["closes_at"] - t,
         "ended_ago": None if ended is None else t - ended,
         "joined": counts.get("joined", 0), "finished": counts.get("finished", 0),
+        "stars": int(run["settings"].get("stars") or 0),
     }
 
 
@@ -213,7 +214,7 @@ def create_run(item: schemas.MonitorRunCreate, user: User = Depends(require_teac
         "school_id": school["id"], "school_name": school["name"],
         "owner_id": user["id"], "owner_name": user.get("name") or user.get("login", ""),
         "form_id": source["form_id"], "set_key": source["key"], "title": source["title"], "kind": source["kind"],
-        "settings": source["settings"],
+        "settings": {**source["settings"], "stars": item.stars},
         "questions": questions, "topic": " ".join(item.topic.split()), "goals": goals,
         "all_classes": int(not item.class_ids), "lesson_date": db.today(),
         "code": f"{secrets.randbelow(10000):04d}" if item.use_code else None,
@@ -248,6 +249,7 @@ def live(run_id: int, user: User = Depends(require_teacher)):
     brief["participants"] = [{
         "id": p["id"], "name": f"{p['last_name']} {p['first_name']}", "class_name": p["class_name"],
         "guest": p["student_id"] is None, "duplicate": seen[f"{p['class_id']}|{p['name_key']}"] > 1,
+        "verified": bool(p["verified"]), "stars": p["stars_given"],
         "answered": min(total, answered.get(p["id"], 0)), "finished": p["finished_at"] is not None,
     } for p in people]
     brief["total_questions"] = total

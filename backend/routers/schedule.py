@@ -11,17 +11,60 @@
 (lesson = None). Время занятия (start, end) хранится всегда: по нему живут кабинет
 ученика, полоска «сегодня» в журнале и статистика.
 """
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from fastapi import APIRouter, Depends
 
 from .. import db, schemas
-from ..security import require_teacher
+from ..security import require_panel
 from .common import bad_request, class_or_404, not_found, school_or_404
 
-router = APIRouter(prefix="/api/schedule", tags=["schedule"], dependencies=[Depends(require_teacher)])
+# Расписание меняют учитель, администратор и администрация школы (свои школы).
+# Каждая правка подписана (updated_by у занятия) и попадает в журнал изменений школы.
+router = APIRouter(prefix="/api/schedule", tags=["schedule"], dependencies=[Depends(require_panel)])
 
 WEEKDAY_IN = ("в понедельник", "во вторник", "в среду", "в четверг", "в пятницу", "в субботу", "в воскресенье")
+WEEKDAY_SHORT = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+LOG_KEEP = 2000             # записей журнала изменений на все школы — старые отбрасываются
+
+
+def _author(user: Dict[str, Any]) -> Dict[str, Any]:
+    # Время — с часовым поясом (UTC): сервер в контейнере живёт по Гринвичу, а панель
+    # покажет время по часам учителя
+    return {"updated_by": user["id"], "updated_by_name": user.get("name") or user.get("login", ""),
+            "updated_by_role": user.get("role"),
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def _stamp(entries: Iterable[Dict[str, Any]], user: Dict[str, Any]) -> None:
+    """Подпись «кто и когда менял» у занятия — видна в окошке клетки и в окне занятия."""
+    who = _author(user)
+    for entry in entries:
+        entry.update(who)
+
+
+def _log(database: Dict[str, Any], school_id: int, user: Dict[str, Any], text: str) -> None:
+    """Журнал изменений расписания: кто, когда, что было и что стало."""
+    log = database.setdefault("schedule_log", [])
+    who = _author(user)
+    log.insert(0, {"school_id": school_id, "at": who["updated_at"], "user_id": user["id"],
+                   "user_name": who["updated_by_name"], "role": who["updated_by_role"], "text": text})
+    del log[LOG_KEEP:]
+
+
+def _teacher_name(database: Dict[str, Any], user_id: Optional[int]) -> str:
+    teacher = db.find_user(database, user_id) if user_id else None
+    return (teacher or {}).get("name") or "без учителя"
+
+
+def _names(database: Dict[str, Any], class_ids: Iterable[int]) -> str:
+    return " + ".join(_class_name(database, c) for c in class_ids)
+
+
+def _default_teacher(user: Dict[str, Any]) -> Optional[int]:
+    """Учитель нового занятия по умолчанию — тот, кто добавил; администрация школы уроков не ведёт."""
+    return None if db.is_school_admin(user) else user["id"]
 
 
 def _entry_or_404(database: Dict[str, Any], entry_id: int, user: Dict[str, Any]) -> Dict[str, Any]:
@@ -84,13 +127,13 @@ def _place(database: Dict[str, Any], entry: Dict[str, Any], school_id: int) -> N
 
 
 @router.post("")
-def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(require_teacher)):
+def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(require_panel)):
     """Занятие сразу на несколько дней недели. Учитель по умолчанию — тот, кто добавил."""
     _check_time(item.start, item.end)
 
     def _apply(database: Dict[str, Any]):
         cls = class_or_404(database, item.class_id, user)
-        teacher = _check_teacher(database, item.user_id if item.user_id is not None else user["id"],
+        teacher = _check_teacher(database, item.user_id if item.user_id is not None else _default_teacher(user),
                                  cls["school_id"])
         schedule = database.setdefault("schedule", [])
         created = []
@@ -104,13 +147,19 @@ def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(req
             _place(database, entry, cls["school_id"])
             schedule.append(entry)
             created.append(entry)
+        _stamp(created, user)
+        days = ", ".join(WEEKDAY_SHORT[w - 1] for w in sorted(set(item.weekdays)))
+        _log(database, cls["school_id"], user,
+             f"Добавлено занятие {cls['name']}: {days} {item.start}–{item.end}"
+             + (f", каб. {item.room.strip()}" if item.room.strip() else "")
+             + f", учитель — {_teacher_name(database, teacher)}")
         return created
 
     return {"ok": True, "created": db.transaction(_apply)}
 
 
 @router.put("/bells/{school_id}")
-def set_bells(school_id: int, item: schemas.SchoolBells, user: Dict[str, Any] = Depends(require_teacher)):
+def set_bells(school_id: int, item: schemas.SchoolBells, user: Dict[str, Any] = Depends(require_panel)):
     """Время уроков школы и учебные дни. Занятия в таблице переезжают на новое время
     своего урока; занятия «в другое время», совпавшие с уроком, встают в таблицу."""
     bells = [{"start": b.start, "end": b.end} for b in item.bells]
@@ -139,11 +188,17 @@ def set_bells(school_id: int, item: schemas.SchoolBells, user: Dict[str, Any] = 
                                       f"{WEEKDAY_IN[entry['weekday'] - 1]} пересечётся с занятием "
                                       f"{clash['start']}–{clash['end']}")
 
+        before = (school.get("bells"), school.get("days"))
         school["bells"] = bells
         school["days"] = item.days
         for entry in entries:
             if entry["id"] in moved:
                 entry.update(moved[entry["id"]])
+        if before != (bells, item.days):
+            _log(database, school_id, user,
+                 f"Время уроков: {len(bells)} {'урок' if len(bells) == 1 else 'урока' if len(bells) < 5 else 'уроков'}, "
+                 f"первый {bells[0]['start']}–{bells[0]['end']}"
+                 + ("; суббота — учебный день" if item.days >= 6 else "; без субботы"))
         db.link_schedule_to_bells(database, school_id)
         return {"bells": school["bells"], "days": school["days"]}
 
@@ -151,7 +206,7 @@ def set_bells(school_id: int, item: schemas.SchoolBells, user: Dict[str, Any] = 
 
 
 @router.put("/cell")
-def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_teacher)):
+def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_panel)):
     """Ячейка таблицы: поставить класс, заменить его другим, объединить несколько классов
     в один урок или убрать урок. Учитель — переданный, иначе прежний учитель ячейки,
     иначе тот, кто нажал; у всех классов урока он общий.
@@ -169,18 +224,20 @@ def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_
         else:
             wanted_ids = [] if item.class_id is None else [item.class_id]
 
+        where = f"{WEEKDAY_SHORT[item.weekday - 1]}, {item.lesson}-й урок"
         if not wanted_ids:
             if not current:
                 return db.NO_SAVE
             gone = {e["id"] for e in current}
             database["schedule"] = [e for e in schedule if e.get("id") not in gone]
+            _log(database, item.school_id, user, f"{where}: убран {_names(database, [e['class_id'] for e in current])}")
             return {"entries": []}
 
         for class_id in wanted_ids:
             if class_or_404(database, class_id, user)["school_id"] != item.school_id:
                 raise not_found("Класс не найден")
         wanted = (item.user_id if "user_id" in item.model_fields_set
-                  else current[0]["user_id"] if current else user["id"])
+                  else current[0]["user_id"] if current else _default_teacher(user))
         teacher = _check_teacher(database, wanted, item.school_id)
 
         keep = [e for e in current if e["class_id"] in wanted_ids]
@@ -197,6 +254,8 @@ def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_
             if clash:
                 raise _clash_error(database, class_id, clash)
         room = keep[0].get("room", "") if keep else ""
+        before_names = _names(database, [e["class_id"] for e in current])
+        before_teacher = current[0].get("user_id") if current else None
         for entry in drop:
             schedule.remove(entry)
         for entry in keep:
@@ -208,7 +267,19 @@ def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_
             schedule.append(entry)
             keep.append(entry)
         order = {c: i for i, c in enumerate(wanted_ids)}
-        return {"entries": sorted(keep, key=lambda e: order[e["class_id"]])}
+        keep.sort(key=lambda e: order[e["class_id"]])
+        _stamp(keep, user)
+        after_names = _names(database, wanted_ids)
+        if not current:
+            text = f"{where}: поставлен {after_names}, учитель — {_teacher_name(database, teacher)}"
+        elif drop or new_ids:
+            text = f"{where}: {before_names} → {after_names}"
+            if before_teacher != teacher:
+                text += f"; учитель {_teacher_name(database, before_teacher)} → {_teacher_name(database, teacher)}"
+        else:
+            text = f"{where}, {after_names}: учитель {_teacher_name(database, before_teacher)} → {_teacher_name(database, teacher)}"
+        _log(database, item.school_id, user, text)
+        return {"entries": keep}
 
     result = db.transaction(_apply)
     if result is db.NO_SAVE:
@@ -218,10 +289,11 @@ def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_
 
 
 @router.patch("/{entry_id}")
-def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, Any] = Depends(require_teacher)):
+def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, Any] = Depends(require_panel)):
     def _apply(database: Dict[str, Any]):
         entry = _entry_or_404(database, entry_id, user)
         cls = db.find_class(database, entry["class_id"])
+        before = dict(entry)
         cell = (entry["weekday"], entry.get("lesson"))
         partners = (_cell_entries(database, cls["school_id"], entry["weekday"], entry["lesson"], skip_id=entry_id)
                     if entry.get("lesson") else [])
@@ -248,16 +320,34 @@ def update_lesson(entry_id: int, item: schemas.ScheduleUpdate, user: Dict[str, A
                     partner["room"] = entry["room"]
                 if "user_id" in item.model_fields_set:
                     partner["user_id"] = entry["user_id"]
+            touched = [entry, *partners] if (item.room is not None or "user_id" in item.model_fields_set) else [entry]
+        else:
+            touched = [entry]
+        changes = []
+        if (before["weekday"], before["start"], before["end"]) != (entry["weekday"], entry["start"], entry["end"]):
+            changes.append(f"{WEEKDAY_SHORT[before['weekday'] - 1]} {before['start']}–{before['end']} → "
+                           f"{WEEKDAY_SHORT[entry['weekday'] - 1]} {entry['start']}–{entry['end']}")
+        if (before.get("room") or "") != (entry.get("room") or ""):
+            changes.append(f"кабинет {before.get('room') or '—'} → {entry.get('room') or '—'}")
+        if before.get("user_id") != entry.get("user_id"):
+            changes.append(f"учитель {_teacher_name(database, before.get('user_id'))} → "
+                           f"{_teacher_name(database, entry.get('user_id'))}")
+        if changes:
+            _stamp(touched, user)
+            _log(database, cls["school_id"], user, f"Занятие {cls['name']}: " + "; ".join(changes))
         return entry
 
     return {"ok": True, "entry": db.transaction(_apply)}
 
 
 @router.delete("/{entry_id}")
-def delete_lesson(entry_id: int, user: Dict[str, Any] = Depends(require_teacher)):
+def delete_lesson(entry_id: int, user: Dict[str, Any] = Depends(require_panel)):
     def _apply(database: Dict[str, Any]):
-        _entry_or_404(database, entry_id, user)
+        entry = _entry_or_404(database, entry_id, user)
+        cls = db.find_class(database, entry["class_id"])
         database["schedule"] = [e for e in database["schedule"] if e.get("id") != entry_id]
+        _log(database, cls["school_id"], user,
+             f"Удалено занятие {cls['name']}: {WEEKDAY_SHORT[entry['weekday'] - 1]} {entry['start']}–{entry['end']}")
         return None
 
     db.transaction(_apply)

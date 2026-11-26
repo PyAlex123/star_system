@@ -1372,3 +1372,24 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
 .from-badge .ic { width: 14px; height: 14px; }
 a.class-tile { text-decoration: none; }
 .ct-print { position: absolute; top: 10px; right: 10px; color: var(--accent-text); }
+
+/* ── Кто изменил расписание ──────────────────────────────────── */
+
+.cp-author, .sch-author { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.sch-author { margin-top: 6px; }
+.sched-log { max-height: min(60vh, 520px); overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.sched-log-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-areas: "when text" "when who";
+  gap: 2px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.sched-log-row:first-child { border-top: 0; }
+.sl-when { grid-area: when; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sl-text { grid-area: text; font-size: 14px; line-height: 20px; }
+.sl-who { grid-area: who; font-size: 12px; color: var(--muted); }
+@media (max-width: 700px) {
+  .sched-log-row { grid-template-columns: 1fr; grid-template-areas: "when" "text" "who"; }
+}

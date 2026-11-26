@@ -21,7 +21,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 from .. import config
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2          # 1 → 2: у участника verified (вошёл из кабинета) и stars_given
 MAX_PARTICIPANTS = 400
 _CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"   # без l/1, o/0, i
 _CODE_LENGTH = 5
@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS participants (
     name_key    TEXT NOT NULL,
     joined_at   INTEGER NOT NULL,
     finished_at INTEGER,
-    score       REAL
+    score       REAL,
+    verified    INTEGER NOT NULL DEFAULT 0,   -- вошёл из своего кабинета: кто это — точно известно
+    stars_given INTEGER                       -- звёзды за опрос уже начислены (сколько)
 );
 CREATE INDEX IF NOT EXISTS participants_run ON participants (run_id);
 CREATE TABLE IF NOT EXISTS answers (
@@ -122,6 +124,12 @@ def _open() -> sqlite3.Connection:
             conn.execute("PRAGMA journal_mode = WAL")
             if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
                 conn.executescript(SCHEMA)
+                # База версии 1: таблица участников уже была — дописываем новые столбцы
+                have = {row[1] for row in conn.execute("PRAGMA table_info(participants)")}
+                if "verified" not in have:
+                    conn.execute("ALTER TABLE participants ADD COLUMN verified INTEGER NOT NULL DEFAULT 0")
+                if "stars_given" not in have:
+                    conn.execute("ALTER TABLE participants ADD COLUMN stars_given INTEGER")
                 conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             _ready_for = str(path)
     return conn

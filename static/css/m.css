@@ -229,3 +229,10 @@ body.m {
 @media (prefers-reduced-motion: reduce) {
   .m-ring.pulse, .m-spinner { animation: none; }
 }
+
+/* Звёзды за опрос на экране «Спасибо» */
+.m-stars { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0; padding: 10px 14px;
+  border-radius: var(--r14); background: var(--star-bg); color: var(--star-text); }
+.m-stars b { font: var(--nw) 26px/1 var(--font-num); }
+.m-stars .ic { color: var(--star); --ic-stroke: var(--star-depth); }
+.m-stars span { font-size: 14px; font-weight: 600; }
