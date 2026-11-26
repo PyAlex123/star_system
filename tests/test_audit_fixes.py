@@ -1,4 +1,5 @@
 """Находки аудита. Каждый тест здесь сначала падал на старом коде."""
+import re
 import json
 
 import pytest
@@ -83,7 +84,11 @@ def avatar_files():
 
 def test_photo_address_not_guessable(client, student_headers):
     url = upload_avatar(client, student_headers(101))
-    assert "101" not in url.split("?")[0]
+    name = url.split("?")[0].rsplit("/", 1)[1]
+    # Имя — 24 случайных шестнадцатеричных знака. Просто искать в нём «101» нельзя:
+    # эти три знака иногда выпадают случайно, и тест падал бы раз в пару сотен запусков.
+    assert re.fullmatch(r"avatar-[0-9a-f]{24}\.webp", name), name
+    assert "student" not in name
 
 
 def test_replaced_photo_deleted(client, student_headers):
