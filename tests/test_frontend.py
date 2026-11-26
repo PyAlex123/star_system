@@ -172,3 +172,26 @@ def test_initials():
     assert eval_common('initials("  ali  valiyev ")') == "AV"
     assert eval_common('initials("")') == "?"
     assert eval_common('initials("— Учитель")') == "У", "знаки без букв пропускаются"
+
+
+def test_popups_start_from_top_on_wide_screens():
+    """Меню разделов на широком экране — колонка слева во всю высоту. Её нижний край — низ экрана:
+    если принять его за «верх», окошки клеток расписания и меню «⋯» уезжают за экран."""
+    script = (
+        "const vm = require('vm'), fs = require('fs');"
+        "const stub = new Proxy(function () { return stub; }, { get: () => stub, apply: () => stub });"
+        "const side = { getBoundingClientRect: () => ({ bottom: 763 }) };"
+        "const edge = (phone) => {"
+        "  const doc = new Proxy({ getElementById: (id) => (id === 'side' ? side : stub) }, { get: (t, k) => (k in t ? t[k] : stub) });"
+        "  const win = new Proxy({ APP_BASE: '', matchMedia: () => ({ matches: phone }) }, { get: (t, k) => (k in t ? t[k] : stub) });"
+        "  const ctx = vm.createContext({ window: win, document: doc, location: {}, sessionStorage: stub, history: stub,"
+        "    setInterval: () => 0, setTimeout: () => 0, URLSearchParams, console, fetch: () => Promise.resolve(stub) });"
+        f"  for (const f of [{json.dumps(str(JS / 'common.js'))}, {json.dumps(str(JS / 'teacher.js'))}])"
+        "    vm.runInContext(fs.readFileSync(f, 'utf8'), ctx);"
+        "  return vm.runInContext('popTopEdge()', ctx);"
+        "};"
+        "console.log(JSON.stringify([edge(false), edge(true)]));"
+    )
+    r = run_node(script=script)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout) == [0, 763], "широкий экран — от верха окна; телефон — под строкой с названием"

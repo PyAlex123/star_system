@@ -2358,8 +2358,11 @@ function onHistoryMove() {
 
 /** Верхний край для всплывающих окошек: на телефоне сверху липкая строка с названием. */
 function popTopEdge() {
+  // Только телефон: там .side — строка сверху. На широком экране .side — колонка слева
+  // во всю высоту (тоже sticky), и её нижний край — это низ экрана, а не верх.
+  if (!window.matchMedia("(max-width: 700px)").matches) return 0;
   const side = $("side");
-  return side && getComputedStyle(side).position === "sticky" ? Math.max(0, side.getBoundingClientRect().bottom) : 0;
+  return side ? Math.max(0, side.getBoundingClientRect().bottom) : 0;
 }
 
 /** Лист «Ещё» нижней панели на телефоне. */
