@@ -14,7 +14,7 @@ from .bot.bot import start_bot, stop_bot
 from .checkin import bot as checkin_bot, scheduler as checkin_scheduler, store as checkin_store
 from .monitoring import store as monitoring_store
 from .routers import (auth, cards, checkin, excel, lessons, m_public, me, monitoring, prizes, schedule, schools,
-                      stats, students, telegram, users)
+                      settings, stats, students, telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
@@ -218,6 +218,7 @@ app.include_router(prizes.router)
 app.include_router(me.router)
 app.include_router(cards.router)
 app.include_router(users.router)
+app.include_router(settings.router)
 app.include_router(excel.router)
 app.include_router(checkin.router)
 app.include_router(monitoring.router)

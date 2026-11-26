@@ -37,6 +37,12 @@ function plural(n, one, few, many) {
   return many;
 }
 
+/** Инициалы для аватара: «Иванова Мария Сергеевна» → «ИМ», «Алишер» → «А». */
+function initials(name) {
+  const words = String(name || "").trim().split(/\s+/).filter((w) => /[\p{L}\d]/u.test(w));
+  return words.slice(0, 2).map((w) => w.match(/[\p{L}\d]/u)[0].toUpperCase()).join("") || "?";
+}
+
 /** Параллель класса: «5-А», «5 Б», «10-Ф1» → 5, 5, 10; кружок без номера — null.
  *  То же правило, что parallel_of в backend/stats.py. */
 function parallelOf(name) {

@@ -256,6 +256,7 @@ def test_invite_code_never_reaches_non_admins(teacher, school_teacher):
     text = json.dumps(state, ensure_ascii=False)
     assert "SECRET" not in text
     assert "users" not in state
-    assert all(set(s) == {"id", "name", "role"} for s in state["staff"]), "о коллегах — только имя и роль"
+    assert all(set(s) <= {"id", "name", "role", "avatar"} for s in state["staff"]), \
+        "о коллегах — только имя, роль и фото: без ставки, Telegram и кода приглашения"
     admin_state = teacher.get("/api/state").json()
     assert any(u.get("invite_code") for u in admin_state["users"]), "администратору — видно"

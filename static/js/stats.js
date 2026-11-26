@@ -94,7 +94,7 @@ function renderStats() {
       <h2 class="eyebrow">Учителя</h2>
       <div class="st-table">
         <div class="st-row st-headrow"><span>Учитель</span><span class="r">Уроков</span><span class="r">Звёзд</span></div>
-        ${d.teachers.map((row) => `<div class="st-row"><span>${escapeHtml(row.name || "не указан")}</span>
+        ${d.teachers.map((row) => `<div class="st-row"><span class="st-who">${row.user_id ? staffAvatar(staffById(row.user_id) || { name: row.name }, "sm") : ""}${escapeHtml(row.name || "не указан")}</span>
           <span class="r num">${row.lessons}</span><span class="r num">${fmt(row.stars)}</span></div>`).join("")}
       </div>
     </section>` : ""}`;

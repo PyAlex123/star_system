@@ -268,3 +268,11 @@ def test_lesson_tile_state():
     assert call(day, 11 * 60, held=True) == "done"
     assert call("2026-11-25", 9 * 60) == "past"
     assert call("2026-11-27", 23 * 60) == "later"
+
+
+def test_initials():
+    assert eval_common('initials("Иванова Мария Сергеевна")') == "ИМ"
+    assert eval_common('initials("Алишер")') == "А"
+    assert eval_common('initials("  ali  valiyev ")') == "AV"
+    assert eval_common('initials("")') == "?"
+    assert eval_common('initials("— Учитель")') == "У", "знаки без букв пропускаются"

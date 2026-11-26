@@ -75,3 +75,42 @@ def test_cards_hide_changed_password(teacher):
     next(s for s in data["students"] if s["id"] == 101)["password_shown"] = None
     save_db(data)
     assert "свой пароль" in teacher.get("/cards/1").text
+
+
+# ── Карточки без бота ────────────────────────────────────────────────────────
+
+def test_telegram_login_on_by_default(teacher):
+    assert teacher.get("/api/state").json()["telegram_login"] is True
+    html = teacher.get("/cards/1").text
+    assert "Код для бота" in html and "Вход на сайте" not in html
+    assert 'type="checkbox" checked' in html, "галочка включена"
+
+
+def test_cards_without_bot(teacher):
+    from backend.routers import cards
+    from conftest import load_db
+    r = teacher.put("/api/settings/telegram-login", json={"enabled": False})
+    assert r.status_code == 200 and r.json()["telegram_login"] is False
+    assert teacher.get("/api/state").json()["telegram_login"] is False
+    html = teacher.get("/cards/1").text
+    assert "Код для бота" not in html and "Вход на сайте" in html
+    assert student_record(101)["token"] not in html, "код бота не печатается"
+    assert student_record(101)["login"] in html
+    assert 'src="/api/students/101/qr.png' in html, "QR остаётся"
+    database = load_db()
+    target = cards.qr_target(database, student_record(101))
+    assert target == config.site_url(f"/enter?login={student_record(101)['login']}")
+    assert teacher.get("/api/students/101/qr.png").content == cards._qr_png(target)
+    teacher.put("/api/settings/telegram-login", json={"enabled": True})
+    assert cards.qr_target(load_db(), student_record(101)) == config.deep_link(student_record(101)["token"])
+
+
+def test_telegram_login_only_admin(school_teacher):
+    assert school_teacher.put("/api/settings/telegram-login", json={"enabled": False}).status_code == 403
+    html = school_teacher.get("/cards/1").text
+    assert "disabled" in html.split("QR и вход через Telegram-бота")[0][-200:], "учителю галочка недоступна"
+
+
+def test_enter_page_takes_login_from_qr(client):
+    html = client.get("/enter?login=ivanov.a").text
+    assert 'get("login")' in html

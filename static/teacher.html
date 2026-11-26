@@ -21,7 +21,6 @@
     <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
     <span class="brand-text">
       <span class="brand-title">Журнал звёзд</span>
-      <span class="brand-sub" id="brandSub"></span>
     </span>
   </div>
 
@@ -63,8 +62,10 @@
         <svg class="ic"><use href="#i-users"></use></svg><span>Сотрудники</span>
       </button>
       <span class="nav-gap"></span>
-      <button class="nav-act" title="Сменить свой пароль" onclick="closeMenus(); openMyPassword()">
-        <svg class="ic"><use href="#i-key"></use></svg><span>Пароль</span>
+      <!-- Мой профиль: аватар, имя и роль; открывает окно профиля -->
+      <button class="nav-act me-btn" id="meBtn" title="Мой профиль" onclick="closeMenus(); openProfile()">
+        <span class="me-av" id="meAvatar"></span>
+        <span class="me-text"><b id="meName"></b><small id="meRole"></small></span>
       </button>
       <button class="nav-act" title="Выйти" onclick="logout()">
         <svg class="ic"><use href="#i-logout"></use></svg><span>Выйти</span>
@@ -552,6 +553,40 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalProfile" onclick="if(event.target===this) closeModal('modalProfile')">
+  <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="profileName">
+    <div class="profile-top">
+      <span class="profile-av" id="profileAvatar"></span>
+      <div class="profile-who">
+        <div class="modal-title" id="profileName">—</div>
+        <p class="modal-sub" id="profileRole"></p>
+        <div class="row">
+          <label class="btn btn-ghost btn-sm">
+            <svg class="ic ic-sm"><use href="#i-camera"></use></svg><span id="profilePhotoLabel">Загрузить фото</span>
+            <input type="file" id="profilePhoto" accept="image/*" hidden onchange="uploadMyPhoto(this)">
+          </label>
+          <button class="btn btn-quiet btn-sm" id="profileDrop" onclick="dropMyPhoto()">Убрать фото</button>
+        </div>
+      </div>
+    </div>
+    <div class="profile-grid">
+      <span class="muted">Логин</span><span class="mono" id="profileLogin">—</span>
+      <span class="muted">Школы</span><span id="profileSchools">—</span>
+    </div>
+    <section class="profile-month">
+      <h3 class="caps" id="profileMonthTitle">В этом месяце</h3>
+      <div class="profile-tiles" id="profileMonth"></div>
+      <p class="field-hint">Отработанные часы появятся здесь, когда подключим отметки преподавателей.</p>
+    </section>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalProfile'); openMyPassword()">
+        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Сменить пароль</button>
+      <span class="grow"></span>
+      <button class="btn" onclick="closeModal('modalProfile')">Готово</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalUser" onclick="if(event.target===this) closeModal('modalUser')">
   <div class="modal" style="max-width:460px;">
     <div>
@@ -573,6 +608,10 @@
     <div class="field">
       <label for="userLogin">Логин</label>
       <input type="text" id="userLogin" class="input-mono" placeholder="ivanova" autocapitalize="none" spellcheck="false">
+    </div>
+    <div class="field" id="userPassInfo" hidden>
+      <span class="field-label">Пароль</span>
+      <div id="userPassBox"></div>
     </div>
     <div class="field" id="userPasswordField">
       <label for="userPassword">Пароль</label>
@@ -938,12 +977,12 @@
     <div class="access-qr">
       <img id="qrImage" alt="QR-код для входа">
       <div class="access-qr-note">
-        <span class="caps">Через Telegram</span>
-        <span>Навести камеру на QR-код или отправить боту код</span>
+        <span class="caps" id="qrWayTitle">Через Telegram</span>
+        <span id="qrWayText">Навести камеру на QR-код или отправить боту код</span>
         <span class="code-chip" id="qrCode">—</span>
       </div>
     </div>
-    <div class="caps">Без Telegram — через сайт</div>
+    <div class="caps" id="qrSiteTitle">Без Telegram — через сайт</div>
     <div class="access-grid">
       <span class="muted">Адрес</span><span class="mono" id="accessSite">—</span>
       <span class="muted">Логин</span>

@@ -209,6 +209,19 @@ const ROLE_NAMES = { superadmin: "администратор", teacher: "учи�
 /** Имя сотрудника: администратору приходит полный список, остальным — коллеги по школам. */
 function staffList() { return state.users || state.staff || []; }
 function staffName(id) { return staffList().find((u) => u.id === id)?.name || ""; }
+function staffById(id) { return staffList().find((u) => u.id === id) || (state.me?.id === id ? state.me : null); }
+
+/** Аватар сотрудника: своё фото или кружок с инициалами. */
+function staffAvatar(user, cls = "") {
+  const name = user?.name || "";
+  const photo = user?.avatar?.type === "photo" && user.avatar.value;
+  return photo
+    ? `<img class="av-staff ${cls}" src="${escapeHtml(assetUrl(photo))}" alt="" loading="lazy">`
+    : `<span class="av-staff av-ini ${cls}" aria-hidden="true">${escapeHtml(initials(name))}</span>`;
+}
+
+/** Вход учеников через Telegram-бота включён (настройка администратора). */
+function botLogin() { return state.telegram_login !== false; }
 
 /** Кнопки «.admin-only» видит только администратор, «.teacher-only» — только учитель. */
 function applyRole() {
@@ -216,11 +229,7 @@ function applyRole() {
   document.body.classList.toggle("is-teacher", state.me?.role === "teacher");
   document.body.classList.toggle("is-sadmin", isSchoolAdmin());
   document.body.classList.toggle("can-checkin", canManageCheckins());
-  const me = state.me;
-  // «Иванова М. С. · учитель»; если имя и есть роль («Учитель») — без повтора
-  const role = ROLE_NAMES[me?.role] || "учитель";
-  $("brandSub").textContent = !me ? ""
-    : me.name.trim().toLowerCase() === role ? me.name : `${me.name} · ${role}`;
+  renderMe();
   if (!isAdmin() && currentPage() === "users") switchPage(canEdit() ? "journal" : "stats");
   if (!canManageCheckins() && currentPage() === "checkin") switchPage(canEdit() ? "journal" : "stats");
   if (!canEdit() && ["journal", "prizes"].includes(currentPage())) switchPage("stats");
@@ -1053,8 +1062,8 @@ function rowHtml(student, index, day) {
       </span>
       <span class="cell-login not-clear-flex" role="cell">
         <button class="code-chip code-btn" onclick="togglePop('code', ${student.id}, event)" aria-haspopup="dialog"
-                aria-expanded="${rowPop?.kind === "code" && popOpen}" title="Логин и пароль для входа без Telegram">
-          ${escapeHtml(student.token || "—")}${icon("chevron-down")}</button>
+                aria-expanded="${rowPop?.kind === "code" && popOpen}" title="${botLogin() ? "Логин и пароль для входа без Telegram" : "Логин и пароль для входа на сайте"}">
+          ${escapeHtml((botLogin() ? student.token : student.login) || "—")}${icon("chevron-down")}</button>
         <span class="login-status ${isIn ? "in" : ""}">${icon(isIn ? "check-circle" : "dash-circle")}${status}</span>
         ${codePop}
       </span>
@@ -1390,6 +1399,12 @@ function showQr(id) {
   $("qrName").textContent = student.name;
   $("qrSub").textContent = `${schoolById(activeSchool)?.name || ""} · ${classById(student.class_id)?.name || "—"}`;
   $("qrCode").textContent = student.token || "—";
+  const bot = botLogin();
+  $("qrCode").hidden = !bot;
+  $("qrWayTitle").textContent = bot ? "Через Telegram" : "QR — вход на сайте";
+  $("qrWayText").textContent = bot ? "Навести камеру на QR-код или отправить боту код"
+    : "Камера откроет страницу входа с логином — останется ввести пароль";
+  $("qrSiteTitle").textContent = bot ? "Без Telegram — через сайт" : "Вход на сайте";
   $("qrImage").src = `${BASE}/api/students/${id}/qr.png?size=10&t=${Date.now()}`;
   $("accessSite").textContent = `${location.host}${BASE}/enter`;
   $("accessLogin").value = student.login || "";
@@ -1992,15 +2007,121 @@ function showInfo(title, html) {
 /* ── Учителя (только администратор) ──────────────────────── */
 
 /** Пароль сотрудника виден администратору сразу, пока сотрудник не сменит его сам. */
+/* ── Мой профиль ──────────────────────────────────────────── */
+
+/** Блок профиля внизу меню: аватар, имя, роль. */
+function renderMe() {
+  const me = state.me;
+  if (!me) return;
+  $("meAvatar").innerHTML = staffAvatar(me);
+  $("meName").textContent = me.name;
+  $("meRole").textContent = ROLE_NAMES[me.role] || "учитель";
+  $("meBtn").title = `${me.name} — мой профиль`;
+}
+
+/** Уроки, звёзды и классы сотрудника за месяц. Общий урок (несколько записей с одним group)
+ *  считается одним уроком — как в статистике. */
+function monthWork(userId, now = new Date()) {
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const mine = (state.lessons || []).filter((l) => l.user_id === userId && String(l.date).startsWith(month));
+  return {
+    lessons: new Set(mine.map((l) => (l.group ? `g${l.group}` : `l${l.id}`))).size,
+    stars: mine.reduce((sum, l) => sum + (l.total_stars || 0), 0),
+    classes: new Set(mine.map((l) => l.class_id)).size,
+  };
+}
+
+function openProfile() {
+  renderProfile();
+  openModal("modalProfile");
+}
+
+function renderProfile() {
+  const me = state.me;
+  if (!me) return;
+  const photo = me.avatar?.type === "photo";
+  $("profileAvatar").innerHTML = staffAvatar(me, "xl");
+  $("profileName").textContent = me.name;
+  $("profileRole").textContent = ROLE_NAMES[me.role] || "учитель";
+  $("profilePhotoLabel").textContent = photo ? "Другое фото" : "Загрузить фото";
+  $("profileDrop").hidden = !photo;
+  $("profileLogin").textContent = me.login || "—";
+  const schools = isAdmin() ? ["все школы"] : (me.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean);
+  $("profileSchools").textContent = schools.join(", ") || "—";
+  const work = monthWork(me.id);
+  const month = new Date().toLocaleDateString("ru-RU", { month: "long" });
+  $("profileMonthTitle").textContent = `За ${month}`;
+  $("profileMonth").innerHTML = [
+    [work.lessons, plural(work.lessons, "урок", "урока", "уроков")],
+    [work.stars, `${stars(work.stars)} выдано`],
+    [work.classes, plural(work.classes, "класс", "класса", "классов")],
+  ].map(([n, label]) => `<div class="profile-tile"><b>${fmt(n)}</b><span>${label}</span></div>`).join("");
+}
+
+async function uploadMyPhoto(input) {
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    await api("/api/auth/teacher/photo", { method: "POST", body: form });
+    await loadState();
+    renderProfile();
+    toast("Фото обновлено", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function dropMyPhoto() {
+  try {
+    await api("/api/auth/teacher/photo", { method: "DELETE" });
+    await loadState();
+    renderProfile();
+    toast("Фото убрано — снова инициалы", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+async function dropUserPhoto(id) {
+  try {
+    await api(`/api/users/${id}/photo`, { method: "DELETE" });
+    await loadState();
+    openUser(id);
+    toast("Фото сотрудника убрано", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+/* ── Пароль сотрудника ───────────────────────────────────────
+   Открытый пароль хранится, пока сотрудник не сменит его сам. Если его нет (сменил сам,
+   учётная запись старая или задана в настройках сервера) — показать нельзя, только выдать новый. */
+
 function staffPassword(user) {
   if (user.role === "superadmin") return `<span class="muted">—</span>`;
   if (!user.password_shown) {
-    return `<span class="pw-unknown"><span class="muted">свой пароль</span>
-      <small class="muted">новый — значком ключа</small></span>`;
+    return `<span class="pw-unknown"><span class="muted" title="Пароль хранится зашифрованным — показать его нельзя">не сохранён</span>
+      <button class="btn btn-link btn-sm" onclick="resetUserPassword(${user.id})">${icon("key", "ic ic-sm")}Выдать новый</button></span>`;
   }
   return `<span class="pw-cell"><span class="mono">${escapeHtml(user.password_shown)}</span>
     <button class="icon-btn" title="Скопировать пароль" aria-label="Скопировать пароль: ${escapeHtml(user.name)}"
             onclick="copyStaffPassword(${user.id})">${icon("copy", "ic ic-sm")}</button></span>`;
+}
+
+/** Строка «Пароль» в окне сотрудника. */
+function staffPasswordBox(user) {
+  if (user.password_shown) {
+    return `<div class="pw-box"><span class="mono">${escapeHtml(user.password_shown)}</span>
+      <button class="btn btn-ghost btn-sm" onclick="copyStaffPassword(${user.id})">${icon("copy", "ic ic-sm")}Скопировать</button></div>
+      <p class="field-hint">Виден, пока сотрудник не сменит пароль сам.</p>`;
+  }
+  return `<div class="pw-box"><span class="muted">не сохранён</span>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modalUser'); resetUserPassword(${user.id})">${icon("key", "ic ic-sm")}Выдать новый пароль</button></div>
+    <p class="field-hint">Пароль хранится зашифрованным: сотрудник сменил его сам, или учётная запись
+      создана раньше, чем пароли начали сохранять. Посмотреть его нельзя — выдайте новый, и он будет виден здесь.</p>`;
 }
 
 async function copyStaffPassword(id) {
@@ -2031,8 +2152,8 @@ function renderUsers() {
     const badges = checkinBadges(user);
     return `
       <div class="user-row">
-        <span class="n"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}</span>
-        <span><span class="code-chip">${escapeHtml(user.login)}</span></span>
+        <span class="n">${staffAvatar(user)}<span class="n-text"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}</span></span>
+        <span class="login-cell"><span class="code-chip" title="${escapeHtml(user.login)}">${escapeHtml(user.login)}</span></span>
         <span>${staffPassword(user)}</span>
         <span>${roleTag}</span>
         <span class="tag-row">${schools}</span>
@@ -2074,6 +2195,11 @@ function openUser(id = null) {
   $("userLogin").disabled = Boolean(user);
   $("userPassword").value = "";
   $("userPasswordField").hidden = Boolean(user);
+  $("userPassInfo").hidden = !user || admin;
+  if (user && !admin) {
+    $("userPassBox").innerHTML = staffPasswordBox(user) + (user.avatar?.type === "photo"
+      ? `<button class="btn btn-quiet btn-sm user-photo-drop" onclick="dropUserPhoto(${user.id})">${staffAvatar(user)}Убрать фото сотрудника</button>` : "");
+  }
   $("userRoleField").hidden = admin;
   $("userTracked").checked = Boolean(user?.checkin_tracked);
   $("userManager").checked = Boolean(user?.checkin_manager);

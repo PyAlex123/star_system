@@ -886,18 +886,25 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 /* ── Учителя ───────────────────────────────────────────────── */
 
 .users { overflow: hidden; }
-.users-head, .user-row { display: grid; grid-template-columns: minmax(160px, 1.2fr) 130px 150px 150px minmax(140px, 1.3fr) 132px; align-items: center; gap: 12px; padding: 0 20px; }
+.users-head, .user-row { display: grid; grid-template-columns: minmax(180px, 1.2fr) 170px 160px 150px minmax(140px, 1.3fr) 132px; align-items: center; gap: 12px; padding: 0 20px; }
+.user-row .n { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.login-cell { min-width: 0; }
+.login-cell .code-chip { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
 .pw-cell { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 .pw-cell .mono { font-size: 13px; }
-.pw-unknown { display: flex; flex-direction: column; font-size: 13px; line-height: 16px; }
-.pw-unknown small { font-size: 11px; }
+.pw-unknown { display: flex; flex-direction: column; align-items: flex-start; font-size: 13px; line-height: 16px; }
+.pw-unknown .btn-link { height: 28px; margin-left: -8px; padding: 0 8px; }
+.pw-box { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 40px; }
+.pw-box .mono { font-size: 16px; }
+.user-photo-drop { margin-top: 8px; }
+.user-photo-drop .av-staff { width: 24px; height: 24px; font-size: 10px; }
 .users-head { height: 40px; background: var(--surface-3); font: 600 11px/14px var(--font-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .user-row { min-height: 56px; border-top: 1px solid var(--line-soft); }
 .user-row .n { font-weight: 600; }
 .user-row .acts { display: flex; justify-content: flex-end; gap: 6px; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .tag-row .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-row .n { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.user-row .n-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .user-sub { display: flex; flex-wrap: wrap; gap: 4px; font-weight: 400; }
 
 /* ── Отметки преподавателей: подготовка ────────────────────── */
@@ -1464,3 +1471,44 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
   .lesson-bar-in .grow { display: none; }
   .finish-btn { flex: 1; min-width: 0; min-height: 48px; height: auto; white-space: normal; line-height: 18px; }
 }
+
+/* ── Аватар сотрудника и «Мой профиль» ───────────────────────── */
+
+.av-staff { width: 32px; height: 32px; flex: none; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
+.av-ini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font: 700 13px/1 var(--font-ui);
+  letter-spacing: .02em;
+}
+.av-staff.sm { width: 24px; height: 24px; font-size: 10px; }
+.av-staff.xl { width: 88px; height: 88px; font-size: 32px; }
+.st-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* Блок профиля внизу меню */
+.nav .me-btn { min-height: 52px; gap: 10px; padding: 0 8px; color: var(--text); }
+.me-av { flex: none; display: flex; }
+.me-av .av-staff { width: 36px; height: 36px; }
+.me-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.me-text b { font: 600 14px/18px var(--font-ui); overflow: hidden; text-overflow: ellipsis; }
+.me-text small { font: 500 12px/14px var(--font-ui); color: var(--muted); }
+@media (min-width: 701px) and (max-width: 1279px) {
+  .nav .me-btn { padding: 0; }
+  .nav .me-btn .me-av { display: flex; }   /* подписи в узком меню скрыты, аватар — нет */
+  .me-text { display: none; }
+}
+
+.profile-top { display: flex; align-items: center; gap: 18px; }
+.profile-av { flex: none; display: flex; }
+.profile-who { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.profile-who .modal-sub { margin: 0; }
+.profile-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px 12px; font-size: 14px; }
+.profile-month { display: flex; flex-direction: column; gap: 10px; }
+.profile-month .caps { margin: 0; }
+.profile-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.profile-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: var(--r12); background: var(--surface-2); }
+.profile-tile b { font: var(--nw) 24px/28px var(--font-num); }
+.profile-tile span { font-size: 12px; color: var(--muted); }
