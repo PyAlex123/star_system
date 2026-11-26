@@ -14,6 +14,9 @@ body:not(.is-admin) .admin-only { display: none !important; }
 body:not(.is-teacher) .teacher-only { display: none !important; }
 /* Администрация школы только смотрит: всё, что меняет данные, ей не показываем */
 body.is-sadmin .editor-only { display: none !important; }
+body:not(.is-sadmin) .sadmin-only { display: none !important; }
+/* Призы добавляют администратор системы и администрация школы (свои) */
+body:not(.is-admin):not(.is-sadmin) .prize-editor { display: none !important; }
 
 .grow { flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1349,3 +1352,23 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
 .profile-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: var(--r12); background: var(--surface-2); }
 .profile-tile b { font: var(--nw) 24px/28px var(--font-num); }
 .profile-tile span { font-size: 12px; color: var(--muted); }
+
+/* ── Призы от администрации школы, раздел «Карточки» ─────────── */
+
+.from-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--r8);
+  background: var(--surface);
+  color: var(--accent-text);
+  font: 600 12px/16px var(--font-ui);
+  box-shadow: var(--shadow-card);
+}
+.from-badge .ic { width: 14px; height: 14px; }
+a.class-tile { text-decoration: none; }
+.ct-print { position: absolute; top: 10px; right: 10px; color: var(--accent-text); }

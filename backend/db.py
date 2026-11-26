@@ -60,7 +60,8 @@ SECRET_USER_FIELDS = ("password_hash", "session_key")
 
 ROLE_SUPERADMIN = "superadmin"
 ROLE_TEACHER = "teacher"
-ROLE_SCHOOL_ADMIN = "school_admin"      # директор, завуч: видит статистику своих школ, ничего не меняет
+ROLE_SCHOOL_ADMIN = "school_admin"      # директор, завуч: статистика своих школ, оформление, свои призы,
+                                         # печать карточек учеников; журнала и звёзд нет
 STAFF_ROLES = (ROLE_TEACHER, ROLE_SCHOOL_ADMIN)
 
 # Чего администрация школы не видит у учеников: всё, чем можно войти в кабинет ребёнка
@@ -197,6 +198,13 @@ def can_edit(user: Optional[Dict[str, Any]]) -> bool:
     return bool(user) and user.get("role") in (ROLE_SUPERADMIN, ROLE_TEACHER)
 
 
+def prize_for_school(prize: Dict[str, Any], school_ids) -> bool:
+    """Приз виден школе: общий (school_id нет — добавил администратор системы)
+    или добавлен администрацией этой школы."""
+    owner = prize.get("school_id")
+    return owner is None or owner in school_ids
+
+
 def allowed_school_ids(db: Dict[str, Any], user: Optional[Dict[str, Any]]) -> set:
     """Школы, которые видит пользователь. Суперадмину — все."""
     if user is None or is_superadmin(user):
@@ -223,6 +231,7 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
     copy["lessons"] = [lesson for lesson in copy.get("lessons", [])
                        if lesson.get("class_id") in class_ids]
     copy["schedule"] = [e for e in copy.get("schedule", []) if e.get("class_id") in class_ids]
+    copy["prizes"] = [p for p in copy.get("prizes", []) if prize_for_school(p, schools)]
     users = copy.pop("users", [])
     copy["telegram_login"] = telegram_login(db)
     copy.pop("settings", None)

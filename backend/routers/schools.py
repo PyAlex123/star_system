@@ -10,10 +10,12 @@ from fastapi import APIRouter, Depends
 from .. import db, images, schemas
 from .. import themes
 from ..monitoring import store as monitoring_store
-from ..security import require_superadmin, require_teacher
+from ..security import require_panel, require_superadmin, require_teacher
 from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
 
 router = APIRouter(prefix="/api", tags=["schools"], dependencies=[Depends(require_teacher)])
+# Оформление школы меняет и администрация школы — у неё нет прав «учителя» на остальное
+theme_router = APIRouter(prefix="/api", tags=["schools"], dependencies=[Depends(require_panel)])
 
 
 # ── Школы ─────────────────────────────────────────────────────────────────────
@@ -45,10 +47,10 @@ def rename_school(school_id: int, item: schemas.SchoolUpdate):
     return {"ok": True, "school": db.transaction(_apply)}
 
 
-@router.put("/schools/{school_id}/theme")
+@theme_router.put("/schools/{school_id}/theme")
 def set_school_theme(school_id: int, item: schemas.SchoolTheme,
-                     user: Dict[str, Any] = Depends(require_teacher)):
-    """Тема оформления школы. Меняют администратор и учителя этой школы:
+                     user: Dict[str, Any] = Depends(require_panel)):
+    """Тема оформления школы. Меняют администратор, учителя и администрация этой школы:
     тему увидят все её ученики, учителя и печатные карточки."""
     def _apply(database: Dict[str, Any]):
         school = school_or_404(database, school_id, user)

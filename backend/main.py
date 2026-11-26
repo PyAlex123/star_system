@@ -202,6 +202,7 @@ app.mount("/static", StaticFiles(directory=str(config.STATIC_DIR)), name="static
 app.include_router(auth.router)
 app.include_router(stats.router)
 app.include_router(schools.router)
+app.include_router(schools.theme_router)
 app.include_router(schedule.router)
 app.include_router(students.router)
 app.include_router(lessons.router)

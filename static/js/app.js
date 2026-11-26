@@ -388,6 +388,7 @@ function cardHtml(p, index) {
         ${p.affordable ? `<span class="ok-chip">${icon("check", "ic ic-xs")}Хватает</span>` : ""}</span>
       <span class="pbody">
         <span class="pname">${escapeHtml(p.name)}</span>
+        ${p.from_school ? `<span class="pfrom">${icon("school", "ic ic-xs")}от администрации школы</span>` : ""}
         <span class="pdesc">${escapeHtml(p.desc || "")}</span>
         <span class="pfoot">${status}</span>
       </span>
@@ -403,6 +404,7 @@ function listRowHtml(p) {
       ${img(p.image, "prow-img")}
       <span class="prow-mid">
         <span class="prow-name">${escapeHtml(p.name)}</span>
+        ${p.from_school ? `<span class="pfrom">${icon("school", "ic ic-xs")}от администрации школы</span>` : ""}
         ${p.affordable ? `<span class="ok-chip">${icon("check", "ic ic-xs")}Можно забрать</span>`
           : `<span class="prow-bar"><span class="pbar"><i style="width:${pct}%"></i></span><span class="still">ещё ${p.left}&nbsp;★</span></span>`}
       </span>

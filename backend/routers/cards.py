@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from qrcode.image.pil import PilImage
 
 from .. import assets, config, db, themes
-from ..security import panel_user, require_editor_page, require_teacher
+from ..security import panel_user, require_panel, require_teacher_page
 from .common import class_or_404, student_or_404
 
 router = APIRouter(tags=["cards"])
@@ -55,7 +55,7 @@ def qr_target(database: Dict[str, Any], student: Dict[str, Any]) -> str:
 
 
 @router.get("/api/students/{student_id}/qr.png")
-def student_qr(student_id: int, size: int = 10, user: Dict[str, Any] = Depends(require_teacher)):
+def student_qr(student_id: int, size: int = 10, user: Dict[str, Any] = Depends(require_panel)):
     database = db.load_db()
     student = student_or_404(database, student_id, user)
     png = _qr_png(qr_target(database, student), box_size=max(4, min(20, size)))
@@ -188,9 +188,11 @@ function togglePick(button) {
 
 
 @router.get("/cards/{class_id}", response_class=HTMLResponse,
-            dependencies=[Depends(require_editor_page)])
+            dependencies=[Depends(require_teacher_page)])
 def class_cards(class_id: int, request: Request):
-    """Печатная страница: листы А4 по 8 карточек (2×4) с метками реза."""
+    """Печатная страница: листы А4 по 8 карточек (2×4) с метками реза.
+    Открывают учитель, администратор и администрация школы (печатает карточки,
+    хотя журнала у неё нет) — только классы своих школ."""
     database = db.load_db()
     user = panel_user(request)
     cls = class_or_404(database, class_id, user)
@@ -220,6 +222,8 @@ def class_cards(class_id: int, request: Request):
 
     base = config.URL_PREFIX
     title = html.escape(f"{cls['name']} — {school}")
+    # Администрации школы журнала нет — возвращаем в её раздел «Карточки»
+    back_hash, back_label = ("#cards", "К классам") if db.is_school_admin(user) else ("", "В журнал")
     # Галочку меняет только администратор: бот один на все школы
     admin = db.is_superadmin(user)
     # Не администратору галочка недоступна — причину пишем рядом, а не только в подсказке
@@ -253,7 +257,7 @@ def class_cards(class_id: int, request: Request):
       <button type="button" role="radio" aria-checked="true" id="modeColor" onclick="setBw(false)">Цвет</button>
       <button type="button" role="radio" aria-checked="false" id="modeBw" onclick="setBw(true)">Ч/б-превью</button>
     </div>
-    <a class="btn btn-ghost btn-md" href="{base}/teacher"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>В журнал</a>
+    <a class="btn btn-ghost btn-md" href="{base}/teacher{back_hash}"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>{back_label}</a>
     <button type="button" class="btn btn-ghost btn-md" id="pickBtn" onclick="togglePickMode()">
       <svg class="ic ic-sm"><use href="#i-square-check"></use></svg><span id="pickLabel">Печатать выбранных</span></button>
     <button type="button" class="btn btn-md" onclick="window.print()"><svg class="ic ic-sm"><use href="#i-printer"></use></svg>Печать</button>

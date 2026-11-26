@@ -52,10 +52,11 @@ def build_leaderboards(database: Dict[str, Any], student: Dict[str, Any]) -> Dic
     return boards
 
 
-def build_prizes(database: Dict[str, Any], stars: int) -> List[Dict[str, Any]]:
+def build_prizes(database: Dict[str, Any], stars: int, school_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Витрина ученика: общие призы и призы от администрации его школы."""
     result = []
     for prize in database["prizes"]:
-        if not prize.get("active", True):
+        if not prize.get("active", True) or not db.prize_for_school(prize, {school_id}):
             continue
         cost = max(1, int(prize["cost"]))
         result.append({
@@ -68,6 +69,7 @@ def build_prizes(database: Dict[str, Any], stars: int) -> List[Dict[str, Any]]:
             "affordable": stars >= cost,
             "left": max(0, cost - stars),
             "progress": min(100, round(stars / cost * 100)),
+            "from_school": prize.get("school_id") is not None,   # пометка «от администрации школы»
         })
     return sorted(result, key=lambda p: (not p["affordable"], p["left"], p["cost"]))
 
@@ -79,7 +81,7 @@ def get_me(request: Request, student: Dict[str, Any] = Depends(require_student))
     database = db.load_db()
     fresh = db.find_student(database, student["id"]) or student
     leaderboards = build_leaderboards(database, fresh)
-    prizes = build_prizes(database, fresh["total_stars"])
+    prizes = build_prizes(database, fresh["total_stars"], stats.school_of_class(database, fresh.get("class_id")))
     next_prize = next((p for p in prizes if not p["affordable"]), None)
 
     # Выданные призы: запись истории знает номер приза — ребёнку показываем его фото и название

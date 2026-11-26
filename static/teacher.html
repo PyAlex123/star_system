@@ -41,8 +41,11 @@
     <button data-page="schedule" title="Расписание" onclick="switchPage('schedule')">
       <svg class="ic"><use href="#i-clock"></use></svg><span>Расписание</span>
     </button>
-    <button data-page="prizes" class="editor-only" title="Призы" onclick="switchPage('prizes')">
+    <button data-page="prizes" title="Призы" onclick="switchPage('prizes')">
       <svg class="ic"><use href="#i-gift"></use></svg><span>Призы</span>
+    </button>
+    <button data-page="cards" class="sadmin-only" title="Карточки учеников" onclick="switchPage('cards')">
+      <svg class="ic"><use href="#i-printer"></use></svg><span>Карточки</span>
     </button>
     <button data-page="lessons" title="Уроки" onclick="switchPage('lessons')">
       <svg class="ic"><use href="#i-calendar"></use></svg><span>Уроки</span>
@@ -192,10 +195,13 @@
   <div class="page-head">
     <div>
       <h1 class="page-title">Витрина призов</h1>
-      <p class="page-sub admin-only">Эти призы видят дети в своём кабинете. Скрытые — видите только вы.</p>
+      <p class="page-sub admin-only">Эти призы видят дети в своём кабинете. Скрытые — видите только вы.
+        Призы с пометкой «от администрации школы» добавила администрация и видят только дети этой школы.</p>
       <p class="page-sub teacher-only">Эти призы видят дети. Выдать приз — кнопка с подарком в строке ученика.</p>
+      <p class="page-sub sadmin-only">Добавляйте призы от своей школы — дети увидят их с пометкой «от администрации школы».
+        Общие призы меняет администратор системы.</p>
     </div>
-    <button class="btn admin-only" onclick="openPrize()">
+    <button class="btn prize-editor" onclick="openPrize()">
       <svg class="ic"><use href="#i-plus"></use></svg>Добавить приз
     </button>
   </div>
@@ -215,6 +221,18 @@
 </main>
 
 <!-- ── Расписание ──────────────────────────────────────────── -->
+<!-- ── Карточки учеников (администрация школы: печать без журнала) ── -->
+<main class="page" id="page-cards">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Карточки учеников</h1>
+      <p class="page-sub">Выберите класс — откроются карточки для печати: у каждого ученика QR, логин и пароль
+        для входа в кабинет. На листе А4 — 8 карточек.</p>
+    </div>
+  </div>
+  <div id="cardsTiles"></div>
+</main>
+
 <main class="page" id="page-schedule">
   <div class="page-head">
     <div>
@@ -364,7 +382,7 @@
   <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="prizeModalTitle">
     <div>
       <div class="modal-title" id="prizeModalTitle">Новый приз</div>
-      <p class="modal-sub">Эти призы видят дети в своём кабинете.</p>
+      <p class="modal-sub" id="prizeModalSub">Эти призы видят дети в своём кабинете.</p>
     </div>
     <div class="prize-form-row">
       <div class="field">

@@ -1,4 +1,5 @@
-"""Администрация школы только смотрит; пароль сотрудника виден администратору до первой смены."""
+"""Администрация школы: смотрит статистику, меняет оформление школы, добавляет свои призы и печатает
+карточки учеников; журнала и звёзд у неё нет. Пароль сотрудника виден администратору до первой смены."""
 import re
 
 import pytest
@@ -42,18 +43,35 @@ def test_route_list_is_not_empty():
     assert ("POST", "/api/schedule") in routes
 
 
+# Что администрации школы можно менять — проверяется отдельными тестами ниже
+SCHOOL_ADMIN_MAY = {"/api/schools/1/theme", "/api/prizes", "/api/prizes/1", "/api/prizes/1/photo"}
+
+
 def test_school_admin_cannot_change_anything(school_admin):
     """Перебор всех изменяющих маршрутов панели: новый маршрут без явного
     разрешения тоже закрыт для администрации школы."""
     for method, path in mutating_routes():
+        if path in SCHOOL_ADMIN_MAY:
+            continue
         r = school_admin.request(method, path, json={})
         assert r.status_code == 403, f"{method} {path}: {r.status_code}"
 
 
-def test_school_admin_cannot_see_login_data(school_admin):
-    for path in ("/api/students/101/qr.png", "/api/excel/export?school_id=1", "/api/excel/template"):
+def test_school_admin_prints_cards_but_no_journal_data(school_admin, teacher):
+    """Карточки для печати — да (там логины и пароли); в самой панели данных входа нет."""
+    assert school_admin.get("/cards/1").status_code == 200
+    html = school_admin.get("/cards/1").text
+    assert "Иванов Артём" in html and 'href="/teacher#cards"' in html, "назад — к разделу «Карточки»"
+    assert school_admin.get("/api/students/101/qr.png").status_code == 200
+    other = teacher.post("/api/schools", json={"name": "Другая"}).json()["school"]["id"]
+    cid = teacher.post("/api/classes", json={"school_id": other, "name": "9-Я"}).json()["class"]["id"]
+    sid = teacher.post("/api/students", json={"class_id": cid, "name": "Чужой"}).json()["student"]["id"]
+    assert school_admin.get(f"/cards/{cid}").status_code == 404, "чужая школа — как несуществующая"
+    assert school_admin.get(f"/api/students/{sid}/qr.png").status_code == 404
+    for path in ("/api/excel/export?school_id=1", "/api/excel/template"):
         assert school_admin.get(path).status_code == 403, path
-    assert school_admin.get("/cards/1").status_code == 403
+    assert school_admin.post("/api/lessons/complete", json={"class_id": 1, "date": "2026-11-20",
+                                                            "awards": [{"student_id": 101, "stars": 1}]}).status_code == 403
     state = school_admin.get("/api/state").json()
     assert state["students"], "учеников видно"
     for s in state["students"]:
@@ -170,3 +188,58 @@ def test_colleague_sees_staff_avatar(teacher, school_teacher, school_admin):
                             files={"file": ("me.png", _png(), "image/png")}).json()["avatar"]["value"]
     staff = {u["name"]: u for u in school_teacher.get("/api/state").json()["staff"]}
     assert staff["Директор Иванова"]["avatar"]["value"] == url
+
+
+
+# ── Оформление и призы администрации школы ───────────────────────────────────
+
+def test_school_admin_sets_theme_of_own_school(school_admin, teacher):
+    assert school_admin.put("/api/schools/1/theme", json={"theme": "quest"}).status_code == 200
+    assert load_db()["schools"][0]["theme"] == "quest"
+    other = teacher.post("/api/schools", json={"name": "Другая"}).json()["school"]["id"]
+    assert school_admin.put(f"/api/schools/{other}/theme", json={"theme": "sky"}).status_code == 404
+
+
+def test_school_admin_adds_own_prizes_only(school_admin, teacher, school_teacher, student_headers):
+    from fastapi.testclient import TestClient
+    r = school_admin.post("/api/prizes", json={"name": "Грамота директора", "cost": 15})
+    assert r.status_code == 200, r.text
+    prize = r.json()["prize"]
+    assert prize["school_id"] == 1, "одна школа — приз её"
+    assert school_admin.patch(f"/api/prizes/{prize['id']}", json={"cost": 20}).status_code == 200
+
+    r = school_admin.patch("/api/prizes/1", json={"cost": 1})
+    assert r.status_code == 403 and "администратор системы" in r.json()["detail"], "общие призы — нельзя"
+    assert school_admin.delete("/api/prizes/1").status_code == 403
+    assert next(p for p in load_db()["prizes"] if p["id"] == 1)["cost"] != 1
+
+    # Приз виден детям этой школы и учителю этой школы, с пометкой
+    me = TestClient(app).get("/api/me", headers=student_headers(101)).json()
+    mine = next(p for p in me["prizes"] if p["id"] == prize["id"])
+    assert mine["from_school"] is True
+    assert all(p["from_school"] is False for p in me["prizes"] if p["id"] != prize["id"])
+
+    # Другая школа приза не видит и не может его выдать
+    other = school_teacher.other
+    state = school_teacher.get("/api/state").json()
+    assert any(p["id"] == prize["id"] for p in state["prizes"]), "учитель этой школы видит"
+    r = teacher.post("/api/students/deduct", json={"student_id": other["student"], "amount": 1, "prize_id": prize["id"]})
+    assert r.status_code == 400, "приз другой школы ученику другой школы не выдать"
+    assert teacher.post("/api/students/deduct", json={"student_id": 101, "amount": 1,
+                                                       "prize_id": prize["id"]}).status_code == 200
+    assert school_admin.delete(f"/api/prizes/{prize['id']}").status_code == 200
+
+
+def test_prize_of_other_school_invisible(teacher, school_admin):
+    other = teacher.post("/api/schools", json={"name": "Другая"}).json()["school"]["id"]
+    r = teacher.post("/api/prizes", json={"name": "Только там", "cost": 5, "school_id": other})
+    assert r.status_code == 200 and r.json()["prize"]["school_id"] == other
+    pid = r.json()["prize"]["id"]
+    assert all(p["id"] != pid for p in school_admin.get("/api/state").json()["prizes"])
+    assert school_admin.patch(f"/api/prizes/{pid}", json={"cost": 1}).status_code == 404
+    assert school_admin.post("/api/prizes", json={"name": "Туда", "cost": 5, "school_id": other}).status_code == 404
+    assert any(p["id"] == pid for p in teacher.get("/api/state").json()["prizes"]), "администратор видит все"
+
+
+def test_teacher_still_cannot_edit_prizes(school_teacher):
+    assert school_teacher.post("/api/prizes", json={"name": "Приз", "cost": 5}).status_code == 403

@@ -143,7 +143,9 @@ def deduct_stars(payload: schemas.DeductRequest, user: Dict[str, Any] = Depends(
         }
         if payload.prize_id is not None:
             prize = next((p for p in database["prizes"] if p["id"] == payload.prize_id), None)
-            if not prize:
+            cls = db.find_class(database, student.get("class_id"))
+            school_id = cls["school_id"] if cls else None
+            if not prize or not db.prize_for_school(prize, {school_id}):
                 raise bad_request("Такого приза нет на витрине")
             entry["prize_id"] = prize["id"]
         student["total_stars"] -= payload.amount

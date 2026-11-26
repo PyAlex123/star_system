@@ -103,8 +103,10 @@ class LessonUndo(BaseModel):
 
 
 class PrizeCreate(BaseModel):
+    """school_id — приз от администрации школы (виден только её детям). Пусто — общий."""
     name: Name
     cost: int = Field(ge=1, le=100_000)
+    school_id: Optional[int] = None
     desc: Text = ""
     category: Annotated[str, Field(pattern="^(small|medium|large)$")] = "small"
     active: bool = True
