@@ -24,6 +24,7 @@ from typing import Any, Dict, Optional
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.types import BotCommand, MenuButtonWebApp, Update, WebAppInfo
 
 from .. import config
@@ -80,9 +81,25 @@ async def _configure(bot: Bot) -> None:
             log.warning("Не удалось установить кнопку меню: %s", exc)
 
 
+def _failed(exc: Exception, delay: int, first: bool) -> bool:
+    """Сбой запуска. Неверный токен (бота удалили, заморозили, токен перевыпущен) сам не пройдёт —
+    одна запись в лог и остановка до перезапуска сайта. Остальное (сеть) — повтор; подробная
+    запись только в первый раз, дальше — одна строка, чтобы лог не разрастался."""
+    _status.update(running=False, last_error=type(exc).__name__)
+    if isinstance(exc, TelegramUnauthorizedError):
+        log.error("Telegram не принимает токен бота (%s). Бот выключен до перезапуска: "
+                  "проверьте токен в настройках сервера.", exc)
+        return False
+    if first:
+        log.exception("Бот остановился, перезапуск через %s с", delay)
+    else:
+        log.warning("Бот всё ещё не запущен (%s: %s), повтор через %s с", type(exc).__name__, exc, delay)
+    return True
+
+
 async def _run_polling() -> None:
     assert _bot and _dispatcher
-    delay = 1
+    delay, first = 1, True
     while True:
         try:
             await _configure(_bot)
@@ -94,8 +111,9 @@ async def _run_polling() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            _status.update(running=False, last_error=type(exc).__name__)
-            log.exception("Бот остановился, перезапуск через %s с", delay)
+            if not _failed(exc, delay, first):
+                return
+            first = False
             await asyncio.sleep(delay)
             delay = min(delay * 2, MAX_BACKOFF_SEC)
 
@@ -108,7 +126,7 @@ async def _setup_webhook() -> None:
         log.error("USE_WEBHOOK=1, но BASE_URL не https (%s). Telegram такой адрес не примет — "
                   "бот не запущен. Укажите настоящий домен или вернитесь к polling.", config.BASE_URL)
         return
-    delay = 1
+    delay, first = 1, True
     while True:
         try:
             await _configure(_bot)
@@ -120,8 +138,9 @@ async def _setup_webhook() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            _status.update(running=False, last_error=type(exc).__name__)
-            log.exception("Webhook не настроился, повтор через %s с", delay)
+            if not _failed(exc, delay, first):
+                return
+            first = False
             await asyncio.sleep(delay)
             delay = min(delay * 2, MAX_BACKOFF_SEC)
 

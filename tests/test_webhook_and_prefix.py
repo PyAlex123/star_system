@@ -137,3 +137,22 @@ def test_prefix_in_monitoring(teacher, prefix):
 def test_static_served_without_prefix_internally(client, prefix):
     """root_path не задан: внутри приложение живёт в корне (см. ARCHITECTURE.md)."""
     assert client.get("/static/css/theme.css").status_code == 200
+
+
+def test_bad_token_stops_bot_without_retry(monkeypatch):
+    """Замороженный или удалённый бот: одна запись в лог и остановка, а не повтор каждую минуту."""
+    import asyncio
+
+    from aiogram.exceptions import TelegramUnauthorizedError
+    calls = []
+
+    async def bad_configure(bot):
+        calls.append(1)
+        raise TelegramUnauthorizedError(method=None, message="Unauthorized")
+
+    monkeypatch.setattr(bot_module, "_configure", bad_configure)
+    monkeypatch.setattr(bot_module, "_bot", object())
+    monkeypatch.setattr(bot_module, "_dispatcher", object())
+    monkeypatch.setattr(bot_module, "_status", {"mode": None, "running": False, "last_error": None})
+    asyncio.run(asyncio.wait_for(bot_module._run_polling(), 5))
+    assert calls == [1] and bot_module.status()["bot_error"] == "TelegramUnauthorizedError"
