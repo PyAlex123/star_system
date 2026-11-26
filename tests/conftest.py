@@ -46,8 +46,6 @@ os.environ.update({
     "JWT_SECRET": "jwt-secret-only-for-tests-long-enough-for-hs256",
     "DEV_LOGIN": "0",
     "SCHOOL_NAME": "Тестовая школа",
-    "CHECKIN_BOT_TOKEN": "",
-    "CHECKIN_BOT_USERNAME": "test_checkin_bot",
     "TZ_NAME": "Asia/Tashkent",
 })
 

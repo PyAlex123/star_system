@@ -153,14 +153,8 @@ WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}" if WEBHOOK_SECRET else ""
 
 
 # ── Отметки преподавателей ───────────────────────────────────────────────────
-# Свой бот: преподаватели не пишут в бот учеников, а дети не видят меню отметок.
-# Токен пустой — модуль работает (панель, расписание, отчёты), бот не запускается.
-
-CHECKIN_BOT_TOKEN = os.getenv("CHECKIN_BOT_TOKEN", "").strip()
-CHECKIN_BOT_USERNAME = os.getenv("CHECKIN_BOT_USERNAME", "").strip().lstrip("@")
-# Один токен на два бота — два опроса getUpdates дерутся, и дети попадают в меню отметок.
-CHECKIN_TOKEN_CLASH = bool(CHECKIN_BOT_TOKEN) and CHECKIN_BOT_TOKEN == BOT_TOKEN
-CHECKIN_BOT_ENABLED = bool(CHECKIN_BOT_TOKEN) and not CHECKIN_TOKEN_CLASH
+# Бот у системы один (BOT_TOKEN): в нём и ученики входят в кабинет, и преподаватели
+# отмечаются. Токен пустой — модуль работает (панель, расписание, отчёты), отметок в боте нет.
 # Отметки, журналы и уроки по датам растут без предела — им не место в JSON,
 # который переписывается целиком. Лежат в том же каталоге данных, бэкап — тот же.
 CHECKIN_DB_FILE = DATA_DIR / "checkin.sqlite"
@@ -169,10 +163,6 @@ CHECKIN_BACKUP_FILE = DATA_DIR / "checkin.backup.sqlite"
 CHECKIN_INVITE_DAYS = 7          # ссылка-приглашение преподавателя действует неделю
 # Все расчёты отметок — по часам школ. В Узбекистане нет перехода на летнее время.
 TZ_NAME = os.getenv("TZ_NAME", "").strip() or "Asia/Tashkent"
-
-CHECKIN_WEBHOOK_SECRET = (hashlib.sha256(f"checkin-webhook:{CHECKIN_BOT_TOKEN}".encode()).hexdigest()[:40]
-                          if CHECKIN_BOT_TOKEN else "")
-CHECKIN_WEBHOOK_PATH = f"/telegram/checkin/{CHECKIN_WEBHOOK_SECRET}" if CHECKIN_WEBHOOK_SECRET else ""
 
 
 def site_url(path: str = "") -> str:
@@ -193,10 +183,10 @@ def webhook_url() -> str:
 
 
 def checkin_invite_link(code: str) -> str:
-    """Ссылка-приглашение преподавателя в бот отметок. Пусто — имя бота неизвестно."""
-    if not CHECKIN_BOT_USERNAME:
+    """Ссылка-приглашение преподавателя в бот (тот же, что у учеников). Пусто — имя бота неизвестно."""
+    if not BOT_USERNAME:
         return ""
-    return f"https://t.me/{CHECKIN_BOT_USERNAME}?start=inv_{code}"
+    return f"https://t.me/{BOT_USERNAME}?start=inv_{code}"
 
 
 def deep_link(token: str) -> str:

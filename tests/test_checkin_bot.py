@@ -1,5 +1,6 @@
-"""Бот преподавателей целиком: обновления Telegram идут через настоящий Dispatcher
-и роутер build_router(), а исходящие запросы ловит подменная сессия — без сети.
+"""Бот целиком: обновления Telegram идут через настоящий Dispatcher общего бота
+(группа «Отметки», преподаватель, ученик — build_dispatcher()), а исходящие запросы ловит
+подменная сессия — без сети.
 
 Понедельник 23 ноября 2026; урок 09:00–09:45 в школе 1 (41.311, 69.279).
 """
@@ -8,15 +9,16 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 import pytest
-from aiogram import Bot, Dispatcher
+from aiogram import Bot
 from aiogram.client.session.base import BaseSession
 from aiogram.exceptions import TelegramForbiddenError
-from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, GetMe, SendMessage
+from aiogram.methods import (AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText, GetMe, SendMessage,
+                             SetChatMenuButton)
 from aiogram.types import Chat, Message, Update, User
 
 from backend import db
 from backend.checkin import clock, service, store
-from backend.checkin.handlers import build_group_router, build_router
+from backend.bot.bot import build_dispatcher
 from conftest import load_db
 
 MON = date(2026, 11, 23)
@@ -62,10 +64,8 @@ class TeacherChat:
 
     def __init__(self, tg_id=TG, chat_type="private"):
         self.session = FakeSession()
-        self.bot = Bot(token="654321:CHECKIN-test-token", session=self.session)
-        self.dp = Dispatcher()
-        self.dp.include_router(build_router())
-        self.dp.include_router(build_group_router())      # как в настоящем боте
+        self.bot = Bot(token="654321:STARS-test-token", session=self.session)
+        self.dp = build_dispatcher()                      # как в настоящем боте
         self.tg_id = tg_id
         self.chat_type = chat_type
         self.update_id = 0
@@ -185,6 +185,42 @@ def test_bad_invite_and_stranger():
     stranger = TeacherChat(tg_id=777)
     assert "ссылку-приглашение" in stranger.text("/start")[0]
     assert "ссылку-приглашение" in stranger.location(at("08:50"))[0], "чужой не отмечается"
+    assert lesson_status() == ("planned", None, "")
+
+
+# ── Один бот: ученик и преподаватель ─────────────────────────────────────────
+
+def test_student_code_goes_to_student_even_from_stranger():
+    prepare()
+    token = load_db()["students"][0]["token"]
+    replies = TeacherChat(tg_id=555).text(token)
+    assert "Карточка привязана" in replies[0]
+    assert db.find_by_tg_id(load_db(), 555)["token"] == token
+
+
+def test_bound_teacher_gets_teacher_menu_not_student():
+    prepare()
+    chat = TeacherChat()
+    replies = chat.text("/start")
+    assert replies and "QR-код" not in replies[0], replies
+    assert chat.keyboard_of_last().keyboard[0][0].request_location, "меню преподавателя"
+    assert any(isinstance(c, SetChatMenuButton) and c.chat_id == TG for c in chat.session.calls), \
+        "у преподавателя кнопка меню — команды, а не «Кабинет» ученика"
+    assert "QR-код" not in " ".join(chat.text("что-то своё")), "текст преподавателя не уходит ученику"
+
+
+def test_student_card_scanned_by_teacher_goes_to_student():
+    """/start с кодом ученика — всегда ученику, даже из телефона преподавателя."""
+    prepare()
+    token = load_db()["students"][0]["token"]
+    replies = TeacherChat().text(f"/start {token}")
+    assert "Карточка привязана" in replies[0]
+
+
+def test_bot_is_silent_on_plain_group_messages():
+    prepare()
+    group = TeacherChat(tg_id=777, chat_type="supergroup")
+    assert group.text("всем привет") == [], "в группе «Отметки» бот не отвечает на обычные сообщения"
 
 
 def test_no_menu_without_consent():

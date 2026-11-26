@@ -210,9 +210,9 @@ async function inviteUser(id) {
     lastInviteLink = result.link || "";
     const name = escapeHtml(user.name);
     if (!result.link) {
-      showInfo("Бот отметок ещё не подключён",
+      showInfo("Telegram-бот ещё не подключён",
         `<p>${user.role === "superadmin" ? "" : `${name} теперь отмечается: уроки появятся в отметках. `}
-         Ссылка-приглашение будет доступна, когда к сайту подключат бот отметок —
+         Ссылка-приглашение будет доступна, когда к сайту подключат Telegram-бота —
          попросите того, кто обслуживает сервер.</p>`);
       return;
     }

@@ -33,7 +33,7 @@ def run_once() -> Dict[str, Any]:
 
 
 async def _loop() -> None:
-    from . import bot as checkin_bot              # бот подключается позже планировщика
+    from ..bot import bot as tg_bot               # бот подключается позже планировщика
     while True:
         try:
             await asyncio.to_thread(run_once)
@@ -42,7 +42,7 @@ async def _loop() -> None:
         except Exception:
             log.exception("Отметки: тик планировщика не удался")
         try:
-            await notify.drain(checkin_bot.get_bot())
+            await notify.drain(tg_bot.get_bot())
         except asyncio.CancelledError:
             raise
         except Exception:

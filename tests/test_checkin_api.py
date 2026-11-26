@@ -90,7 +90,7 @@ def test_invite_link_and_unbind(teacher):
     r = teacher.post("/api/users/2/invite")
     assert r.status_code == 200
     data = r.json()
-    assert data["link"].startswith("https://t.me/test_checkin_bot?start=inv_") and data["days"] == 7
+    assert data["link"].startswith("https://t.me/test_stars_bot?start=inv_") and data["days"] == 7
     code = data["link"].split("inv_", 1)[1]
     assert re.fullmatch(r"[A-Za-z0-9_-]{8,40}", code), "Telegram пропускает только такие символы"
     saved = db.find_user(load_db(), 2)
@@ -193,7 +193,7 @@ def test_full_flow_through_api(teacher):
     day = teacher.get("/api/checkin/day?date=2026-11-23").json()
     assert [(l["start"], l["state"], l["teacher"]) for l in day["lessons"]] == [("09:00", "ahead", "Учитель")]
     overview = teacher.get("/api/checkin/overview").json()
-    assert overview["counts"]["today"] == 1 and overview["bot"]["enabled"] is False
+    assert overview["counts"]["today"] == 1 and overview["bot"]["enabled"] is True, "бот общий — тот же, что у учеников"
 
     clock.freeze(clock.at(MON, "09:20"))
     service.tick()
@@ -260,4 +260,4 @@ def test_one_off_lesson_through_api(teacher):
 
 def test_healthz_reports_checkin(client):
     data = client.get("/healthz").json()["checkin"]
-    assert data["bot_enabled"] is False and "last_tick" in data
+    assert data["bot_enabled"] is True and data["bot_username"] == "test_stars_bot" and "last_tick" in data

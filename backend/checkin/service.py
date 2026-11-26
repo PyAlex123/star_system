@@ -753,8 +753,7 @@ def overview(now: Optional[datetime] = None) -> Dict[str, Any]:
         today = conn.execute("SELECT COUNT(*) FROM planned_lessons WHERE date = ? AND status != ?",
                              (clock.today(now).isoformat(), d.CANCELLED)).fetchone()[0]
     return {
-        "bot": {"enabled": config.CHECKIN_BOT_ENABLED, "username": config.CHECKIN_BOT_USERNAME or None,
-                "token_clash": config.CHECKIN_TOKEN_CLASH},
+        "bot": {"enabled": config.BOT_ENABLED, "username": config.BOT_USERNAME or None},
         "chat_connected": bool(settings["report_chat_id"]),
         "today": clock.today(now).isoformat(), "now": clock.hhmm(now),
         "counts": {"queue": waiting, "today": today, "tracked": len(tracked_ids(database))},

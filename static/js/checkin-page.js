@@ -212,7 +212,7 @@ function readinessHtml() {
   const ready = ckOverview.readiness;
   const items = [];
   if (!ckOverview.bot.enabled) {
-    items.push(`<li><span>Бот отметок не подключён — преподаватели пока не могут отмечаться.
+    items.push(`<li><span>Telegram-бот не подключён — преподаватели пока не могут отмечаться.
       Подключает тот, кто обслуживает сервер.</span></li>`);
   }
   if (!ckOverview.chat_connected) {
@@ -707,8 +707,8 @@ async function renderCheckinSettings() {
     </div>`).join("");
   const bot = ckOverview?.bot || {};
   const botLine = bot.enabled
-    ? `Бот отметок подключён${bot.username ? `: <b>@${escapeHtml(bot.username)}</b>` : ""}.`
-    : "Бот отметок не подключён — его подключает тот, кто обслуживает сервер. Без бота преподаватели не могут отмечаться.";
+    ? `Telegram-бот подключён${bot.username ? `: <b>@${escapeHtml(bot.username)}</b>` : ""} — в нём и ученики входят в кабинет, и преподаватели отмечаются.`
+    : "Telegram-бот не подключён — его подключает тот, кто обслуживает сервер. Без бота преподаватели не могут отмечаться.";
   const chatLine = ckOverview?.chat_connected
     ? "Группа «Отметки» подключена: туда приходят копии отметок и карточки уроков с кнопками."
     : `Группа «Отметки» не подключена. Создайте закрытую группу, добавьте в неё бота и отправьте там <b>/setchat</b>.

@@ -1,4 +1,8 @@
-"""Бот преподавателей: привязка по ссылке, язык, согласие, меню и отметка.
+"""Преподаватель в общем боте: привязка по ссылке, язык, согласие, меню и отметка.
+
+Бот у системы один (backend/bot/bot.py). Роутер преподавателя берёт сообщение, только если
+Telegram-аккаунт привязан к сотруднику или пришла ссылка-приглашение (/start inv_…);
+остальное уходит роутеру ученика.
 
 Бот только переводит сообщения Telegram в вызовы service.py и отвечает человеку.
 Время отметки — время сообщения в Telegram (message.date), а не сервера:
@@ -17,8 +21,9 @@ from typing import Any, Dict, Optional
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
-from aiogram.types import (CallbackQuery, ChatMemberUpdated, ForceReply, InlineKeyboardButton, InlineKeyboardMarkup,
-                           KeyboardButton, Message, ReplyKeyboardMarkup, ReplyParameters)
+from aiogram.types import (BotCommand, BotCommandScopeChat, CallbackQuery, ChatMemberUpdated, ForceReply,
+                           InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonCommands, Message,
+                           ReplyKeyboardMarkup, ReplyParameters)
 
 from .. import db
 from . import notify, service, store
@@ -165,10 +170,37 @@ def month_reply(lang: str, data: Dict[str, Any]) -> str:
 
 # ── Роутер ────────────────────────────────────────────────────────────────────
 
+async def is_staff_message(message: Message) -> bool:
+    """Сообщение — для роутера преподавателя: ссылка-приглашение или привязанный сотрудник.
+    /start с кодом ученика всегда уходит ученику (карточку сканируют и в чужом телефоне)."""
+    if not message.from_user:
+        return False
+    text = (message.text or "").strip()
+    if text.startswith("/start"):
+        args = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+        if args.startswith(INVITE_PREFIX):
+            return True
+        if args:
+            return False
+    return await _call(service.user_by_tg, message.from_user.id) is not None
+
+
+async def staff_chat(bot, chat_id: int) -> None:
+    """У сотрудника кнопка меню — команды, а не «Кабинет» ученика; и свои команды."""
+    try:
+        await bot.set_chat_menu_button(chat_id=chat_id, menu_button=MenuButtonCommands())
+        await bot.set_my_commands([
+            BotCommand(command="start", description="Меню / Menyu"),
+            BotCommand(command="help", description="Как отмечаться / Qanday belgilash"),
+        ], scope=BotCommandScopeChat(chat_id=chat_id))
+    except Exception as exc:                          # не критично — меню останется общим
+        log.warning("Не удалось настроить меню сотрудника: %s", exc)
+
+
 def build_router() -> Router:
     """Новый роутер на каждый Dispatcher: aiogram не даёт подключить один роутер дважды."""
     router = Router(name="checkin-teacher")
-    router.message.filter(F.chat.type == "private")
+    router.message.filter(F.chat.type == "private", is_staff_message)
 
     @router.message(CommandStart())
     async def on_start(message: Message, command: CommandObject) -> None:
@@ -180,6 +212,7 @@ def build_router() -> Router:
                 await message.answer(t("ru", f"invite_{status}") + "\n\n" + t("uz", f"invite_{status}"))
                 return
             if status == "ok":
+                await staff_chat(message.bot, message.chat.id)
                 lang = lang_of(user.get("lang"))
                 if not user.get("checkin_tracked"):
                     await message.answer(_not_tracked_text(user))
@@ -191,6 +224,7 @@ def build_router() -> Router:
         if not user:
             await message.answer(t("ru", "start_unbound") + "\n\n" + t("uz", "start_unbound"))
             return
+        await staff_chat(message.bot, message.chat.id)
         lang = lang_of(user.get("lang"))
         if not user.get("checkin_tracked"):
             await message.answer(_not_tracked_text(user))

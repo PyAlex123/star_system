@@ -1,4 +1,8 @@
-"""Логика бота: привязка по QR-коду и единственная кнопка «Зайти в свой кабинет»."""
+"""Бот для учеников: привязка по QR-коду и единственная кнопка «Зайти в свой кабинет».
+
+Роутер ученика стоит в боте последним (см. bot.py): сюда попадает всё, что не взяли
+группа «Отметки» и роутер преподавателя. Работает только в личных сообщениях —
+в группе «Отметки» бот не отвечает на обычные сообщения."""
 import html
 import logging
 import re
@@ -12,7 +16,6 @@ from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup, Message,
 from .. import config, db, themes
 
 log = logging.getLogger("stars.bot")
-router = Router()
 
 CODE_RE = re.compile(r"^[A-Za-z0-9]{6,16}$")
 
@@ -140,7 +143,6 @@ async def handle_code(message: Message, code: str) -> None:
     await send_cabinet(message, text, student)
 
 
-@router.message(CommandStart())
 async def on_start(message: Message, command: CommandObject) -> None:
     code = (command.args or "").strip()
     if code:
@@ -161,11 +163,11 @@ async def on_start(message: Message, command: CommandObject) -> None:
         "👋 Привет! Это бот школьной системы звёзд.\n\n"
         "Чтобы войти в свой кабинет, наведи камеру телефона на <b>QR-код со своей карточки</b> — "
         "её выдаёт учитель.\n\n"
-        "Если камера не читает код, просто отправь мне <b>код с карточки</b> (8 символов)."
+        "Если камера не читает код, просто отправь мне <b>код с карточки</b> (8 символов).\n\n"
+        "<i>Вы преподаватель? Откройте ссылку-приглашение, которую прислал администратор.</i>"
     )
 
 
-@router.message(Command("help"))
 async def on_help(message: Message) -> None:
     await message.answer(
         "ℹ️ Как пользоваться:\n\n"
@@ -177,7 +179,6 @@ async def on_help(message: Message) -> None:
     )
 
 
-@router.message(Command("cabinet"))
 async def on_cabinet(message: Message) -> None:
     student = db.find_by_tg_id(db.load_db(), message.from_user.id)
     if not student:
@@ -186,7 +187,6 @@ async def on_cabinet(message: Message) -> None:
     await send_cabinet(message, f"Твои звёзды: <b>{student['total_stars']} ⭐</b>", student)
 
 
-@router.message(F.text)
 async def on_text(message: Message) -> None:
     """Код, присланный текстом — для тех, у кого камера не читает QR."""
     text = (message.text or "").strip()
@@ -198,3 +198,23 @@ async def on_text(message: Message) -> None:
         "Не понял 🤔\n\nОтсканируй QR-код с карточки или пришли код с неё (8 символов). "
         "Команда /help — короткая инструкция."
     )
+
+
+async def on_location(message: Message) -> None:
+    """Геолокация от того, кто не привязан как сотрудник: отмечаются только преподаватели."""
+    await message.answer(
+        "📍 Отмечаться в боте могут только преподаватели.\n\n"
+        "Откройте ссылку-приглашение, которую прислал администратор, — после неё бот узнает вас."
+    )
+
+
+def build_router() -> Router:
+    """Новый роутер на каждый Dispatcher: aiogram не даёт подключить один роутер дважды."""
+    router = Router(name="student")
+    router.message.filter(F.chat.type == "private")
+    router.message.register(on_start, CommandStart())
+    router.message.register(on_help, Command("help"))
+    router.message.register(on_cabinet, Command("cabinet"))
+    router.message.register(on_location, F.location)
+    router.message.register(on_text, F.text)
+    return router

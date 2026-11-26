@@ -10,7 +10,6 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from .. import config
 from ..bot import bot as bot_module
-from ..checkin import bot as checkin_bot
 
 log = logging.getLogger("stars.bot")
 router = APIRouter(tags=["telegram"], include_in_schema=False)
@@ -41,21 +40,3 @@ async def telegram_webhook(secret: str, request: Request):
     # Telegram важен только код ответа: тело он не читает
     return Response(status_code=status.HTTP_200_OK)
 
-
-@router.post("/telegram/checkin/{secret}")
-async def checkin_webhook(secret: str, request: Request):
-    """Бот преподавателей: те же три защиты, свой секрет (выводится из его токена)."""
-    if not config.USE_WEBHOOK or not config.CHECKIN_WEBHOOK_SECRET:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
-    if not hmac.compare_digest(secret, config.CHECKIN_WEBHOOK_SECRET):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
-    header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-    if not hmac.compare_digest(header, config.CHECKIN_WEBHOOK_SECRET):
-        log.warning("Запрос на webhook бота отметок без правильного заголовка — отклонён")
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
-    try:
-        payload = await request.json()
-    except Exception:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ожидался JSON")
-    await checkin_bot.feed_webhook_update(payload)
-    return Response(status_code=status.HTTP_200_OK)
