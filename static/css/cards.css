@@ -178,3 +178,5 @@ body.picking .pick { display: flex; }
 .pswitch { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; font: 500 14px/18px var(--font-ui); color: var(--text); cursor: pointer; }
 .pswitch input { width: 18px; height: 18px; accent-color: var(--primary); cursor: inherit; }
 .pswitch:has(input:disabled) { color: var(--muted); cursor: not-allowed; }
+.pswitch-box { display: flex; flex-direction: column; gap: 2px; }
+.pswitch-note { max-width: 300px; font: 400 12px/16px var(--font-ui); color: var(--muted); }

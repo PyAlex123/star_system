@@ -84,6 +84,7 @@ def test_telegram_login_on_by_default(teacher):
     html = teacher.get("/cards/1").text
     assert "Код для бота" in html and "Вход на сайте" not in html
     assert 'type="checkbox" checked' in html, "галочка включена"
+    assert "Менять может только администратор." not in html, "администратору подсказка не нужна"
 
 
 def test_cards_without_bot(teacher):
@@ -109,6 +110,7 @@ def test_telegram_login_only_admin(school_teacher):
     assert school_teacher.put("/api/settings/telegram-login", json={"enabled": False}).status_code == 403
     html = school_teacher.get("/cards/1").text
     assert "disabled" in html.split("QR и вход через Telegram-бота")[0][-200:], "учителю галочка недоступна"
+    assert "Менять может только администратор" in html, "причина видна сразу, а не только в подсказке"
 
 
 def test_enter_page_takes_login_from_qr(client):

@@ -222,9 +222,13 @@ def class_cards(class_id: int, request: Request):
     title = html.escape(f"{cls['name']} — {school}")
     # Галочку меняет только администратор: бот один на все школы
     admin = db.is_superadmin(user)
-    bot_switch = f"""<label class="pswitch" title="{'Бот один на все школы — настройка общая' if admin else 'Меняет администратор'}">
+    # Не администратору галочка недоступна — причину пишем рядом, а не только в подсказке
+    who = html.escape((user or {}).get("name") or (user or {}).get("login") or "")
+    locked = "" if admin else f"""<small class="pswitch-note">Менять может только администратор.
+        Вы вошли как {who} — войдите под администратором.</small>"""
+    bot_switch = f"""<div class="pswitch-box"><label class="pswitch" title="{'Бот один на все школы — настройка общая' if admin else 'Менять может только администратор'}">
       <input type="checkbox" {'checked' if bot else ''} {'' if admin else 'disabled'} onchange="setBot(this)">
-      <span>QR и вход через Telegram-бота</span></label>"""
+      <span>QR и вход через Telegram-бота</span></label>{locked}</div>"""
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ru" {themes.html_attrs(theme, themes.page_mode(request))}>
 <head>
