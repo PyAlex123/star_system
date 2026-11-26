@@ -40,6 +40,7 @@ async function loadCabinet() {
 function renderCabinet() {
   if (!state.me || !$("page-me")) return;
   renderCabinetHead();
+  renderBell($("meBell"), schoolById(activeSchool));      // звонок — static/js/bell.js
   renderCabinetSchools();
   renderCabinetBot();
   renderCabinetToday();

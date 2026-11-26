@@ -138,6 +138,7 @@
 
   <!-- «Сегодня»: уроки на выбранную дату и все классы -->
   <div id="journalHome">
+    <div class="bell-host" id="journalBell" hidden></div>
     <section class="j-sec" aria-labelledby="todayTitle">
       <h2 class="caps j-sec-title" id="todayTitle">Уроки на эту дату</h2>
       <div id="todayTiles"></div>
@@ -334,6 +335,7 @@
       <svg class="ic"><use href="#i-plus"></use></svg>Добавить сотрудника
     </button>
   </div>
+  <div class="users-now" id="usersNow"></div>
   <div class="card users" id="userList"></div>
 </main>
 
@@ -355,6 +357,8 @@
         <svg class="ic ic-sm"><use href="#i-key"></use></svg>Сменить пароль</button>
     </div>
   </section>
+
+  <div class="bell-host" id="meBell" hidden></div>
 
   <div class="me-grid">
     <section class="card sc-block" aria-labelledby="meSchoolsTitle">
@@ -1109,6 +1113,7 @@
 <script src="{{BASE}}/static/js/common.js"></script>
 <script src="{{BASE}}/static/js/teacher.js"></script>
 <script src="{{BASE}}/static/js/schedule.js"></script>
+<script src="{{BASE}}/static/js/bell.js"></script>
 <script src="{{BASE}}/static/js/stats.js"></script>
 <script src="{{BASE}}/static/js/m-render.js"></script>
 <script src="{{BASE}}/static/js/monitoring.js"></script>

@@ -270,6 +270,71 @@ def test_lesson_tile_state():
     assert call("2026-11-27", 23 * 60) == "later"
 
 
+# ── Звонок и «кто сейчас на работе» (static/js/bell.js) ───────────────────────
+
+BELL = ("schedule.js", "checkin.js", "bell.js")
+SLOTS = '[{start: "08:00", end: "08:45", n: 1}, {start: "08:55", end: "09:40", n: 2}]'
+
+
+@pytest.mark.parametrize("clock,expected", [
+    ("07:30:00", {"kind": "before", "i": 0, "left": 1800, "total": None}),
+    ("08:20:00", {"kind": "lesson", "i": 0, "left": 1500, "total": 2700}),
+    ("08:45:00", {"kind": "break", "i": 1, "left": 600, "total": 600}),   # звонок с урока — уже перемена
+    ("08:50:30", {"kind": "break", "i": 1, "left": 270, "total": 600}),
+    ("09:39:59", {"kind": "lesson", "i": 1, "left": 1, "total": 2700}),
+    ("09:40:00", {"kind": "after", "i": 1, "left": 0, "total": None}),
+])
+def test_bell_moment(clock, expected):
+    h, m, s = map(int, clock.split(":"))
+    assert eval_common(f"bellMoment({SLOTS}, {h * 3600 + m * 60 + s})", BELL) == expected
+
+
+def test_bell_moment_without_lessons():
+    assert eval_common("bellMoment([], 30000)", BELL) == {"kind": "none"}
+
+
+def test_left_text_and_words():
+    assert eval_common("[leftText(59), leftText(754), leftText(0), leftText(3599), leftText(3900), leftText(7200)]",
+                       BELL) == ["00:59", "12:34", "00:00", "59:59", "1 ч 05 мин", "2 ч 00 мин"]
+    assert eval_common("[leftWords(30), leftWords(754), leftWords(3600), leftWords(3900)]", BELL) == \
+        ["1 минута", "13 минут", "1 час", "1 час 5 минут"]
+
+
+@pytest.mark.parametrize("minutes,kind,start", [
+    (7 * 60, "before", "08:00"),
+    (8 * 60 + 10, "lesson", "08:00"),
+    (8 * 60 + 50, "break", "10:00"),
+    (11 * 60, "done", "10:00"),
+])
+def test_staff_moment(minutes, kind, start):
+    lessons = '[{start: "10:00", end: "10:45"}, {start: "08:00", end: "08:45"}]'
+    moment = eval_common(f"staffMoment({lessons}, {minutes})", BELL)
+    assert moment["kind"] == kind and moment["lesson"]["start"] == start
+
+
+def test_staff_moment_no_lessons():
+    assert eval_common("staffMoment([], 600)", BELL) == {"kind": "none"}
+
+
+def test_staff_mark():
+    mark = lambda lessons: eval_common(f"staffMark({lessons})", BELL)
+    assert mark("[]") is None
+    assert mark('[{state: "ok", checkin_at: "08:12"}, {state: "ok", checkin_at: "07:58"}]') == \
+        {"cls": "ok", "text": "Отметка в 07:58", "came": True}
+    assert mark('[{state: "ok", checkin_at: "07:58"}, {state: "late", late_minutes: 7}]')["text"] == "Опоздание 7 мин"
+    assert mark('[{state: "missing"}, {state: "ahead"}]')["cls"] == "missing"
+    assert mark('[{state: "now"}]') == {"cls": "", "text": "Ждём отметку", "came": False}
+    assert mark('[{state: "ahead"}]') is None
+
+
+def test_group_lessons_joins_classes_of_one_lesson():
+    items = ('[{start: "09:00", end: "09:45", school_id: 1, class: "8-Б", room: ""},'
+             ' {start: "08:00", end: "08:45", school_id: 1, class: "5-А", room: "12"},'
+             ' {start: "09:00", end: "09:45", school_id: 1, class: "8-А", room: "3"}]')
+    assert eval_common(f"groupLessons({items}).map(l => [l.start, l.class, l.room])", BELL) == \
+        [["08:00", "5-А", "12"], ["09:00", "8-БА", "3"]]
+
+
 def test_initials():
     assert eval_common('initials("Иванова Мария Сергеевна")') == "ИМ"
     assert eval_common('initials("Алишер")') == "А"

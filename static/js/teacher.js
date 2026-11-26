@@ -398,6 +398,7 @@ function renderJournalHome() {
   const day = lessonDay();
   const today = localToday();
   $("todayTitle").textContent = day === today ? "Уроки на сегодня" : `Уроки на ${dotted(day)}`;
+  renderBell($("journalBell"), day === today ? school : null);   // звонок — только «на сегодня»
   if (!school) {
     tiles.innerHTML = `<div class="card empty">${icon("school", "ic ic-xl")}${isAdmin()
       ? "<b>Школ пока нет</b>Добавьте первую в меню «Школа»."
@@ -2217,7 +2218,7 @@ function renderUsers() {
     const badges = checkinBadges(user);
     return `
       <div class="user-row">
-        <span class="n">${staffAvatar(user)}<span class="n-text"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}</span></span>
+        <span class="n">${staffAvatar(user)}<span class="n-text"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}<span class="user-now" data-user="${user.id}" hidden></span></span></span>
         <span class="login-cell"><span class="code-chip" title="${escapeHtml(user.login)}">${escapeHtml(user.login)}</span></span>
         <span>${staffPassword(user)}</span>
         <span class="tag-row">${roleTag}</span>
@@ -2230,7 +2231,9 @@ function renderUsers() {
       </div>`;
   }).join("");
   $("userList").innerHTML = `
-    <div class="users-head"><span>Имя</span><span>Логин</span><span>Пароль</span><span>Должности</span><span>Школы</span><span></span></div>${rows}`;
+    <div class="users-head"><span>Имя</span><span>Логин</span><span>Пароль</span><span>Должности</span><span>Школы</span><span></span></div>${rows}
+    <p class="users-empty" id="usersEmpty" hidden>Сейчас на работе никого нет — ни уроков, ни отметок.</p>`;
+  renderPresence();          // где сотрудник сейчас и отметка за сегодня — static/js/bell.js
 }
 
 /* Окно сотрудника: должности по школам — в каждой строке школы переключатели. */
@@ -2421,6 +2424,7 @@ function showPage(name) {
   if (name === "journal") renderJournal();
   if (name === "cards") renderCardsPage();
   if (name === "schools") renderSchoolsPage();
+  if (name === "users") loadPresence();
   if (name === "me") loadCabinet();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
@@ -2557,6 +2561,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setInterval(() => {
     if (!document.hidden && currentPage() === "journal" && journalView === "home") renderJournalHome();
   }, 60000);
+  startBellClock();          // звонок — каждую секунду, «Сотрудники» — раз в 30 секунд
 
   // Кнопка «Открыть в панели» из группы «Отметки» ведёт на /teacher#checkin-lesson-<номер>
   window.addEventListener("hashchange", openCheckinFromHash);
