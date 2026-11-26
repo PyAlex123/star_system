@@ -146,6 +146,23 @@ def test_prefix_in_external_urls(prefix):
     assert config.webhook_url().startswith("http://localhost:8000/stars/telegram/")
 
 
+def test_prefix_in_monitoring(teacher, prefix):
+    """«Мониторинг» на подпути: ссылка школы, QR-плакат, страница ученика и её cookie."""
+    link = teacher.get("/api/monitoring/link?school_id=1").json()
+    assert link["url"] == f"http://localhost:8000/stars/m/{link['code']}"
+
+    poster = teacher.get("/monitoring/poster/1").text
+    assert 'href="/stars/teacher"' in poster, "«В журнал» — с подпутём"
+    assert f"/stars/m/{link['code']}" in poster
+
+    page = teacher.get(f"/m/{link['code']}")
+    assert 'href="/stars/static/css/m.css?v=' in page.text
+    assert "path=/stars/m" in page.headers["set-cookie"].lower()
+
+    short = teacher.get("/m", follow_redirects=False)
+    assert short.headers["location"] == f"/stars/m/{link['code']}"
+
+
 def test_static_served_without_prefix_internally(client, prefix):
     """root_path не задан: внутри приложение живёт в корне (см. ARCHITECTURE.md)."""
     assert client.get("/static/css/theme.css").status_code == 200

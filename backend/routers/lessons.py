@@ -35,7 +35,13 @@ def student_stars_on(student: Dict[str, Any], day: str) -> int:
 def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depends(require_teacher)):
     """Звёзды за урок. Лимиты считаются на дату, а не на нажатие кнопки:
     классу — не больше MAX_LESSON_BANK за день, ученику — не больше MAX_STUDENT_STARS.
-    Иначе «Завершить урок» второй раз за ту же дату давал бы новый полный банк."""
+    Иначе «Завершить урок» второй раз за ту же дату давал бы новый полный банк.
+
+    Общий урок объединённых классов (class_ids): банк один на весь урок —
+    MAX_LESSON_BANK минус то, что эти классы уже получили за дату, в сумме (так и
+    лимит каждого класса соблюдён). Запись урока — у каждого класса своя, даже без
+    звёзд: по ней живут «проведён» в расписании, статистика класса и отмена.
+    Записи общего урока связаны полем group (id первой записи) и подписаны joint_names."""
     total_stars = sum(a.stars for a in payload.awards)
     if total_stars > config.MAX_LESSON_BANK:
         raise bad_request(f"Превышен лимит {config.MAX_LESSON_BANK} звёзд на урок")
@@ -48,8 +54,15 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
     if len(ids) != len(set(ids)):
         raise bad_request("Ученик указан в уроке дважды")
 
+    class_ids = list(dict.fromkeys([payload.class_id, *(payload.class_ids or [])]))
+
     def _apply(database: Dict[str, Any]):
-        cls = class_or_404(database, payload.class_id, user)
+        classes = [class_or_404(database, class_id, user) for class_id in class_ids]
+        if len({c["school_id"] for c in classes}) > 1:
+            raise bad_request("Общий урок — только для классов одной школы")
+        joint = len(classes) > 1
+        title = " + ".join(c["name"] for c in classes)
+        in_lesson = {c["id"] for c in classes}
 
         # Сначала проверяем всех, потом начисляем: урок либо проходит целиком, либо никак
         students = []
@@ -57,16 +70,16 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
             if award.stars <= 0:
                 continue
             student = student_or_404(database, award.student_id)
-            if student.get("class_id") != cls["id"]:
-                raise bad_request(f"{student['name']} учится не в классе {cls['name']}")
+            if student.get("class_id") not in in_lesson:
+                raise bad_request(f"{student['name']} учится не в {'классах' if joint else 'классе'} {title}")
             students.append((student, award.stars))
 
         day = payload.date
-        already = class_stars_on(database, cls["id"], day)
+        already = sum(class_stars_on(database, c["id"], day) for c in classes)
         if total_stars and already + total_stars > config.MAX_LESSON_BANK:
             left = max(0, config.MAX_LESSON_BANK - already)
             raise bad_request(
-                f"За {day} классу {cls['name']} уже начислено {already} из "
+                f"За {day} {'классам' if joint else 'классу'} {title} уже начислено {already} из "
                 f"{config.MAX_LESSON_BANK} звёзд. " +
                 (f"Можно добавить ещё не больше {left}." if left else "Банк этого дня исчерпан."))
         for student, stars in students:
@@ -87,19 +100,27 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
             })
 
         settings = database.setdefault("settings", {})
-        settings["last_lesson_id"] = settings.get("last_lesson_id", 0) + 1
-        database["lessons"].insert(0, {
-            "id": settings["last_lesson_id"],
-            "class_id": cls["id"],
-            "user_id": user["id"],          # кто провёл — для статистики по учителям
-            "class_name": cls["name"],       # для истории: класс могут переименовать
-            "school_name": db.school_name_of_class(database, cls["id"]),
-            "date": payload.date,
-            "total_stars": total_stars,
-            "students_rewarded": len(students),
-            "awards": {str(student["id"]): stars for student, stars in students},
-            "undone": {},
-        })
+        records = []
+        for cls in classes:
+            mine = [(student, stars) for student, stars in students if student["class_id"] == cls["id"]]
+            settings["last_lesson_id"] = settings.get("last_lesson_id", 0) + 1
+            record = {
+                "id": settings["last_lesson_id"],
+                "class_id": cls["id"],
+                "user_id": user["id"],          # кто провёл — для статистики по учителям
+                "class_name": cls["name"],       # для истории: класс могут переименовать
+                "school_name": db.school_name_of_class(database, cls["id"]),
+                "date": payload.date,
+                "total_stars": sum(stars for _, stars in mine),
+                "students_rewarded": len(mine),
+                "awards": {str(student["id"]): stars for student, stars in mine},
+                "undone": {},
+            }
+            if joint:
+                record["group"] = records[0]["id"] if records else record["id"]
+                record["joint_names"] = title
+            records.append(record)
+        database["lessons"][0:0] = records      # новые — в начале списка, как раньше
         return len(students)
 
     return {"ok": True, "students_rewarded": db.transaction(_apply)}

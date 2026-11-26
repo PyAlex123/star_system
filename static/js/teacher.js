@@ -16,6 +16,8 @@ let state = { schools: [], classes: [], students: [], prizes: [], lessons: [] };
 let activeSchool = null;   // id школы
 let activeClass = null;    // id класса
 let draft = {};            // { student_id: звёзды за текущий урок }
+let jointClasses = null;   // общий урок объединённых классов: [id, …] (2 и больше) или null
+let jointPick = new Set(); // окно «Провести вместе с…»
 
 let rowPop = null;         // { kind: "code" | "more", id } — открытое окошко в строке
 let panelId = null;        // ученик в боковой панели
@@ -159,6 +161,13 @@ function classStudents(classId = activeClass) {
     .sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
+/* Общий урок объединённых классов: журнал показывает учеников всех классов урока
+   (по классам), банк звёзд один на урок — как и на сервере (lessons.py). */
+function journalClassIds() { return jointClasses || (activeClass ? [activeClass] : []); }
+function journalStudents() { return journalClassIds().flatMap((id) => classStudents(id)); }
+function jointName() { return combinedName((jointClasses || []).map((id) => classById(id)?.name || "")); }
+function jointTitle() { return (jointClasses || []).map((id) => classById(id)?.name || "").join(" + "); }
+
 async function loadState() {
   state = await api("/api/state");
 
@@ -172,6 +181,10 @@ async function loadState() {
     draft = {};
   }
   if (!classes.some((c) => c.id === lessonClass)) lessonClass = activeClass;
+  if (jointClasses && !jointClasses.every((id) => classes.some((c) => c.id === id))) {
+    jointClasses = null;
+    draft = {};
+  }
   if (panelId && !studentById(panelId)) panelId = null;
   syncSchoolTheme();
   renderAll();
@@ -223,6 +236,8 @@ function renderAll() {
   if (currentPage() === "stats") loadStats();
   if (currentPage() === "checkin") loadCheckin();
   else refreshCheckinBadge();
+  if (currentPage() === "monitor") loadMonitor();
+  if (currentPage() === "lessons") loadLessonRuns();
   if (isAdmin()) renderUsers();
 }
 
@@ -254,6 +269,7 @@ function renderSchoolMenu() {
 function selectSchool(id) {
   closeMenus();
   activeSchool = id;
+  jointClasses = null;
   activeClass = sortedClasses(id)[0]?.id ?? null;
   lessonClass = activeClass;
   draft = {};
@@ -268,7 +284,7 @@ function renderClassTabs() {
   if (!activeSchool) { host.innerHTML = ""; return; }
   const tabs = sortedClasses(activeSchool).map((c, i) => {
     const color = `c${i % 3}`;
-    if (c.id === activeClass) {
+    if (c.id === activeClass && !jointClasses) {
       return `<div class="class-tab active ${color}">
         <span role="tab" aria-selected="true">${escapeHtml(c.name)}</span>
         <button class="icon-btn" id="classMenuBtn" onclick="openClassMenu(event)"
@@ -279,6 +295,12 @@ function renderClassTabs() {
     return `<button class="class-tab ${color}" role="tab" aria-selected="false"
                     onclick="selectClass(${c.id})">${escapeHtml(c.name)}</button>`;
   });
+  if (jointClasses) {
+    tabs.unshift(`<div class="class-tab active joint">
+        <span role="tab" aria-selected="true" title="Общий урок: ${escapeHtml(jointTitle())}">${icon("users", "ic ic-sm")}${escapeHtml(jointName())}</span>
+        <button class="icon-btn" onclick="closeJoint()" aria-label="Выйти из общего урока" title="Выйти из общего урока">${icon("close", "ic ic-sm")}</button>
+      </div>`);
+  }
   tabs.push(`<button class="class-add" onclick="openClassGrid()">${icon("plus", "ic ic-sm")}Класс</button>`);
   host.innerHTML = tabs.join("");
   host.querySelector(".class-tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -298,7 +320,9 @@ function openClassMenu(event) {
     document.body.appendChild(menu);
   }
   menu.innerHTML = `
+    <button role="menuitem" onclick="openJointPicker()">${icon("users", "ic ic-sm")}Провести вместе с…</button>
     <button role="menuitem" onclick="renameClass()">${icon("pencil", "ic ic-sm")}Переименовать класс</button>
+    <button role="menuitem" class="danger" onclick="clearClass()">${icon("users", "ic ic-sm")}Удалить всех учеников…</button>
     <button role="menuitem" class="danger" onclick="removeClass()">${icon("trash", "ic ic-sm")}Удалить класс…</button>`;
   const rect = event.currentTarget.getBoundingClientRect();
   menu.style.left = `${Math.max(8, rect.left - 8)}px`;
@@ -308,6 +332,7 @@ function openClassMenu(event) {
 }
 
 function selectClass(id) {
+  jointClasses = null;
   activeClass = id;
   lessonClass = id;
   draft = {};
@@ -451,6 +476,74 @@ async function saveClassName() {
   }
 }
 
+/* ── Общий урок: «Провести вместе с…» ────────────────────── */
+
+function openJointPicker() {
+  closeMenus();
+  if (sortedClasses(activeSchool).length < 2) return toast("В школе пока один класс", "error");
+  jointPick = new Set(jointClasses || [activeClass].filter(Boolean));
+  renderJointPicker();
+  openModal("modalJoint");
+}
+
+function renderJointPicker() {
+  const classes = sortedClasses(activeSchool);
+  $("jointList").innerHTML = classes.map((c) => `<button type="button" role="checkbox" aria-checked="${jointPick.has(c.id)}"
+      data-class="${c.id}" title="${escapeHtml(c.name)}" onclick="toggleJointPick(${c.id})">${escapeHtml(c.name)}</button>`).join("");
+  const picked = classes.filter((c) => jointPick.has(c.id)).map((c) => c.name);
+  $("jointHint").innerHTML = picked.length > 1 ? `Вместе: <b>${escapeHtml(combinedName(picked))}</b>` : "Отметьте хотя бы два класса.";
+  $("jointOpen").disabled = picked.length < 2;
+}
+
+function toggleJointPick(id) {
+  if (jointPick.has(id)) jointPick.delete(id);
+  else jointPick.add(id);
+  renderJointPicker();
+  $("jointList").querySelector(`[data-class="${id}"]`)?.focus();
+}
+
+function confirmJoint() {
+  if (jointPick.size < 2) return;
+  closeModal("modalJoint");
+  openJoint([...jointPick]);
+}
+
+/** Общий журнал классов ids — из полоски «по расписанию» или окна выбора. */
+function openJoint(ids) {
+  const list = sortedClasses(activeSchool).map((c) => c.id).filter((id) => ids.includes(id));
+  if (list.length < 2) { if (list.length) selectClass(list[0]); return; }
+  if (jointClasses?.join() !== list.join()) {
+    draft = {};
+    panelId = null;
+    rowPop = null;
+  }
+  jointClasses = list;
+  activeClass = list[0];
+  lessonClass = list[0];
+  renderAll();
+}
+
+function closeJoint() {
+  selectClass(jointClasses?.[0] ?? activeClass);
+}
+
+/** Все ученики класса — разом: класс, его расписание и карточки других классов остаются. */
+function clearClass() {
+  closeMenus();
+  const cls = classById(activeClass);
+  if (!cls) return;
+  const count = classStudents().length;
+  if (!count) return toast(`В классе ${cls.name} нет учеников`, "error");
+  confirmAction(`Удалить всех учеников ${cls.name}?`,
+    `${count} ${plural(count, "ученик", "ученика", "учеников")} — вместе со звёздами и историей. ` +
+    "Класс и его расписание останутся, учеников можно загрузить заново. Это нельзя отменить.",
+    async () => {
+      const r = await api(`/api/classes/${cls.id}/students`, { method: "DELETE" });
+      await loadState();
+      toast(`Удалено: ${r.removed} ${plural(r.removed, "ученик", "ученика", "учеников")}`, "success");
+    }, "Удалить всех");
+}
+
 function removeClass() {
   closeMenus();
   const cls = classById(activeClass);
@@ -540,7 +633,7 @@ function renderDate() {
    не упирался в ошибку. Правило подсчёта то же, что в backend/routers/lessons.py. */
 function classGotOn(day) {
   return (state.lessons || [])
-    .filter((l) => l.class_id === activeClass && l.date === day)
+    .filter((l) => journalClassIds().includes(l.class_id) && l.date === day)
     .reduce((sum, l) => sum + (l.total_stars || 0), 0);
 }
 
@@ -551,7 +644,7 @@ function studentGotOn(student, day) {
     .reduce((sum, h) => sum + h.delta, 0);
 }
 
-function usedBank() { return classStudents().reduce((sum, s) => sum + (draft[s.id] || 0), 0); }
+function usedBank() { return journalStudents().reduce((sum, s) => sum + (draft[s.id] || 0), 0); }
 function bankLeft() { return Math.max(0, MAX_LESSON_BANK - classGotOn(lessonDay()) - usedBank()); }
 
 function renderBank() {
@@ -561,8 +654,9 @@ function renderBank() {
   const left = bankLeft();
   $("bankNum").textContent = `${given + used} / ${MAX_LESSON_BANK}`;
   $("bankText").textContent = left ? `осталось ${left}` : "банк исчерпан";
-  $("bank").title = (given ? `Раньше за эту дату уже начислено ${given}. ` : "") +
-    `За одну дату класс получает не больше ${MAX_LESSON_BANK} звёзд, ученик — не больше ${MAX_STUDENT_STARS}`;
+  $("bank").title = (given ? `Раньше за эту дату уже начислено ${given}. ` : "") + (jointClasses
+    ? `Общий банк урока ${jointTitle()}: за одну дату все его классы вместе получают не больше ${MAX_LESSON_BANK} звёзд, ученик — не больше ${MAX_STUDENT_STARS}`
+    : `За одну дату класс получает не больше ${MAX_LESSON_BANK} звёзд, ученик — не больше ${MAX_STUDENT_STARS}`);
   $("bankDots").innerHTML = Array.from({ length: MAX_LESSON_BANK }, (_, i) => {
     const cls = i < given ? "given" : i < given + used ? "on" : "";
     return `<svg viewBox="0 0 24 24"><polygon class="bank-dot ${cls}" points="${STAR_POINTS}"/></svg>`;
@@ -573,7 +667,7 @@ function renderBank() {
 function onLessonDateChange() {
   const day = lessonDay();
   let room = MAX_LESSON_BANK - classGotOn(day);
-  for (const student of classStudents()) {
+  for (const student of journalStudents()) {
     const cap = Math.max(0, MAX_STUDENT_STARS - studentGotOn(student, day));
     const value = Math.max(0, Math.min(draft[student.id] || 0, cap, room));
     draft[student.id] = value;
@@ -612,13 +706,13 @@ function isLoggedIn(student) { return Boolean(student.tg_id || student.last_logi
    Видит только учитель: ребёнку такая метка не показывается. Правило то же,
    что в backend/stats.py (student_activity). */
 const IDLE_LESSONS = 3;
-function idleSet() {
+function idleSet(classId = activeClass) {
   const lessons = (state.lessons || [])
-    .filter((l) => l.class_id === activeClass && l.awards && (Object.keys(l.awards).length || Object.keys(l.undone || {}).length))
+    .filter((l) => l.class_id === classId && l.awards && (Object.keys(l.awards).length || Object.keys(l.undone || {}).length))
     .sort((a, b) => (a.date === b.date ? (b.id || 0) - (a.id || 0) : a.date < b.date ? 1 : -1));
   const idle = new Set();
   if (lessons.length < IDLE_LESSONS) return idle;
-  for (const student of classStudents()) {
+  for (const student of classStudents(classId)) {
     if (lessons.slice(0, IDLE_LESSONS).every((l) => !(String(student.id) in l.awards))) idle.add(student.id);
   }
   return idle;
@@ -650,11 +744,12 @@ function renderTable() {
   renderTodayStrip();
   renderLessonBar();
   const addRow = $("addRow");
-  addRow.hidden = !activeClass;
+  addRow.hidden = !activeClass || Boolean(jointClasses);     // добавить ученика — на вкладке его класса
+  $("cardsBtn").hidden = Boolean(jointClasses);
 
   const school = schoolById(activeSchool);
   const cls = classById(activeClass);
-  $("studentsTitle").textContent = `Ученики · ${cls ? classStudents().length : 0}`;
+  $("studentsTitle").textContent = `Ученики · ${cls ? journalStudents().length : 0}`;
 
   if (!school) {
     return emptySheet(isAdmin()
@@ -665,19 +760,33 @@ function renderTable() {
     return emptySheet(`${icon("users", "ic ic-xl")}<b>В школе ${quoted(escapeHtml(school.name))} пока нет классов</b>
       <button class="btn btn-md" onclick="openClassGrid()">${icon("plus", "ic ic-sm")}Добавить классы</button>`);
   }
-  const list = classStudents();
+  const list = journalStudents();
   if (!list.length) {
-    return emptySheet(`${icon("users", "ic ic-xl")}<b>В классе ${escapeHtml(cls.name)} пока нет учеников</b>
-      Добавьте их ниже, загрузите шаблон Excel или вставьте строки из таблицы.`);
+    return emptySheet(jointClasses
+      ? `${icon("users", "ic ic-xl")}<b>В классах ${escapeHtml(jointTitle())} пока нет учеников</b>
+        Добавьте их на вкладке каждого класса.`
+      : `${icon("users", "ic ic-xl")}<b>В классе ${escapeHtml(cls.name)} пока нет учеников</b>
+        Добавьте их ниже, загрузите шаблон Excel или вставьте строки из таблицы.`);
   }
 
   // Фокус клавиатуры остаётся на той же строке после перерисовки
   const focused = document.activeElement?.classList?.contains("jt-row") ? document.activeElement.dataset.row : null;
 
   const day = lessonDay();
-  const rows = list.map((student, index) => rowHtml(student, index, day)).join("");
+  // Общий урок: перед учениками каждого класса — строка-заголовок; номера сквозные,
+  // чтобы ↑/↓ и Enter переходили через границу классов.
+  let index = 0;
+  const rows = jointClasses
+    ? jointClasses.map((id) => {
+      const kidsOf = classStudents(id);
+      return `<div class="jt-group" role="row"><span role="rowheader">${icon("users", "ic ic-sm")}<b>${escapeHtml(classById(id)?.name || "")}</b>
+          <span class="jt-group-n">${kidsOf.length} ${kids(kidsOf.length)}</span></span></div>` +
+        kidsOf.map((student) => rowHtml(student, index++, day)).join("");
+    }).join("")
+    : list.map((student, i) => rowHtml(student, i, day)).join("");
+  const title = jointClasses ? jointTitle() : cls.name;
   $("tableHost").innerHTML = `
-    <div class="jt ${hasPanel() ? "has-panel" : ""}" role="table" aria-label="Журнал ${escapeHtml(cls.name)}">
+    <div class="jt ${hasPanel() ? "has-panel" : ""}" role="table" aria-label="Журнал ${escapeHtml(title)}">
       <div class="jt-head" role="row">
         <span role="columnheader">№</span><span role="columnheader">Ученик</span>
         <span role="columnheader" title="Бледные звёзды уже начислены за эту дату">Звёзды за урок · до ${MAX_STUDENT_STARS}</span>
@@ -783,7 +892,7 @@ function rowHtml(student, index, day) {
         <span class="st-name" title="${name}" onclick="openPanel(${student.id})">${name}</span>
         <span class="st-dot only-clear ${isIn ? "in" : ""}" role="img" aria-label="${status}" title="${status}"></span>
         ${hidden ? `<span class="tag tag-hidden" title="Скрыт из рейтинга">${icon("eye-off")}вне рейтинга</span>` : ""}
-        ${idleSet().has(student.id) ? `<button class="tag tag-idle" onclick="openActivity(${student.id})"
+        ${idleSet(student.class_id).has(student.id) ? `<button class="tag tag-idle" onclick="openActivity(${student.id})"
             title="${IDLE_LESSONS} урока подряд без звёзд — посмотреть активность">давно без звёзд</button>` : ""}
       </span>
       <span class="cell-stars" role="cell">
@@ -854,11 +963,11 @@ function setDraft(studentId, value) {
               : `${student.name} уже получил(а) ${MAX_STUDENT_STARS} звёзд за этот день`, "error");
   }
   value = Math.max(0, Math.min(cap, value));
-  const others = classStudents().reduce((sum, s) => (s.id === studentId ? sum : sum + (draft[s.id] || 0)), 0);
+  const others = journalStudents().reduce((sum, s) => (s.id === studentId ? sum : sum + (draft[s.id] || 0)), 0);
   const available = Math.max(0, MAX_LESSON_BANK - classGotOn(day) - others);
   if (value > available) {
     toast(available ? `В банке дня осталось только ${available}`
-                    : `Банк дня исчерпан: за ${dotted(day)} классу уже начислено ${MAX_LESSON_BANK} звёзд`, "error");
+                    : `Банк дня исчерпан: за ${dotted(day)} ${jointClasses ? "классам урока" : "классу"} уже начислено ${MAX_LESSON_BANK} звёзд`, "error");
     value = available;
   }
   draft[studentId] = value;
@@ -898,14 +1007,14 @@ function resetLesson() {
 }
 
 function renderLessonBar() {
-  const list = classStudents();
+  const list = journalStudents();
   const sum = usedBank();
   const count = list.filter((s) => (draft[s.id] || 0) > 0).length;
   $("sumStars").textContent = sum;
   $("sumText").textContent = sum ? `${count} ${kids(count)} из ${list.length}` : "пока никому не поставлено";
   $("resetLessonBtn").hidden = !sum;
   $("finishBtn").disabled = !sum;
-  $("lessonBar").hidden = !activeClass;
+  $("lessonBar").hidden = !journalClassIds().length;
 }
 
 /* ── Боковая панель ученика (sky, clear, sticker) ─────────── */
@@ -1189,20 +1298,20 @@ function openCards() {
 /* ── Итог урока (T1a) ─────────────────────────────────────── */
 
 function openFinish() {
-  const list = classStudents();
+  const list = journalStudents();
   const given = list.filter((s) => (draft[s.id] || 0) > 0);
   const sum = usedBank();
   if (!sum) return;
   const day = lessonDay();
   const cls = classById(activeClass);
   const zero = list.length - given.length;
-  $("finishCaps").textContent = `Итог урока · ${dotted(day)} · ${cls?.name || ""}`;
+  $("finishCaps").textContent = `Итог урока · ${dotted(day)} · ${jointClasses ? jointTitle() : cls?.name || ""}`;
   $("finishTitle").textContent = `Начислить ${sum} ${stars(sum)} ${given.length} ` +
     `${plural(given.length, "ученику", "ученикам", "ученикам")} за ${dotted(day)}?`;
   $("finishList").innerHTML = given.map((s) => `
     <div class="finish-row">
       <img src="${escapeHtml(avatarUrl(s))}" alt="">
-      <span class="n">${escapeHtml(s.name)}</span>
+      <span class="n">${escapeHtml(s.name)}${jointClasses ? ` <span class="muted">· ${escapeHtml(classById(s.class_id)?.name || "")}</span>` : ""}</span>
       <span class="v">+${draft[s.id]} ★</span>
       <span class="ft">${s.total_stars} → <b>${s.total_stars + draft[s.id]}</b></span>
     </div>`).join("");
@@ -1213,8 +1322,9 @@ function openFinish() {
 }
 
 async function submitLesson() {
-  if (!activeClass) return;
-  const list = classStudents();
+  const ids = journalClassIds();
+  if (!ids.length) return;
+  const list = journalStudents();
   const awards = list.map((s) => ({ student_id: s.id, stars: draft[s.id] || 0 })).filter((a) => a.stars > 0);
   const total = awards.reduce((sum, a) => sum + a.stars, 0);
   if (!total) return;
@@ -1222,11 +1332,14 @@ async function submitLesson() {
   const button = $("finishConfirm");
   button.disabled = true;
   try {
-    await api("/api/lessons/complete", { method: "POST", json: { class_id: activeClass, date, awards } });
+    await api("/api/lessons/complete", {
+      method: "POST",
+      json: { class_id: ids[0], ...(jointClasses ? { class_ids: ids } : {}), date, awards },
+    });
     closeModal("modalFinish");
     draft = {};
     await loadState();
-    justDone = state.lessons.find((l) => l.class_id === activeClass)?.id ?? null;
+    justDone = state.lessons.find((l) => ids.includes(l.class_id))?.id ?? null;   // у общего урока это его group
     if (justDone) openLessons.add(justDone);
     renderLessons();
     toast(`Начислено ${total} ${stars(total)} · урок ${dotted(date)} сохранён в «Уроках»`, "success");
@@ -1384,12 +1497,13 @@ function lessonHtml(lesson) {
         ${icon("chevron-right")}
         <span class="lesson-when">
           <span class="lesson-date">${escapeHtml(formatDay(lesson.date))}</span>
-          <span class="lesson-meta">${escapeHtml(weekday)} · ${escapeHtml(lesson.class_name || classById(lesson.class_id)?.name || "")} · ${count} ${kids(count)}</span>
+          <span class="lesson-meta">${escapeHtml(weekday)} · ${escapeHtml(lesson.class_name || classById(lesson.class_id)?.name || "")} · ${count} ${kids(count)}${lesson.joint_names ? ` · общий урок ${escapeHtml(lesson.joint_names)}` : ""}</span>
         </span>
-        ${lesson.id === justDone ? `<span class="tag tag-accent">только что</span>` : ""}
+        ${justDone && (lesson.id === justDone || lesson.group === justDone) ? `<span class="tag tag-accent">только что</span>` : ""}
+        ${lessonRunsTag(lesson)}
         <span class="pill-star plus">${icon("star")}<b>+${lesson.total_stars}</b></span>
       </button>
-      ${open ? `<div class="lesson-items">${items}${foot}</div>` : ""}
+      ${open ? `<div class="lesson-items">${lessonRunsRow(lesson)}${items}${foot}</div>` : ""}
     </section>`;
 }
 
@@ -1668,6 +1782,11 @@ function closeMenus(withRows = true) {
   if (classMenu) { classMenu.style.display = "none"; classMenu.classList.remove("shown"); }
   if (withRows && rowPop) { rowPop = null; renderTable(); }
   if (!rowPop) document.querySelectorAll("body > .row-float").forEach((el) => el.remove());
+  if (typeof closeCellPop === "function") closeCellPop();      // окошко ячейки расписания
+}
+
+function anyPopOpen() {
+  return Boolean(rowPop) || (typeof cellPopOpen === "function" && cellPopOpen());
 }
 
 /** Скачивание файла с сервера: cookie сессии уходит сама, как у обычной ссылки. */
@@ -1726,22 +1845,27 @@ function showInfo(title, html) {
 
 /* ── Учителя (только администратор) ──────────────────────── */
 
-let shownStaffPasswords = new Set();
-
+/** Пароль сотрудника виден администратору сразу, пока сотрудник не сменит его сам. */
 function staffPassword(user) {
   if (user.role === "superadmin") return `<span class="muted">—</span>`;
   if (!user.password_shown) {
-    return `<span class="muted pw-unknown" title="Сотрудник сменил пароль сам или запись создана до обновления">свой пароль</span>`;
+    return `<span class="pw-unknown"><span class="muted">свой пароль</span>
+      <small class="muted">новый — значком ключа</small></span>`;
   }
-  const open = shownStaffPasswords.has(user.id);
-  const label = open ? "Скрыть пароль" : "Показать пароль";
-  return `<span class="pw-cell"><span class="mono ${open ? "" : "masked"}">${open ? escapeHtml(user.password_shown) : "•••••••••"}</span>
-    <button class="icon-btn" title="${label}" aria-label="${label}" onclick="toggleStaffPassword(${user.id})">${icon(open ? "eye-off" : "eye", "ic ic-sm")}</button></span>`;
+  return `<span class="pw-cell"><span class="mono">${escapeHtml(user.password_shown)}</span>
+    <button class="icon-btn" title="Скопировать пароль" aria-label="Скопировать пароль: ${escapeHtml(user.name)}"
+            onclick="copyStaffPassword(${user.id})">${icon("copy", "ic ic-sm")}</button></span>`;
 }
 
-function toggleStaffPassword(id) {
-  if (shownStaffPasswords.has(id)) shownStaffPasswords.delete(id); else shownStaffPasswords.add(id);
-  renderUsers();
+async function copyStaffPassword(id) {
+  const user = (state.users || []).find((u) => u.id === id);
+  if (!user?.password_shown) return;
+  try {
+    await navigator.clipboard.writeText(user.password_shown);
+    toast("Пароль скопирован", "success");
+  } catch {
+    toast(`Пароль: ${user.password_shown}`, "success", "key");
+  }
 }
 
 function renderUsers() {
@@ -1930,6 +2054,8 @@ function switchPage(name) {
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
   if (name === "checkin") loadCheckin();
+  if (name === "monitor") loadMonitor();
+  if (name === "lessons") loadLessonRuns();
   window.scrollTo(0, 0);
 }
 
@@ -1944,17 +2070,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("newStudentName").addEventListener("keydown", (e) => { if (e.key === "Enter") addStudent(); });
   $("schoolName").addEventListener("keydown", (e) => { if (e.key === "Enter") saveSchool(); });
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
+  // Путь события, а не e.target.closest(): окошко ячейки перерисовывается по клику,
+  // и к этому моменту нажатая кнопка уже вне страницы — closest() её «потерял» бы.
+  const insidePop = ".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop";
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float")) closeMenus();
+    if (!e.composedPath().some((el) => el.matches?.(insidePop))) closeMenus();
   });
-  // Окошко строки стоит поверх страницы — при прокрутке и смене размера закрываем его
-  window.addEventListener("scroll", () => { if (rowPop) closeMenus(); }, { passive: true });
-  window.addEventListener("resize", () => { if (rowPop) closeMenus(); });
+  // Окошки строки и ячейки стоят поверх страницы — при прокрутке и смене размера закрываем их
+  window.addEventListener("scroll", () => { if (anyPopOpen()) closeMenus(); }, { passive: true });
+  window.addEventListener("resize", () => { if (anyPopOpen()) closeMenus(); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const modal = topModal();
+      if (!modal && liveRunId) return closeLive();
       if (modal) return closeModal(modal.id);
-      if (rowPop || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
+      if (anyPopOpen() || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
       if (panelId) return closePanel();
     }
     // Ctrl+Enter — итог урока из любого места журнала
@@ -1980,6 +2110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadState();
     reportSwitchedLogin();
     openCheckinFromHash();
+    openLiveFromAddress();
   } catch (error) {
     toast(error.message, "error");
   }

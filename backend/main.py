@@ -5,15 +5,16 @@ from typing import Dict, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
 from .checkin import bot as checkin_bot, scheduler as checkin_scheduler, store as checkin_store
-from .routers import (auth, cards, checkin, excel, lessons, me, prizes, schedule, schools, stats, students,
-                      telegram, users)
+from .monitoring import store as monitoring_store
+from .routers import (auth, cards, checkin, excel, lessons, m_public, me, monitoring, prizes, schedule, schools,
+                      stats, students, telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
@@ -175,13 +176,13 @@ class ResponseHeaders:
 # повторное сжатие только тратит процессор. Ответы API не трогаем: они маленькие,
 # а сжатие ответов с секретами рядом с текстом от пользователя — лишний риск (BREACH).
 _COMPRESSIBLE_STATIC = (".css", ".js", ".svg")
-_COMPRESSIBLE_PAGES = {"/", "/teacher", "/login", "/enter", "/app", "/_ui"}
+_COMPRESSIBLE_PAGES = {"/", "/teacher", "/login", "/enter", "/app", "/_ui", "/m"}
 
 
 def _compressible(path: str) -> bool:
     if path.startswith("/static/"):
         return path.endswith(_COMPRESSIBLE_STATIC)
-    return path in _COMPRESSIBLE_PAGES or path.startswith("/cards/")
+    return path in _COMPRESSIBLE_PAGES or path.startswith(("/cards/", "/m/"))
 
 
 class SelectiveGZip:
@@ -219,6 +220,9 @@ app.include_router(cards.router)
 app.include_router(users.router)
 app.include_router(excel.router)
 app.include_router(checkin.router)
+app.include_router(monitoring.router)
+app.include_router(monitoring.pages)
+app.include_router(m_public.router)
 app.include_router(telegram.router)
 
 
@@ -296,6 +300,43 @@ def student_login_page(request: Request):
 def student_app(request: Request):
     """Кабинет ученика (Telegram Web App). Данные отдаются только после проверки initData."""
     return _page("app.html", request, themes.student_page_theme(request, db.load_db()))
+
+
+MONITOR_COOKIE = "zv_m"
+
+
+@app.get("/m", response_class=HTMLResponse)
+def monitoring_entry(request: Request):
+    """Короткий адрес опроса. Ведёт на ссылку школы, если она понятна: школа одна
+    или это устройство уже открывало ссылку своей школы. Иначе — просьба открыть
+    ссылку от учителя (списка школ посторонним не показываем)."""
+    database = db.load_db()
+    code = request.cookies.get(MONITOR_COOKIE, "")
+    with monitoring_store.read() as conn:
+        known = monitoring_store.school_by_code(conn, code) if code else None
+    if not known and len(database["schools"]) == 1:
+        school = database["schools"][0]
+        with monitoring_store.write() as conn:
+            code = monitoring_store.school_link(conn, school["id"], school["name"])
+        known = True
+    if known:
+        return RedirectResponse(f"{config.URL_PREFIX}/m/{code}", status_code=307)
+    return _page("m.html", request, themes.device_theme(request, database))
+
+
+@app.get("/m/{code}", response_class=HTMLResponse)
+def monitoring_page(code: str, request: Request):
+    """Страница ученика: ожидание, вход, вопросы. Тема — школы, которой принадлежит ссылка."""
+    database = db.load_db()
+    with monitoring_store.read() as conn:
+        link = monitoring_store.school_by_code(conn, code)
+    theme = (themes.school_theme(db.find_school(database, link["school_id"])) if link
+             else themes.device_theme(request, database))
+    response = _page("m.html", request, theme)
+    if link:
+        response.set_cookie(MONITOR_COOKIE, link["code"], max_age=365 * 86400, samesite="lax",
+                            path=f"{config.URL_PREFIX}/m")
+    return response
 
 
 @app.get("/_ui", response_class=HTMLResponse, dependencies=[Depends(require_superadmin_page)])

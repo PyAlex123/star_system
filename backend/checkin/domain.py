@@ -189,7 +189,27 @@ def expected_lessons(database: Dict[str, Any], start: date, end: date,
                 if lesson:
                     result.append(lesson)
             day += timedelta(weeks=1)
-    return sorted(result, key=lambda l: (l["starts_at"], l["entry_id"]))
+    return sorted(_join_classes(result), key=lambda l: (l["starts_at"], l["entry_id"]))
+
+
+def _join_classes(lessons: List[Lesson]) -> List[Lesson]:
+    """Объединённые классы — один урок. В таблице расписания общий урок нескольких классов —
+    это занятие у каждого класса с общими учителем и временем; преподаватель ведёт его один раз,
+    поэтому и отмечается, и получает часы один раз. Урок держится за занятие с меньшим номером,
+    в названии — все классы."""
+    groups: Dict[Tuple[Any, ...], List[Lesson]] = {}
+    for lesson in lessons:
+        key = (lesson["user_id"], lesson["school_id"], lesson["starts_at"], lesson["ends_at"], lesson["status"])
+        groups.setdefault(key, []).append(lesson)
+    joined: List[Lesson] = []
+    for group in groups.values():
+        group.sort(key=lambda l: l["entry_id"])
+        lesson = dict(group[0])
+        if len(group) > 1:
+            lesson["class_name"] = ", ".join(l["class_name"] for l in group)
+            lesson["room"] = next((l["room"] for l in group if l["room"]), "")
+        joined.append(lesson)
+    return joined
 
 
 def _expected_one(entry: Dict[str, Any], day: date, cls: Dict[str, Any], school: Dict[str, Any],
@@ -295,6 +315,12 @@ def plan_changes(expected: List[Lesson], existing: List[Lesson], now: datetime,
             deletes.append({"id": have["id"], "lesson": have, "reason": "schedule"})
         # Сегодняшний урок исчезнувшего занятия остаётся: решит администратор
 
+    # У преподавателя не бывает двух уроков, начинающихся в одну минуту. Так бывает, когда
+    # у объединённого урока сегодня сменился состав классов: сегодняшний урок остался,
+    # а новый — лишний.
+    gone = {d["id"] for d in deletes}
+    busy = {(l.get("user_id"), l.get("starts_at")) for l in existing if l.get("id") not in gone}
+    inserts = [i for i in inserts if (i.get("user_id"), i.get("starts_at")) not in busy]
     return {"insert": inserts, "update": updates, "delete": deletes}
 
 

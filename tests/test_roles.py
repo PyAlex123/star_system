@@ -124,6 +124,7 @@ def test_state_never_leaks_password_hashes(teacher):
     lambda o: ("post", "/api/classes/bulk", {"school_id": o["school"], "names": ["1-А"]}),
     lambda o: ("patch", f"/api/classes/{o['class']}", {"name": "Взлом"}),
     lambda o: ("delete", f"/api/classes/{o['class']}", None),
+    lambda o: ("delete", f"/api/classes/{o['class']}/students", None),
     lambda o: ("post", "/api/students/bulk",
                [{"school_id": o["school"], "class_name": "1-А", "name": "Подкидыш"}]),
     lambda o: ("get", f"/api/excel/export?school_id={o['school']}", None),

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Резервная копия системы наград: база звёзд, отметки преподавателей и загруженные фотографии.
+# Резервная копия системы наград: база звёзд, опросы «Мониторинга», отметки преподавателей
+# и загруженные фотографии.
 #
 # Запуск вручную:
 #   bash deploy/backup.sh
@@ -20,22 +21,31 @@ if [ ! -d "$DATA_DIR" ]; then
 fi
 
 mkdir -p "$BACKUP_DIR"
+
 STAMP="$(date +%Y-%m-%d_%H-%M)"
 ARCHIVE="${BACKUP_DIR}/stars_${STAMP}.tar.gz"
 
-# База отметок (SQLite): живой файл посреди записи может попасть в архив несогласованным,
-# поэтому кладём согласованный снимок. Его делает приложение — по команде ниже и само каждую ночь.
-# При восстановлении приложение само сделает снимок базой (backend/checkin/store.py).
-if command -v docker >/dev/null 2>&1 \
-        && docker compose -f "${PROJECT_DIR}/docker-compose.yml" ps --status running -q stars 2>/dev/null | grep -q .; then
-    if docker compose -f "${PROJECT_DIR}/docker-compose.yml" exec -T stars \
-            python -m backend.checkin.store snapshot >/dev/null; then
-        echo "Снимок базы отметок обновлён"
+# Две SQLite-базы рядом с JSON: живой файл посреди записи может попасть в архив несогласованным,
+# поэтому сначала — снимки изнутри контейнера средствами SQLite.
+#  - Опросы «Мониторинга» (data/monitoring.sqlite3, WAL): снимок кладётся в архив рядом с рабочим файлом.
+#  - Отметки преподавателей (data/checkin.sqlite): в архив идёт только снимок — его делает приложение
+#    по команде ниже и само каждую ночь; при восстановлении оно само сделает снимок базой
+#    (backend/checkin/store.py).
+COMPOSE=(docker compose -f "$PROJECT_DIR/docker-compose.yml")
+if command -v docker >/dev/null 2>&1 && "${COMPOSE[@]}" ps --status running -q stars 2>/dev/null | grep -q .; then
+    if "${COMPOSE[@]}" exec -T stars python -c \
+        "from backend.monitoring import store; store.backup_to('/app/data/monitoring.backup.sqlite3')"; then
+        echo "снимок опросов: data/monitoring.backup.sqlite3"
     else
-        echo "Снимок базы отметок не обновился — в архив пойдёт ночной"
+        echo "снимок опросов сделать не удалось — архив всё равно создаётся"
+    fi
+    if "${COMPOSE[@]}" exec -T stars python -m backend.checkin.store snapshot >/dev/null; then
+        echo "снимок отметок обновлён"
+    else
+        echo "снимок отметок не обновился — в архив пойдёт ночной"
     fi
 else
-    echo "Контейнер не запущен — в архив пойдёт ночной снимок базы отметок"
+    echo "Контейнер не запущен — опросы копируются как есть, отметки — из ночного снимка"
 fi
 
 tar -czf "$ARCHIVE" -C "$PROJECT_DIR" \

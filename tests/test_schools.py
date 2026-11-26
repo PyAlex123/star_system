@@ -92,6 +92,22 @@ def test_move_class_to_other_school(teacher):
     assert next(c for c in load_db()["classes"] if c["id"] == 3)["school_id"] == sid
 
 
+def test_clear_class_keeps_class_and_schedule(teacher):
+    teacher.post("/api/schedule", json={"class_id": 1, "weekdays": [1], "start": "14:00", "end": "14:45"})
+    before = [s for s in load_db()["students"] if s.get("class_id") == 1]
+    others = [s["id"] for s in load_db()["students"] if s.get("class_id") != 1]
+    assert before, "в демо-классе есть ученики"
+    r = teacher.delete("/api/classes/1/students")
+    assert r.status_code == 200 and r.json()["removed"] == len(before)
+    data = load_db()
+    assert any(c["id"] == 1 for c in data["classes"]), "класс остался"
+    assert not any(s.get("class_id") == 1 for s in data["students"])
+    assert [s["id"] for s in data["students"]] == others, "другие классы не тронуты"
+    assert [e["class_id"] for e in data["schedule"]] == [1], "расписание класса осталось"
+    assert teacher.delete("/api/classes/1/students").json()["removed"] == 0
+    assert teacher.delete("/api/classes/999/students").status_code == 404
+
+
 def test_delete_class_removes_students(teacher):
     assert teacher.delete("/api/classes/1").status_code == 200
     data = load_db()

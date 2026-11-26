@@ -146,3 +146,62 @@ def test_deduct_not_more_than_balance(teacher):
 def test_deduct_positive_only(teacher):
     assert teacher.post("/api/students/deduct",
                         json={"student_id": 101, "amount": 0}).status_code == 400
+
+
+# ── Общий урок объединённых классов ──────────────────────────────────────────
+
+def joint(teacher, awards, class_ids=(1, 2), date="2026-11-20"):
+    return teacher.post("/api/lessons/complete",
+                        json={"class_id": class_ids[0], "class_ids": list(class_ids), "date": date, "awards": awards})
+
+
+def test_joint_lesson_records_per_class(teacher):
+    """101, 102 — 5-А; 103 — 5-Б; 104 — 6-А. Запись урока — у каждого класса своя."""
+    before = student_record(103)["total_stars"]
+    r = joint(teacher, [{"student_id": 101, "stars": 3}, {"student_id": 103, "stars": 4}], class_ids=(1, 2, 3))
+    assert r.status_code == 200, r.text
+    assert r.json()["students_rewarded"] == 2
+    assert student_record(103)["total_stars"] == before + 4
+    records = {l["class_id"]: l for l in load_db()["lessons"]}
+    assert set(records) == {1, 2, 3}, "у 6-А без звёзд тоже запись — урок у него проведён"
+    assert records[1]["awards"] == {"101": 3} and records[1]["total_stars"] == 3
+    assert records[2]["awards"] == {"103": 4} and records[2]["total_stars"] == 4
+    assert records[3]["awards"] == {} and records[3]["total_stars"] == 0
+    assert len({l["group"] for l in records.values()}) == 1 and records[1]["group"] == records[1]["id"]
+    assert {l["joint_names"] for l in records.values()} == {"5-А + 5-Б + 6-А"}
+
+
+def test_joint_lesson_shares_one_bank(teacher):
+    r = joint(teacher, [{"student_id": 101, "stars": 5}, {"student_id": 102, "stars": 1},
+                        {"student_id": 103, "stars": 5}])
+    assert r.status_code == 400 and "10" in r.json()["detail"], "11 звёзд на двоих — больше общего банка"
+    assert load_db()["lessons"] == [], "урок не прошёл целиком"
+    assert joint(teacher, [{"student_id": 101, "stars": 5}, {"student_id": 103, "stars": 5}]).status_code == 200
+
+
+def test_joint_bank_counts_earlier_lessons_of_day(teacher):
+    assert lesson(teacher, [{"student_id": 101, "stars": 4}]).status_code == 200          # 5-А отдельно
+    r = joint(teacher, [{"student_id": 103, "stars": 5}, {"student_id": 102, "stars": 2}])
+    assert r.status_code == 400 and "Можно добавить ещё не больше 6" in r.json()["detail"]
+    assert joint(teacher, [{"student_id": 103, "stars": 5}, {"student_id": 102, "stars": 1}]).status_code == 200
+    assert joint(teacher, [{"student_id": 102, "stars": 1}], date="2026-11-21").status_code == 200, "другая дата — новый банк"
+
+
+def test_joint_lesson_checks(teacher, school_teacher):
+    r = joint(teacher, [{"student_id": 104, "stars": 1}])
+    assert r.status_code == 400 and "учится не в классах 5-А + 5-Б" in r.json()["detail"]
+    other = school_teacher.other["class"]
+    assert joint(school_teacher, [{"student_id": 101, "stars": 1}], class_ids=(1, other)).status_code == 404
+    r = joint(teacher, [{"student_id": 101, "stars": 1}], class_ids=(1, other))
+    assert r.status_code == 400 and "одной школы" in r.json()["detail"]
+    assert joint(teacher, [{"student_id": 101, "stars": 1}], class_ids=(1, 1)).status_code == 200
+    assert "group" not in load_db()["lessons"][0], "один и тот же класс дважды — обычный урок"
+
+
+def test_joint_lesson_undo_one_class(teacher):
+    joint(teacher, [{"student_id": 101, "stars": 3}, {"student_id": 103, "stars": 2}])
+    first = next(l for l in load_db()["lessons"] if l["class_id"] == 2)
+    before = student_record(103)["total_stars"]
+    assert teacher.post(f"/api/lessons/{first['id']}/undo", json={}).status_code == 200
+    assert student_record(103)["total_stars"] == before - 2
+    assert next(l for l in load_db()["lessons"] if l["class_id"] == 1)["total_stars"] == 3, "5-А не тронут"

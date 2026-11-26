@@ -21,6 +21,12 @@ function entryActiveOn(entry, iso) {
   return (!from || from <= iso) && (!to || iso <= to);
 }
 
+/** Стоит ли занятие в таблице расписания в этот день — только по явному сроку «с … по …»:
+ *  поставленное в среду на понедельник видно и в понедельник этой недели (как на сервере). */
+function entryShownOn(entry, iso) {
+  return entryActiveOn({ ...entry, created_at: "" }, iso);
+}
+
 function shortDate(iso) {
   const [y, m, d] = iso.split("-");
   return y === String(new Date().getFullYear()) ? `${d}.${m}` : `${d}.${m}.${y.slice(2)}`;

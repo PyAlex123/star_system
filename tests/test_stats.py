@@ -131,3 +131,21 @@ def test_lesson_remembers_teacher(teacher):
     lesson(teacher, [{"student_id": 101, "stars": 1}])
     admin = next(u for u in load_db()["users"] if u["role"] == "superadmin")
     assert load_db()["lessons"][0]["user_id"] == admin["id"]
+
+
+def test_joint_lesson_counts_once(teacher):
+    """Общий урок — по записи у каждого класса, но у учителя и школы это один урок."""
+    r = teacher.post("/api/lessons/complete", json={"class_id": 1, "class_ids": [1, 2], "date": "2026-11-20",
+                                                    "awards": [{"student_id": 101, "stars": 2},
+                                                               {"student_id": 103, "stars": 2}]})
+    assert r.status_code == 200, r.text
+    lesson(teacher, [{"student_id": 102, "stars": 1}])
+    data = load_db()
+    for l in data["lessons"]:
+        l["date"] = stats.today().isoformat()
+    save_db(data)
+    st = teacher.get("/api/stats?school_id=1&days=7").json()
+    assert st["totals"]["lessons"] == 2
+    assert st["teachers"][0]["lessons"] == 2 and st["teachers"][0]["stars"] == 5
+    rows = {c["name"]: c["lessons"] for c in st["classes"]}
+    assert rows["5-А"] == 2 and rows["5-Б"] == 1

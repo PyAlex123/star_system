@@ -1,0 +1,448 @@
+"""Чистые функции «Мониторинга»: ни базы, ни запросов — только данные на входе и выходе.
+
+Ответ ученика хранится словарём с короткими ключами:
+    {"v": 4}                    — настроение (1–5) и шкала
+    {"v": "green"}              — светофор
+    {"o": "b"}                  — один вариант; {"o": "_other", "t": "…"} — «Другое»
+    {"o": ["a", "c"], "t": "…"} — несколько вариантов (t — если отмечено «Другое»)
+    {"t": "…"}                  — короткий и развёрнутый ответ
+"""
+import copy
+import re
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from .library import GOAL, LIGHT_VALUES, MOOD_LEVELS, TOPIC
+
+OTHER = "_other"
+MAX_NAME = 40
+MAX_SHORT = 200
+MAX_LONG = 2000
+MAX_TOPIC = 120
+MAX_GOALS = 5
+MAX_QUESTIONS = 30
+
+
+class AnswerError(ValueError):
+    """Ответ не подходит к вопросу — текст показывается ученику."""
+
+
+# ── ФИО ───────────────────────────────────────────────────────────────────────
+
+_SPACES = re.compile(r"\s+")
+
+
+def clean_person(value: Optional[str]) -> str:
+    """Фамилия или имя как его ввели: без лишних пробелов, с заглавной буквы.
+    Набранное капсом «ИВАНОВ» становится «Иванов»."""
+    text = _SPACES.sub(" ", str(value or "")).strip()[:MAX_NAME]
+    if len(text) > 1 and text == text.upper() and text != text.lower():
+        text = text.title()
+    return text[:1].upper() + text[1:] if text else ""
+
+
+def norm(value: str) -> str:
+    """Для сравнения: без регистра, лишних пробелов и разницы «ё/е»."""
+    return _SPACES.sub(" ", str(value or "")).strip().lower().replace("ё", "е")
+
+
+def name_key(last: str, first: str) -> str:
+    return f"{norm(last)}|{norm(first)}"
+
+
+def match_student(roster: Iterable[Tuple[int, str]], last: str, first: str) -> Optional[int]:
+    """Ученик класса по фамилии и имени. Найден ровно один — его id, иначе None (гость).
+
+    В базе имя записано «Фамилия Имя [Отчество]». Ребёнок может перепутать поля
+    местами — такой вариант тоже ищем, но связываем только при единственном совпадении.
+    """
+    want = (norm(last), norm(first))
+    found = set()
+    for student_id, full_name in roster:
+        parts = norm(full_name).split(" ")
+        if len(parts) < 2:
+            continue
+        pair = (parts[0], parts[1])
+        if pair == want or pair == (want[1], want[0]):
+            found.add(student_id)
+    return found.pop() if len(found) == 1 else None
+
+
+# ── Вопросы запуска ───────────────────────────────────────────────────────────
+
+def clean_goals(goals: Iterable[str]) -> List[str]:
+    result = []
+    for goal in goals or []:
+        text = _SPACES.sub(" ", str(goal or "")).strip()[:MAX_TOPIC]
+        if text and text not in result:
+            result.append(text)
+    return result[:MAX_GOALS]
+
+
+def prepare_questions(questions: Sequence[Dict[str, Any]], topic: str, goals: Sequence[str]) -> List[Dict[str, Any]]:
+    """Снимок вопросов для запуска: {тема} и {цель} заполнены.
+
+    Вопрос с {цель} размножается — по вопросу на каждую цель (С15). Без целей
+    такой вопрос задать нельзя — ошибка с понятным текстом. Без темы вопрос
+    с {тема} берёт свой «простой» текст, если он есть («тема урока»).
+    """
+    topic = _SPACES.sub(" ", str(topic or "")).strip()[:MAX_TOPIC]
+    result: List[Dict[str, Any]] = []
+    for source in questions:
+        q = copy.deepcopy(source)
+        plain = q.pop("text_plain", None)
+        text = q.get("text", "")
+        if TOPIC in text:
+            text = text.replace(TOPIC, topic) if topic else (plain or text.replace(TOPIC, "урока"))
+        if GOAL in text:
+            if not goals:
+                raise ValueError("Впишите хотя бы одну цель урока — по ней ученики оценят себя")
+            for i, goal in enumerate(goals, start=1):
+                copy_q = copy.deepcopy(q)
+                copy_q["id"] = f"{q['id']}-{i}"
+                copy_q["text"] = text.replace(GOAL, goal)
+                result.append(copy_q)
+            continue
+        q["text"] = text
+        result.append(q)
+    if not result:
+        raise ValueError("В форме нет вопросов")
+    if len(result) > MAX_QUESTIONS:
+        raise ValueError(f"Слишком много вопросов: не больше {MAX_QUESTIONS}")
+    return result
+
+
+def public_question(q: Dict[str, Any]) -> Dict[str, Any]:
+    """Вопрос для ученика — без правильного ответа."""
+    return {k: v for k, v in q.items() if k not in ("correct",)}
+
+
+# ── Проверка ответа ───────────────────────────────────────────────────────────
+
+def _text(value: Any, limit: int) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def validate_answer(q: Dict[str, Any], raw: Any) -> Optional[Dict[str, Any]]:
+    """Приводит ответ к формату хранения. None — ответа нет (необязательный пропущен).
+    Неподходящий ответ — AnswerError."""
+    if not isinstance(raw, dict):
+        raise AnswerError("Ответ не распознан")
+    kind = q.get("type")
+    if kind == "mood":
+        value = raw.get("v")
+        if value not in [level for level, _ in MOOD_LEVELS]:
+            raise AnswerError("Выбери одно из лиц")
+        return {"v": int(value)}
+    if kind == "scale":
+        scale = q.get("scale") or {}
+        value = raw.get("v")
+        if not isinstance(value, int) or isinstance(value, bool) or not scale.get("min", 1) <= value <= scale.get("max", 5):
+            raise AnswerError("Выбери число на шкале")
+        return {"v": value}
+    if kind == "light":
+        if raw.get("v") not in LIGHT_VALUES:
+            raise AnswerError("Выбери один из цветов")
+        return {"v": raw["v"]}
+    option_ids = [o["id"] for o in q.get("options", [])]
+    if kind == "single":
+        choice = raw.get("o")
+        if choice == OTHER and q.get("other"):
+            text = _text(raw.get("t"), MAX_SHORT)
+            if not text:
+                raise AnswerError("Допиши свой вариант")
+            return {"o": OTHER, "t": text}
+        if choice not in option_ids:
+            raise AnswerError("Выбери один вариант")
+        return {"o": choice}
+    if kind == "multi":
+        chosen = raw.get("o")
+        if not isinstance(chosen, list) or not chosen:
+            if not q.get("required"):
+                return None
+            raise AnswerError("Отметь хотя бы один вариант")
+        allowed = option_ids + ([OTHER] if q.get("other") else [])
+        picked = [c for c in allowed if c in chosen]           # порядок вариантов, без повторов
+        if len(picked) != len(set(chosen)) or len(picked) != len(chosen):
+            raise AnswerError("Такого варианта нет")
+        exclusive = {o["id"] for o in q.get("options", []) if o.get("exclusive")}
+        if len(picked) > 1 and exclusive & set(picked):
+            raise AnswerError("«Ничего» нельзя отметить вместе с другими вариантами")
+        result: Dict[str, Any] = {"o": picked}
+        if OTHER in picked:
+            text = _text(raw.get("t"), MAX_SHORT)
+            if not text:
+                raise AnswerError("Допиши свой вариант")
+            result["t"] = text
+        return result
+    if kind in ("short", "long"):
+        text = _text(raw.get("t"), MAX_SHORT if kind == "short" else MAX_LONG)
+        if not text:
+            if q.get("required"):
+                raise AnswerError("Напиши ответ")
+            return None
+        return {"t": text}
+    raise AnswerError("Вопрос не распознан")
+
+
+def grade(q: Dict[str, Any], value: Optional[Dict[str, Any]]) -> Tuple[Optional[bool], float]:
+    """Верно ли и сколько баллов. (None, 0) — у вопроса нет правильного ответа."""
+    correct = q.get("correct")
+    if not correct or q.get("type") not in ("single", "multi", "short"):
+        return None, 0.0
+    points = float(q.get("points") or 1)
+    if not value:
+        return False, 0.0
+    kind = q["type"]
+    if kind == "single":
+        ok = value.get("o") == correct[0]
+    elif kind == "multi":
+        ok = set(value.get("o") or []) == set(correct)
+    else:
+        ok = norm(value.get("t", "")) in {norm(c) for c in correct}
+    return ok, points if ok else 0.0
+
+
+def missing_required(questions: Sequence[Dict[str, Any]], answered: Iterable[str]) -> List[str]:
+    done = set(answered)
+    return [q["id"] for q in questions if q.get("required") and q["id"] not in done]
+
+
+# ── Сводка ────────────────────────────────────────────────────────────────────
+
+def _labels(q: Dict[str, Any]) -> List[Tuple[Any, str]]:
+    """Возможные значения ответа и их подписи — в порядке показа."""
+    kind = q.get("type")
+    if kind == "mood":
+        return list(MOOD_LEVELS)
+    if kind == "scale":
+        scale = q.get("scale") or {}
+        return [(v, str(v)) for v in range(scale.get("min", 1), scale.get("max", 5) + 1)]
+    if kind == "light":
+        return list(zip(LIGHT_VALUES, q.get("lights") or ["", "", ""]))
+    if kind in ("single", "multi"):
+        labels = [(o["id"], o["text"]) for o in q.get("options", [])]
+        return labels + ([(OTHER, "Другое")] if q.get("other") else [])
+    return []
+
+
+def summarize(questions: Sequence[Dict[str, Any]],
+              answers: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Итоги по каждому вопросу.
+
+    answers — [{question_id, value (dict), name, class_name}] для участников запуска.
+    Для вариантов — сколько выбрали каждый (доля от ответивших на вопрос);
+    для лиц и шкал — ещё и среднее; тексты — списком.
+    """
+    by_question: Dict[str, List[Dict[str, Any]]] = {}
+    for answer in answers:
+        by_question.setdefault(answer["question_id"], []).append(answer)
+
+    result = []
+    for q in questions:
+        got = by_question.get(q["id"], [])
+        item: Dict[str, Any] = {"id": q["id"], "std": q.get("std"), "type": q["type"], "text": q["text"],
+                                "answered": len(got)}
+        labels = _labels(q)
+        if labels:
+            counts = {key: 0 for key, _ in labels}
+            for a in got:
+                value = a["value"]
+                keys = value.get("o") if q["type"] == "multi" else value.get("o", value.get("v"))
+                for key in (keys if isinstance(keys, list) else [keys]):
+                    if key in counts:
+                        counts[key] += 1
+            item["options"] = [{"key": key, "label": label, "count": counts[key]} for key, label in labels]
+            if q["type"] in ("mood", "scale") and got:
+                item["average"] = round(sum(a["value"]["v"] for a in got) / len(got), 1)
+            if q["type"] == "scale":
+                item["scale"] = q.get("scale")
+        texts = [{"text": a["value"]["t"], "name": a.get("name", ""), "class_name": a.get("class_name", "")}
+                 for a in got if a["value"].get("t")]
+        if texts:
+            item["texts"] = texts
+        if q.get("correct"):
+            item["correct_count"] = sum(1 for a in got if a.get("correct"))
+        result.append(item)
+    return result
+
+
+# ── Таблица «участник × вопрос» ───────────────────────────────────────────────
+
+HIDDEN = "скрыто"          # настроение без разрешения показывать имена
+
+
+def answer_label(q: Dict[str, Any], value: Optional[Dict[str, Any]]) -> str:
+    """Ответ словами — для таблицы и Excel."""
+    if not value:
+        return ""
+    labels = dict(_labels(q))
+    kind = q.get("type")
+    if kind in ("mood", "light"):
+        return str(labels.get(value.get("v"), ""))
+    if kind == "scale":
+        return str(value.get("v", ""))
+    if kind == "single":
+        return f"Другое: {value.get('t', '')}" if value.get("o") == OTHER else str(labels.get(value.get("o"), ""))
+    if kind == "multi":
+        parts = [f"Другое: {value.get('t', '')}" if key == OTHER else str(labels.get(key, ""))
+                 for key in value.get("o") or []]
+        return ", ".join(p for p in parts if p)
+    return str(value.get("t", ""))
+
+
+def answer_table(questions: Sequence[Dict[str, Any]], people: Iterable[Dict[str, Any]],
+                 answers: Iterable[Dict[str, Any]], show_names: bool) -> List[Dict[str, Any]]:
+    """Строки таблицы: участник и его ответы словами по id вопроса.
+
+    Настроение (лица) по умолчанию не связывается с именем — в строке «скрыто»,
+    видна только общая сводка (ТЗ: «показывать имена в ответах о настроении — нет»).
+    """
+    by_id = {q["id"]: q for q in questions}
+    given: Dict[int, Dict[str, Any]] = {}
+    for a in answers:
+        given.setdefault(a["participant_id"], {})[a["question_id"]] = a
+    rows = []
+    for p in people:
+        cells = {}
+        for qid, a in given.get(p["id"], {}).items():
+            q = by_id.get(qid)
+            if not q:
+                continue
+            hidden = q["type"] == "mood" and not show_names
+            cells[qid] = {"text": HIDDEN if hidden else answer_label(q, a["value"]),
+                          "correct": None if a.get("correct") is None else bool(a["correct"])}
+        rows.append({**p, "answers": cells})
+    return rows
+
+
+# ── Свои формы (конструктор) ──────────────────────────────────────────────────
+
+FORM_KINDS = ("survey", "test")
+AFTER_OPTIONS = ("none", "score", "full")     # что ученик видит после отправки
+MAX_OPTIONS = 10
+MAX_TEXT = 300
+MAX_OPTION = 120
+MAX_SPELLINGS = 10
+_ID = re.compile(r"^[a-z0-9-]{1,20}$")
+_OPTION_ID = re.compile(r"^[a-z0-9]{1,4}$")
+DEFAULT_LIGHTS = ["всё понятно", "есть вопросы", "не понял"]
+
+
+def _clip(value: Any, limit: int) -> str:
+    return _SPACES.sub(" ", str(value or "")).strip()[:limit]
+
+
+def _clean_options(raw: Any, n: int) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise ValueError(f"Вопрос {n}: нужно хотя бы два варианта ответа")
+    if len(raw) > MAX_OPTIONS:
+        raise ValueError(f"Вопрос {n}: не больше {MAX_OPTIONS} вариантов")
+    used, result = set(), []
+    for i, item in enumerate(raw):
+        item = item if isinstance(item, dict) else {"text": item}
+        text = _clip(item.get("text"), MAX_OPTION)
+        if not text:
+            raise ValueError(f"Вопрос {n}: у варианта {i + 1} нет текста")
+        oid = str(item.get("id") or "")
+        if not _OPTION_ID.match(oid) or oid in used:
+            oid = next(c for c in "abcdefghijklmnopqrstuvwxyz" if c not in used)
+        used.add(oid)
+        result.append({"id": oid, "text": text, **({"exclusive": True} if item.get("exclusive") else {})})
+    return result
+
+
+def clean_question(raw: Dict[str, Any], n: int, used_ids: set) -> Dict[str, Any]:
+    """Вопрос из конструктора в формат хранения. Ошибка — ValueError с номером вопроса."""
+    from .library import BY_ID, library_question
+    if not isinstance(raw, dict):
+        raise ValueError(f"Вопрос {n} не распознан")
+    std_id = str(raw.get("id") or "")
+    if raw.get("std") and std_id in BY_ID:
+        if std_id in used_ids:
+            raise ValueError(f"Стандартный вопрос {BY_ID[std_id]['std']} уже есть в форме")
+        used_ids.add(std_id)
+        return library_question(std_id)                 # текст стандартного вопроса не меняется
+
+    kind = raw.get("type")
+    if kind not in ("mood", "scale", "light", "single", "multi", "short", "long"):
+        raise ValueError(f"Вопрос {n}: неизвестный тип")
+    text = _clip(raw.get("text"), MAX_TEXT)
+    if not text:
+        raise ValueError(f"Вопрос {n}: напишите текст вопроса")
+    qid = str(raw.get("id") or "")
+    if not _ID.match(qid) or qid in used_ids or qid in BY_ID or qid.split("-")[0] in BY_ID:
+        k = 1
+        while f"q{k}" in used_ids:
+            k += 1
+        qid = f"q{k}"
+    used_ids.add(qid)
+    q: Dict[str, Any] = {"id": qid, "std": None, "type": kind, "text": text, "required": bool(raw.get("required", True))}
+
+    if kind in ("single", "multi"):
+        q["options"] = _clean_options(raw.get("options"), n)
+        if kind == "single":
+            for o in q["options"]:
+                o.pop("exclusive", None)
+        q["other"] = bool(raw.get("other"))
+    elif kind == "scale":
+        scale = raw.get("scale") or {}
+        top = 10 if scale.get("max") == 10 else 5
+        q["scale"] = {"min": 1, "max": top, "left": _clip(scale.get("left"), 40), "right": _clip(scale.get("right"), 40)}
+    elif kind == "light":
+        lights = raw.get("lights") if isinstance(raw.get("lights"), list) else []
+        q["lights"] = [_clip(lights[i] if i < len(lights) else "", 80) or DEFAULT_LIGHTS[i] for i in range(3)]
+
+    correct = raw.get("correct")
+    if correct and kind in ("single", "multi", "short"):
+        if kind == "short":
+            spellings = [_clip(s, 100) for s in (correct if isinstance(correct, list) else [correct])]
+            spellings = [s for s in dict.fromkeys(spellings) if s][:MAX_SPELLINGS]
+            if spellings:
+                q["correct"] = spellings
+        else:
+            ids = {o["id"] for o in q["options"]}
+            chosen = [c for c in (correct if isinstance(correct, list) else [correct]) if c in ids]
+            if kind == "single":
+                chosen = chosen[:1]
+            if chosen:
+                q["correct"] = list(dict.fromkeys(chosen))
+        if q.get("correct"):
+            try:
+                q["points"] = max(1, min(100, int(raw.get("points") or 1)))
+            except (TypeError, ValueError):
+                q["points"] = 1
+    return q
+
+
+def clean_form(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Форма из конструктора: название, тип, настройки, вопросы — проверено и приведено."""
+    kind = raw.get("kind") if raw.get("kind") in FORM_KINDS else "survey"
+    settings_in = raw.get("settings") if isinstance(raw.get("settings"), dict) else {}
+    after = settings_in.get("after")
+    settings = {
+        "after": after if after in AFTER_OPTIONS else ("score" if kind == "test" else "none"),
+        "show_names": bool(settings_in.get("show_names")),
+        "shuffle": bool(settings_in.get("shuffle")),
+    }
+    questions_in = raw.get("questions") if isinstance(raw.get("questions"), list) else []
+    if len(questions_in) > MAX_QUESTIONS:
+        raise ValueError(f"Слишком много вопросов: не больше {MAX_QUESTIONS}")
+    used: set = set()
+    questions = [clean_question(q, i + 1, used) for i, q in enumerate(questions_in)]
+    return {"title": _clip(raw.get("title"), 120) or "Без названия", "kind": kind,
+            "settings": settings, "questions": questions}
+
+
+def shuffled(questions: Sequence[Dict[str, Any]], seed: str) -> List[Dict[str, Any]]:
+    """Свой порядок вопросов и вариантов у каждого участника — постоянный для него.
+    «Другое» и исключающий вариант («ничего») остаются в конце."""
+    import random
+    rng = random.Random(seed)
+    result = [copy.deepcopy(q) for q in questions]
+    rng.shuffle(result)
+    for q in result:
+        if q.get("type") in ("single", "multi") and q.get("options"):
+            plain = [o for o in q["options"] if not o.get("exclusive")]
+            rng.shuffle(plain)
+            q["options"] = plain + [o for o in q["options"] if o.get("exclusive")]
+    return result

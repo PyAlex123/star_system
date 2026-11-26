@@ -56,6 +56,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend import config, db, passwords, ratelimit  # noqa: E402
 from backend.checkin import clock as checkin_clock, store as checkin_store  # noqa: E402
 from backend.main import app  # noqa: E402
+from backend.monitoring import store as monitoring_store  # noqa: E402
+from backend.routers import m_public  # noqa: E402
 
 # Боевые 120 000 итераций делают каждый тест на полсекунды дольше.
 # Проверка хеша читает число итераций из самой записи, поэтому совместимость
@@ -76,6 +78,11 @@ def fresh_state():
     ratelimit._failures.clear()
     checkin_store.reset_for_tests()
     checkin_clock.freeze(None)
+    # «Мониторинг»: своя SQLite рядом с базой — тоже чистая перед каждым тестом
+    for suffix in ("", "-wal", "-shm"):
+        Path(f"{monitoring_store.db_file()}{suffix}").unlink(missing_ok=True)
+    monitoring_store.forget()
+    m_public._roster.update(stamp=None, by_class={})
     yield
     checkin_clock.freeze(None)
 

@@ -221,6 +221,48 @@ def _apply(existing, changes, next_id=100):
     return list(rows.values())
 
 
+def _joint_db(*schedule):
+    """Школа №1 с двумя классами: объединённый урок — по занятию у каждого класса."""
+    db = database(*schedule)
+    db["classes"].append({"id": 4, "school_id": 1, "name": "5-Б"})
+    return db
+
+
+def test_combined_classes_make_one_lesson():
+    """Объединённые классы в таблице — два занятия с общим учителем и временем,
+    но урок у преподавателя один: одна отметка и одни часы."""
+    db = _joint_db(entry(1, room=""), entry(2, class_id=4, room="14"), entry(3, start="10:00", end="10:45"))
+    lessons = d.expected_lessons(db, MON, MON, [])
+    assert [(l["entry_id"], l["class_name"], l["room"]) for l in lessons] == [(1, "5-А, 5-Б", "14"), (3, "5-А", "12")]
+    rows = materialize(lessons)
+    for row in rows:
+        row["status"] = d.CHECKED_IN
+    assert d.report(rows, db["users"], MON, MON, at(TUE, "08:00"), 5)["totals"]["hours"] == 1.5
+
+
+def test_combined_classes_split_by_teacher_or_cancel():
+    """Разные учителя или отмена одного класса — уже не общий урок."""
+    db = _joint_db(entry(1), entry(2, class_id=4, user_id=3))
+    assert len(d.expected_lessons(db, MON, MON, [])) == 2
+    db = _joint_db(entry(1), entry(2, class_id=4))
+    calendar = [exception(1, d.CANCEL, MON, entry_id=2)]
+    lessons = d.expected_lessons(db, MON, MON, calendar)
+    assert sorted((l["entry_id"], l["status"]) for l in lessons) == [(1, d.PLANNED), (2, d.CANCELLED)]
+
+
+def test_combined_lesson_change_today_keeps_one_lesson():
+    """Сегодня из объединённого урока убрали первый класс: сегодняшний урок остаётся,
+    второй на то же время не появляется; со следующей недели урок держится за оставшееся занятие."""
+    now = at(MON, "08:00")
+    rows = _apply([], _plan(_joint_db(entry(1), entry(2, class_id=4)), [], now))
+    assert len(rows) == 2, "сегодня и через неделю"
+    changes = _plan(_joint_db(entry(2, class_id=4)), rows, now)
+    assert [(l["entry_id"], l["date"]) for l in changes["insert"]] == [(2, "2026-11-30")]
+    assert [x["lesson"]["date"] for x in changes["delete"]] == ["2026-11-30"]
+    rows = _apply(rows, changes, next_id=200)
+    assert sorted((l["entry_id"], l["date"]) for l in rows) == [(1, "2026-11-23"), (2, "2026-11-30")]
+
+
 def test_first_run_inserts_only_lessons_not_started():
     db = database(entry(1, start="07:00", end="07:45"), entry(2))
     changes = _plan(db, [], at(MON, "08:00"))

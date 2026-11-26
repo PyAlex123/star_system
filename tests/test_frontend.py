@@ -96,6 +96,48 @@ def test_asset_url_respects_prefix():
     assert eval_common('assetUrl("")') == ""
 
 
+def eval_schedule(expression: str):
+    """Чистые функции расписания: schedule.js без страницы (DOM не нужен)."""
+    script = (
+        "const vm = require('vm'), fs = require('fs');"
+        "const ctx = vm.createContext({window: {APP_BASE: ''}, document: {}});"
+        f"vm.runInContext(fs.readFileSync({json.dumps(str(JS / 'schedule.js'))}, 'utf8'), ctx);"
+        f"console.log(JSON.stringify(vm.runInContext({json.dumps(expression)}, ctx)));"
+    )
+    r = run_node(script=script)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_make_bells():
+    assert eval_schedule('makeBells("08:00", 45, 10, 3)') == [
+        {"start": "08:00", "end": "08:45"}, {"start": "08:55", "end": "09:40"}, {"start": "09:50", "end": "10:35"}]
+    assert len(eval_schedule('makeBells("22:00", 45, 15, 5)')) == 2, "за полночь не уходим"
+
+
+def test_bells_error():
+    assert eval_schedule('bellsError([{start: "08:00", end: "08:45"}, {start: "08:55", end: "09:40"}])') == ""
+    assert eval_schedule('bellsError([])') == "Нужен хотя бы один урок"
+    assert "2-й урок начинается раньше" in eval_schedule(
+        'bellsError([{start: "08:00", end: "08:45"}, {start: "08:30", end: "09:15"}])')
+    assert "позже" in eval_schedule('bellsError([{start: "09:00", end: "08:00"}])')
+    assert "Заполните" in eval_schedule('bellsError([{start: "", end: "08:00"}])')
+
+
+def test_visible_days():
+    assert eval_schedule("visibleDays(5, [])") == 5
+    assert eval_schedule("visibleDays(5, [{weekday: 6}])") == 6, "занятие в субботу видно и без учебной субботы"
+    assert eval_schedule("visibleDays(6, [{weekday: 2}])") == 6
+
+
+def test_combined_name():
+    """Объединённые классы в клетке таблицы — коротко, как пишут в школьном расписании."""
+    assert eval_schedule('combinedName(["5-А"])') == "5-А"
+    assert eval_schedule('combinedName(["8-А", "8-Б", "8-В"])') == "8-АБВ"
+    assert eval_schedule('combinedName(["7-А", "7-В", "9-Б"])') == "7-АВ + 9-Б"
+    assert eval_schedule('combinedName(["10А", "Кружок робототехники"])') == "10-А + Кружок робототехники"
+
+
 def test_error_text_handles_lists():
     """Иначе на экране оказалось бы «[object Object]»."""
     assert eval_common('errorText([{msg: "a"}, {msg: "b"}])') == "a; b"
@@ -135,6 +177,15 @@ def test_entry_active_on_matches_server_rule():
     assert eval_common("entryActiveOn({valid_from: '2026-12-01', created_at: '2026-11-30'}, '2026-11-30')",
                        CHECKIN) is False
     assert eval_common("entryActiveOn({weekday: 1}, '2000-01-01')", CHECKIN) is True
+
+
+def test_entry_shown_on_ignores_created_at():
+    """Таблица расписания (как _shown_on на сервере): поставленное в среду на понедельник
+    видно и в понедельник этой недели; явный срок «с … по …» действует."""
+    entry = '{created_at: "2026-11-25", valid_from: null, valid_to: "2026-12-31"}'
+    assert eval_common(f"[entryShownOn({entry}, '2026-11-23'), entryShownOn({entry}, '2027-01-01'),"
+                       f" entryShownOn({{valid_from: '2026-12-07'}}, '2026-11-30')]",
+                       CHECKIN) == [True, False, False]
 
 
 def test_entry_bounds_label_and_day_before():

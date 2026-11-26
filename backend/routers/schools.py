@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 
 from .. import db, images, schemas
 from .. import themes
+from ..monitoring import store as monitoring_store
 from ..security import require_superadmin, require_teacher
 from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
 
@@ -24,8 +25,8 @@ def add_school(item: schemas.SchoolCreate):
     def _apply(database: Dict[str, Any]):
         if any(s["name"].strip().lower() == name.lower() for s in database["schools"]):
             raise bad_request("Такая школа уже есть")
-        school = {"id": db.next_counted_id(database, "schools"), "name": name,
-                  "theme": themes.DEFAULT_THEME, **db.SCHOOL_CHECKIN_DEFAULTS}
+        school = {"id": db.next_counted_id(database, "schools"), "name": name, "theme": themes.DEFAULT_THEME,
+                  "bells": db.default_bells(), "days": db.SCHOOL_DAYS[0], **db.SCHOOL_CHECKIN_DEFAULTS}
         database["schools"].append(school)
         return school
 
@@ -88,6 +89,7 @@ def delete_school(school_id: int):
 
     db.transaction(_apply)
     drop_photos(removed.get("photos"))
+    monitoring_store.drop_school(school_id)
     return {"ok": True}
 
 
@@ -155,6 +157,28 @@ def update_class(class_id: int, item: schemas.ClassUpdate,
         return cls
 
     return {"ok": True, "class": db.transaction(_apply)}
+
+
+@router.delete("/classes/{class_id}/students")
+def clear_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
+    """Удаляет всех учеников класса с их фото; сам класс и его расписание остаются —
+    например, чтобы заново загрузить неправильно заполненный список."""
+    removed: Dict[str, list] = {"photos": []}
+
+    def _apply(database: Dict[str, Any]):
+        class_or_404(database, class_id, user)
+        gone = [s for s in database["students"] if s.get("class_id") == class_id]
+        if not gone:
+            return db.NO_SAVE
+        removed["photos"] = [images.avatar_upload_url(s) for s in gone]
+        database["students"] = [s for s in database["students"] if s.get("class_id") != class_id]
+        return len(gone)
+
+    result = db.transaction(_apply)
+    if result is db.NO_SAVE:
+        return {"ok": True, "removed": 0}
+    drop_photos(removed["photos"])
+    return {"ok": True, "removed": result}
 
 
 @router.delete("/classes/{class_id}")

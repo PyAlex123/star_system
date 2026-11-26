@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="{{BASE}}/static/css/tokens.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/theme.css">
 <link rel="stylesheet" href="{{BASE}}/static/css/teacher.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/m.css">
+<link rel="stylesheet" href="{{BASE}}/static/css/monitoring.css">
 </head>
 <body class="teacher">
 
@@ -36,6 +38,9 @@
       <button data-page="lessons" onclick="switchPage('lessons')">
         <svg class="ic"><use href="#i-calendar"></use></svg>Уроки
       </button>
+      <button data-page="monitor" class="editor-only" onclick="switchPage('monitor')">
+        <svg class="ic"><use href="#i-activity"></use></svg>Мониторинг
+      </button>
       <button data-page="stats" onclick="switchPage('stats')">
         <svg class="ic"><use href="#i-chart"></use></svg>Статистика
       </button>
@@ -48,11 +53,11 @@
     </nav>
 
     <div class="topbar-end">
-      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль">
-        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Пароль
+      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль" aria-label="Сменить свой пароль">
+        <svg class="ic ic-sm"><use href="#i-key"></use></svg><span class="tb-label">Пароль</span>
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()">
-        <svg class="ic ic-sm"><use href="#i-logout"></use></svg>Выйти
+      <button class="btn btn-ghost btn-sm" onclick="logout()" title="Выйти" aria-label="Выйти">
+        <svg class="ic ic-sm"><use href="#i-logout"></use></svg><span class="tb-label">Выйти</span>
       </button>
     </div>
   </div>
@@ -139,7 +144,7 @@
               title="Пароли скрыты, чтобы их не увидел класс, если экран выведен на доску">
         <svg class="ic ic-sm"><use href="#i-eye"></use></svg><span>Показать пароли</span>
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="openCards()">
+      <button class="btn btn-ghost btn-sm" id="cardsBtn" onclick="openCards()">
         <svg class="ic ic-sm"><use href="#i-printer"></use></svg>Карточки класса
       </button>
     </div>
@@ -202,7 +207,7 @@
   <div class="page-head">
     <div>
       <h1 class="page-title">Расписание</h1>
-      <p class="page-sub">Занятия со звёздами по дням недели. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
+      <p class="page-sub" id="scheduleHint">Нажмите на клетку, чтобы поставить класс на урок. Журнал подсказывает, какие уроки сегодня, а ученик видит свой следующий урок.</p>
     </div>
     <div class="week-nav" role="group" aria-label="Неделя">
       <button class="icon-btn boxed" onclick="shiftScheduleWeek(-1)" title="Предыдущая неделя" aria-label="Предыдущая неделя">
@@ -212,11 +217,34 @@
         <svg class="ic ic-sm"><use href="#i-chevron-right"></use></svg></button>
     </div>
     <div class="seg class-seg" id="scheduleClasses" role="tablist" aria-label="Класс"></div>
-    <button class="btn editor-only" onclick="openScheduleEntry()">
-      <svg class="ic"><use href="#i-plus"></use></svg>Занятие
+    <button class="btn btn-ghost editor-only" onclick="openBells()">
+      <svg class="ic"><use href="#i-clock"></use></svg>Время уроков
     </button>
   </div>
-  <div class="week-grid" id="weekGrid"></div>
+  <div class="card sched" id="weekGrid" role="table" aria-label="Расписание по урокам"></div>
+  <section class="sched-extra" id="schedExtra">
+    <div class="sched-extra-head">
+      <h2 class="sched-extra-title">Занятия в другое время</h2>
+      <button class="btn btn-ghost btn-sm editor-only" onclick="openScheduleEntry()">
+        <svg class="ic ic-sm"><use href="#i-plus"></use></svg>Занятие
+      </button>
+    </div>
+    <div class="sched-extra-list" id="extraList"></div>
+  </section>
+  <div class="cell-pop" id="cellPop" role="dialog" aria-labelledby="cellPopTitle" hidden></div>
+</main>
+
+<!-- ── Мониторинг ──────────────────────────────────────────── -->
+<main class="page" id="page-monitor">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Мониторинг</h1>
+      <p class="page-sub">Опрос на 1–2 минуты урока: настроение, понимание темы, оценка урока.
+        Ученики отвечают по ссылке школы — без входа и пароля.</p>
+    </div>
+    <div class="mon-link" id="monLink"></div>
+  </div>
+  <div id="monHost"></div>
 </main>
 
 <!-- ── Статистика ──────────────────────────────────────────── -->
@@ -708,6 +736,36 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalBells" onclick="if(event.target===this) closeModal('modalBells')">
+  <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="bellsTitle">
+    <div>
+      <div class="modal-title" id="bellsTitle">Время уроков</div>
+      <p class="modal-sub">Школа <b id="bellsSchool">—</b>. Одинаковое во все учебные дни. Занятия в таблице переедут на новое время своего урока.</p>
+    </div>
+    <div class="bells-quick">
+      <span class="field-label">Заполнить по порядку</span>
+      <div class="bells-quick-row">
+        <div class="field"><label for="bqFirst">Первый урок</label><input type="time" id="bqFirst" value="08:00"></div>
+        <div class="field"><label for="bqLength">Урок, мин</label><input type="number" id="bqLength" min="10" max="180" value="45" inputmode="numeric"></div>
+        <div class="field"><label for="bqPause">Перемена, мин</label><input type="number" id="bqPause" min="0" max="120" value="10" inputmode="numeric"></div>
+        <div class="field"><label for="bqCount">Уроков</label><input type="number" id="bqCount" min="1" max="12" value="7" inputmode="numeric"></div>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fillBells()">
+        <svg class="ic ic-sm"><use href="#i-refresh"></use></svg>Заполнить</button>
+    </div>
+    <div class="bells-list" id="bellsList" role="group" aria-label="Уроки"></div>
+    <div class="bells-more">
+      <button type="button" class="btn btn-ghost btn-sm" id="bellsAdd" onclick="addBell()">
+        <svg class="ic ic-sm"><use href="#i-plus"></use></svg>Урок</button>
+      <label class="check"><input type="checkbox" id="bellsSaturday">Суббота — учебный день</label>
+    </div>
+    <div class="modal-actions ruled">
+      <button class="btn btn-ghost" onclick="closeModal('modalBells')">Отмена</button>
+      <button class="btn" onclick="saveBells()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalActivity" onclick="if(event.target===this) closeModal('modalActivity')">
   <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="activityName">
     <div class="act-head">
@@ -724,6 +782,56 @@
     </div>
   </div>
 </div>
+
+<div class="backdrop" id="modalLaunch" onclick="if(event.target===this) closeModal('modalLaunch')">
+  <div class="modal" style="max-width:560px;" role="dialog" aria-labelledby="launchTitle">
+    <div>
+      <div class="modal-title" id="launchTitle">Запуск опроса</div>
+      <p class="modal-sub" id="launchSub"></p>
+    </div>
+    <div class="field">
+      <span class="field-label">Классы</span>
+      <div class="launch-classes" id="launchClasses" role="group" aria-label="Классы"></div>
+      <p class="field-hint" id="launchClassesHint"></p>
+    </div>
+    <div class="field" id="launchTopicField">
+      <label for="launchTopic">Тема урока</label>
+      <input type="text" id="launchTopic" maxlength="120" placeholder="Например: Закон Ома">
+      <p class="field-hint">Подставится в вопрос «Насколько понятна тема…». Можно не заполнять.</p>
+    </div>
+    <div class="field" id="launchGoalsField">
+      <label for="launchGoals">Цели урока</label>
+      <textarea id="launchGoals" rows="3" placeholder="По одной на строку, например: рассчитать силу тока"></textarea>
+      <p class="field-hint">По каждой цели ученик ответит «Я могу: …» — да, почти или нет. До 5 целей.</p>
+    </div>
+    <div class="field">
+      <span class="field-label">Сколько идёт опрос</span>
+      <div class="seg launch-time" id="launchTime" role="radiogroup" aria-label="Время"></div>
+    </div>
+    <label class="check launch-code"><input type="checkbox" id="launchCode">
+      <span>Код урока: 4 цифры на экране класса — ответят только те, кто на уроке</span></label>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalLaunch')">Отмена</button>
+      <button class="btn" id="launchBtn" onclick="launchRun()"><svg class="ic"><use href="#i-play"></use></svg>Запустить</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalLibrary" onclick="if(event.target===this) closeModal('modalLibrary')">
+  <div class="modal" style="max-width:640px;" role="dialog" aria-labelledby="libraryTitle">
+    <div>
+      <div class="modal-title" id="libraryTitle">Стандартные вопросы</div>
+      <p class="modal-sub">Их текст не меняется — так результаты можно сравнивать между уроками.</p>
+    </div>
+    <div class="mb-lib" id="libraryList"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalLibrary')">Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- Экран для класса: поверх панели, крупно — для проектора -->
+<div class="live" id="liveScreen" role="dialog" aria-modal="true" aria-labelledby="liveTitle" hidden></div>
 
 <div class="backdrop" id="modalMyPassword" onclick="if(event.target===this) closeModal('modalMyPassword')">
   <div class="modal" style="max-width:420px;">
@@ -774,6 +882,22 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalPaste')">Отмена</button>
       <button class="btn" onclick="processPaste()">Добавить в журнал</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="modalJoint" onclick="if(event.target===this) closeModal('modalJoint')">
+  <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="jointTitle">
+    <div>
+      <div class="modal-title" id="jointTitle">Общий урок</div>
+      <p class="modal-sub">Отметьте классы, которые занимаются вместе. В журнале будут ученики всех этих классов, а банк звёзд — один на урок.</p>
+    </div>
+    <div class="cp-classes joint-list" id="jointList" role="group" aria-label="Классы урока"></div>
+    <p class="cp-hint" id="jointHint"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalJoint')">Отмена</button>
+      <button class="btn" id="jointOpen" onclick="confirmJoint()" disabled>
+        <svg class="ic ic-sm"><use href="#i-users"></use></svg>Открыть общий журнал</button>
     </div>
   </div>
 </div>
@@ -836,6 +960,9 @@
 <script src="{{BASE}}/static/js/teacher.js"></script>
 <script src="{{BASE}}/static/js/schedule.js"></script>
 <script src="{{BASE}}/static/js/stats.js"></script>
+<script src="{{BASE}}/static/js/m-render.js"></script>
+<script src="{{BASE}}/static/js/monitoring.js"></script>
+<script src="{{BASE}}/static/js/m-builder.js"></script>
 <script src="{{BASE}}/static/js/checkin.js"></script>
 <script src="{{BASE}}/static/js/checkin-page.js"></script>
 </body>

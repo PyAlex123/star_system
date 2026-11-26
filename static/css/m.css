@@ -1,0 +1,231 @@
+/* Страница опроса ученика /m — телефон 360–430 px, общий компьютер, браузер Telegram.
+   Фон и карточки — как у входа ученика (auth.css), только на токенах темы.
+   Лица и светофор — цвета состояний через color-mix, всегда с подписью. */
+
+body.m {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  background-color: var(--bg);
+  background-image:
+    repeating-linear-gradient(to bottom, transparent 0, transparent 27px, var(--rule) 27px, var(--rule) 28px),
+    var(--sky);
+  background-size: auto, var(--sky-size);
+  color: var(--text);
+}
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.m-top, .m-col { width: 100%; max-width: 480px; }
+.m-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.m-top-text { display: flex; flex-direction: column; min-width: 0; }
+.m-top-text b { font: var(--dw) 18px/22px var(--font-display); }
+.m-top-text span { font-size: 13px; line-height: 18px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.m-col { display: flex; flex-direction: column; gap: 14px; }
+
+.m-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r18);
+  box-shadow: var(--shadow-card);
+}
+.m-center { align-items: center; text-align: center; }
+.m-center .btn-block { margin-top: 4px; }
+.m-title { font: var(--dw) 24px/30px var(--font-display); text-wrap: balance; }
+.m-lead { font-size: 15px; line-height: 22px; color: var(--muted); text-wrap: pretty; }
+.m-form .field input, .m-form .field select { height: 48px; font-size: 16px; }   /* 16 px — iOS не увеличивает страницу */
+.m-code { letter-spacing: .4em; font-size: 20px !important; text-align: center; }
+.m-confirm { align-items: stretch; text-align: center; }
+.m-confirm .m-ring { align-self: center; }
+
+/* Круг со значком: ожидание, готово, закрыто */
+.m-ring {
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.m-ring.ok { background: color-mix(in srgb, var(--success) 16%, var(--surface)); color: var(--success); }
+.m-ring.warn { background: var(--danger-bg); color: var(--danger); }
+.m-ring.pulse { animation: m-pulse 2.4s ease-in-out infinite; }
+@keyframes m-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 35%, transparent); }
+  50% { box-shadow: 0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+.m-spinner {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: m-spin .8s linear infinite;
+}
+@keyframes m-spin { to { transform: rotate(360deg); } }
+
+.m-score { display: flex; flex-direction: column; gap: 2px; padding: 12px 20px; border-radius: var(--r14); background: var(--star-bg); }
+.m-score span { font-size: 13px; color: var(--star-text); }
+.m-score b { font-size: 28px; line-height: 34px; }
+
+.m-answers { width: 100%; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; text-align: left; }
+.m-answers li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r12);
+  background: color-mix(in srgb, var(--success) 10%, var(--surface)); }
+.m-answers li.bad { background: var(--danger-bg); }
+.m-answers li > .ic { margin-top: 3px; color: var(--success); }
+.m-answers li.bad > .ic { color: var(--danger); }
+.m-answers b { display: block; font-size: 15px; line-height: 20px; font-weight: 600; }
+.m-answers small { font-size: 13px; line-height: 18px; color: var(--muted); }
+
+.m-offline {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 448px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: var(--r12);
+  background: var(--inverse-bg);
+  color: var(--inverse-fg);
+  font-size: 13px;
+  line-height: 18px;
+  z-index: 20;
+}
+
+/* ── Вопрос ────────────────────────────────────────────────── */
+
+.m-progress { display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.m-progress > span:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.m-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--line-soft); overflow: hidden; }
+.m-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width 240ms ease-out; }
+
+.m-q { padding: 22px 18px; }
+.mq { display: flex; flex-direction: column; gap: 14px; }
+.mq-title { font: var(--dw) 22px/28px var(--font-display); text-wrap: balance; }
+.mq-hint { margin-top: -6px; font-size: 14px; color: var(--muted); }
+
+.m-nav { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.m-nav > .m-next { grid-column: 2; justify-self: end; min-width: 150px; }
+
+/* Лица настроения */
+.mq-faces { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.mq-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 10px;
+  border: var(--bw) solid transparent;
+  border-radius: var(--r14);
+  background: none;
+  color: var(--text);
+  font: 500 12px/15px var(--font-ui);
+  cursor: pointer;
+}
+.mq-face .face-art { width: 100%; max-width: 60px; }
+.mq-face:hover { background: var(--surface-2); }
+.mq-face.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 12%, var(--surface)); font-weight: 700; }
+.mq-face.on .face-art .face-bg { fill: color-mix(in srgb, var(--c) 45%, var(--surface)); stroke-width: 3; }
+.mq-faces:has(.on) .mq-face:not(.on) .face-art { opacity: .5; }   /* подпись не тускнеет — контраст текста */
+
+/* Шкала */
+.mq-scale { display: grid; grid-template-columns: repeat(auto-fit, minmax(48px, 1fr)); gap: 8px; }
+.mq-scale.wide { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mq-num {
+  height: 56px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r12);
+  background: var(--field-bg);
+  color: var(--text);
+  font: var(--nw) 22px/1 var(--font-num);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.mq-num:hover { border-color: var(--accent); }
+.mq-num.on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.mq-ends { display: flex; justify-content: space-between; gap: 12px; margin-top: -6px; font-size: 13px; line-height: 18px; color: var(--muted); }
+.mq-ends span:last-child { text-align: right; }
+
+/* Светофор */
+.mq-lights { display: flex; flex-direction: column; gap: 10px; }
+.mq-light {
+  --c: var(--success);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 60px;
+  padding: 10px 16px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r14);
+  background: var(--field-bg);
+  color: var(--text);
+  font: 500 16px/22px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.mq-light.yellow { --c: var(--star); }
+.mq-light.red { --c: var(--danger); }
+.mq-lamp {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 22%, transparent);
+}
+.mq-light:hover { border-color: var(--c); }
+.mq-light.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--surface)); font-weight: 700; }
+
+/* Варианты */
+.mq-opts { display: flex; flex-direction: column; gap: 8px; }
+.mq-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r12);
+  background: var(--field-bg);
+  color: var(--text);
+  font: 500 16px/22px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.mq-opt:hover { border-color: var(--accent); }
+.mq-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--on-primary);
+}
+.multi .mq-mark { border-radius: 6px; }
+.mq-opt.on { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface)); font-weight: 600; }
+.mq-opt.on .mq-mark { border-color: var(--primary); background: var(--primary); }
+.mq-other, .mq-text { width: 100%; font-size: 16px !important; }
+.mq-other, input.mq-text { height: 50px; }
+
+@media (max-width: 370px) {
+  .m-card { padding: 18px 14px; }
+  .mq-face { font-size: 11px; }
+  .m-nav > .m-next { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-ring.pulse, .m-spinner { animation: none; }
+}

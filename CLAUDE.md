@@ -1,6 +1,7 @@
 # Система наград «Звёзды»
 
 Карта кода и решения — в `ARCHITECTURE.md`. Запуск и развёртывание — в `README.md`.
+ТЗ «Мониторинга» (опросы на уроке) — `MDs/07-monitoring.md`; данные — `data/monitoring.sqlite3`.
 
 ## Дизайн
 Источник: `docs/design/HANDOFF-Zvezdy.md`. Темы: notebook · quest · sky · clear · sticker (все в проде),

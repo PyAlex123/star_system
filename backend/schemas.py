@@ -79,7 +79,10 @@ class LessonAward(BaseModel):
 
 
 class LessonComplete(BaseModel):
+    """Звёзды за урок. class_ids — общий урок объединённых классов: один банк на всех,
+    а запись урока — у каждого класса своя. Без class_ids урок одного класса class_id."""
     class_id: int
+    class_ids: Optional[List[int]] = Field(default=None, max_length=12)
     date: str
     awards: List[LessonAward] = Field(max_length=200)
 
@@ -230,6 +233,32 @@ class SchoolLocation(BaseModel):
     radius_m: int = Field(default=150, ge=30, le=2000)
 
 
+class Bell(BaseModel):
+    start: Clock
+    end: Clock
+
+
+class SchoolBells(BaseModel):
+    """Время уроков школы (номер урока — место в списке) и учебные дни: 5 — Пн–Пт, 6 — Пн–Сб."""
+    bells: List[Bell] = Field(min_length=1, max_length=12)
+    days: Annotated[int, Field(ge=5, le=6)] = 5
+
+
+class ScheduleCell(BaseModel):
+    """Ячейка таблицы расписания: день недели + номер урока.
+
+    В ячейке один урок; в нём один класс или несколько (объединённые классы).
+    class_ids — классы урока целиком (пустой список — убрать урок);
+    class_id — один класс вместо прежних (null — убрать). Если пришли оба, главный class_ids."""
+    school_id: int
+    weekday: Annotated[int, Field(ge=1, le=7)]
+    lesson: Annotated[int, Field(ge=1, le=12)]
+    class_id: Optional[int] = None
+    class_ids: Optional[List[int]] = Field(default=None, max_length=30)
+    user_id: Optional[int] = None
+    date: Optional[IsoDate] = None     # день недели, открытой в таблице; пусто — сегодня
+
+
 class StudentLogin(BaseModel):
     """Вход через сайт — для детей без Telegram."""
     login: Annotated[str, Field(max_length=64)]
@@ -266,3 +295,58 @@ class AvatarChoice(BaseModel):
     preset: Optional[Annotated[str, Field(max_length=40)]] = None
     use_telegram_photo: bool = False
     telegram_photo_url: Optional[Annotated[str, Field(max_length=500)]] = None
+
+
+# ── Мониторинг ───────────────────────────────────────────────────────────────
+
+MonitorText = Annotated[str, Field(max_length=120)]
+
+
+class MonitorRunCreate(BaseModel):
+    """Запуск опроса: готовый набор (set_key) или своя форма (form_id).
+    class_ids пуст — все классы школы; minutes None — до ручного закрытия."""
+    school_id: int
+    set_key: Optional[Annotated[str, Field(max_length=20)]] = None
+    form_id: Optional[int] = None
+    class_ids: List[int] = Field(default_factory=list, max_length=60)
+    topic: MonitorText = ""
+    goals: List[MonitorText] = Field(default_factory=list, max_length=5)
+    minutes: Optional[int] = Field(default=None, ge=1, le=90)
+    use_code: bool = False
+
+
+class MonitorFormCreate(BaseModel):
+    """Новая форма: пустая, копия готового набора (from_set) или своей формы (from_form)."""
+    school_id: int
+    title: Optional[MonitorText] = None
+    from_set: Optional[Annotated[str, Field(max_length=20)]] = None
+    from_form: Optional[int] = None
+
+
+class MonitorFormSave(BaseModel):
+    """Форма из конструктора. Подробная проверка — monitoring.logic.clean_form."""
+    title: Annotated[str, Field(max_length=200)] = ""
+    kind: Annotated[str, Field(max_length=10)] = "survey"
+    settings: dict = Field(default_factory=dict)
+    questions: List[dict] = Field(default_factory=list, max_length=40)
+
+
+class MonitorExtend(BaseModel):
+    minutes: int = Field(default=5, ge=1, le=30)
+
+
+class MonitorJoin(BaseModel):
+    last_name: Annotated[str, Field(max_length=60)]
+    first_name: Annotated[str, Field(max_length=60)]
+    class_id: int
+    code: Optional[Annotated[str, Field(max_length=8)]] = None
+
+
+class MonitorAnswer(BaseModel):
+    token: Annotated[str, Field(max_length=64)]
+    question_id: Annotated[str, Field(max_length=20)]
+    value: dict
+
+
+class MonitorToken(BaseModel):
+    token: Annotated[str, Field(max_length=64)]

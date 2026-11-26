@@ -158,7 +158,7 @@ V8 = {
 def test_v8_gets_checkin_fields_everywhere():
     config.DB_FILE.write_text(json.dumps(V8, ensure_ascii=False), encoding="utf-8")
     data = db.load_db()
-    assert data["version"] == 9
+    assert data["version"] == db.DB_VERSION == 10
     school = data["schools"][0]
     assert school["theme"] == "quest", "тема не сбрасывается"
     assert school["lat"] is None and school["lon"] is None and school["radius_m"] == 150
@@ -172,6 +172,25 @@ def test_v8_gets_checkin_fields_everywhere():
     assert data["schedule"][0]["created_at"] == "2026-10-05"
     assert data["settings"]["last_user_id"] == 2 and data["settings"]["last_schedule_id"] == 2
     assert data["settings"]["last_school_id"] == 1
+
+
+def test_v9_with_bells_gets_checkin_fields():
+    """Сервер мог уже перейти на схему 9 из main (время уроков) — поля отметок
+    добавляются по наличию ключей, время уроков и места в таблице не трогаются."""
+    v9 = json.loads(json.dumps(V8, ensure_ascii=False))
+    v9["version"] = 9
+    bells = [{"start": "08:30", "end": "09:15"}, {"start": "09:25", "end": "10:10"}]
+    v9["schools"][0].update(bells=bells, days=6)
+    for entry in v9["schedule"]:
+        entry["lesson"] = 2
+    config.DB_FILE.write_text(json.dumps(v9, ensure_ascii=False), encoding="utf-8")
+    data = db.load_db()
+    assert data["version"] == db.DB_VERSION
+    school = data["schools"][0]
+    assert school["bells"] == bells and school["days"] == 6
+    assert school["radius_m"] == 150 and school["lat"] is None
+    assert all(e["lesson"] == 2 and e["valid_from"] is None for e in data["schedule"])
+    assert all(set(db.STAFF_CHECKIN_DEFAULTS) <= set(u) for u in data["users"])
 
 
 def test_v9_migration_is_idempotent():
@@ -200,7 +219,7 @@ def test_new_school_and_staff_and_schedule_get_fields(teacher):
     entry = r.json()["created"][0]
     assert entry["valid_from"] is None and entry["valid_to"] is None
     saved = load_db()
-    assert saved["version"] == 9
+    assert saved["version"] == db.DB_VERSION
 
 
 def test_ids_are_never_reused(teacher):
