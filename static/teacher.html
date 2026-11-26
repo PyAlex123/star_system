@@ -61,12 +61,15 @@
       <button data-page="checkin" class="checkin-only" title="Отметки" onclick="switchPage('checkin')">
         <svg class="ic"><use href="#i-check-circle"></use></svg><span>Отметки</span><span class="nav-count" id="checkinNavCount" hidden></span>
       </button>
+      <button data-page="schools" class="admin-only" title="Школы" onclick="switchPage('schools')">
+        <svg class="ic"><use href="#i-school"></use></svg><span>Школы</span>
+      </button>
       <button data-page="users" class="admin-only" title="Сотрудники" onclick="switchPage('users')">
         <svg class="ic"><use href="#i-users"></use></svg><span>Сотрудники</span>
       </button>
       <span class="nav-gap"></span>
-      <!-- Мой профиль: аватар, имя и роль; открывает окно профиля -->
-      <button class="nav-act me-btn" id="meBtn" title="Мой профиль" onclick="closeMenus(); openProfile()">
+      <!-- Мой кабинет: аватар, имя и должности; открывает страницу кабинета -->
+      <button class="nav-act me-btn" id="meBtn" data-page="me" title="Мой кабинет" onclick="openProfile()">
         <span class="me-av" id="meAvatar"></span>
         <span class="me-text"><b id="meName"></b><small id="meRole"></small></span>
       </button>
@@ -324,14 +327,84 @@
   <div class="page-head">
     <div>
       <h1 class="page-title">Сотрудники</h1>
-      <p class="page-sub">Учителя ведут журнал своих школ. Администрация школы (директор, завуч) видит статистику и ничего не меняет.
-        Пароль виден здесь, пока сотрудник не сменит его сам.</p>
+      <p class="page-sub">Все сотрудники всех школ. Должности — директор, завучи, учитель — у каждой школы свои:
+        их задают здесь или в разделе «Школы». Пароль виден здесь, пока сотрудник не сменит его сам.</p>
     </div>
     <button class="btn" onclick="openUser()">
       <svg class="ic"><use href="#i-plus"></use></svg>Добавить сотрудника
     </button>
   </div>
   <div class="card users" id="userList"></div>
+</main>
+
+<main class="page" id="page-me">
+  <section class="card me-head">
+    <span class="profile-av" id="profileAvatar"></span>
+    <div class="profile-who">
+      <h1 class="page-title" id="profileName">—</h1>
+      <p class="page-sub" id="profileRole"></p>
+      <p class="me-login">Логин <span class="mono" id="profileLogin">—</span></p>
+    </div>
+    <div class="me-acts">
+      <label class="btn btn-ghost btn-sm">
+        <svg class="ic ic-sm"><use href="#i-camera"></use></svg><span id="profilePhotoLabel">Загрузить фото</span>
+        <input type="file" id="profilePhoto" accept="image/*" hidden onchange="uploadMyPhoto(this)">
+      </label>
+      <button class="btn btn-quiet btn-sm" id="profileDrop" onclick="dropMyPhoto()">Убрать фото</button>
+      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()">
+        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Сменить пароль</button>
+    </div>
+  </section>
+
+  <div class="me-grid">
+    <section class="card sc-block" aria-labelledby="meSchoolsTitle">
+      <h2 class="sc-title" id="meSchoolsTitle"><svg class="ic ic-sm"><use href="#i-school"></use></svg>Мои школы</h2>
+      <div class="me-schools" id="meSchools"></div>
+    </section>
+    <section class="card sc-block" id="meBotBlock" aria-labelledby="meBotTitle">
+      <h2 class="sc-title" id="meBotTitle"><svg class="ic ic-sm"><use href="#i-send"></use></svg>Отметки через бота</h2>
+      <div class="me-bot" id="meBot"></div>
+    </section>
+  </div>
+
+  <section class="me-section" id="meTodayBlock" hidden>
+    <h2 class="me-h2">Мои уроки сегодня</h2>
+    <div class="card ck-list" id="meToday"></div>
+  </section>
+
+  <section class="me-section">
+    <div class="me-month-head">
+      <h2 class="me-h2">Месяц</h2>
+      <div class="week-nav" role="group" aria-label="Месяц">
+        <button class="icon-btn boxed" onclick="shiftCabinetMonth(-1)" title="Предыдущий месяц" aria-label="Предыдущий месяц">
+          <svg class="ic ic-sm"><use href="#i-chevron-left"></use></svg></button>
+        <button class="btn btn-ghost btn-sm" id="meMonthLabel" onclick="shiftCabinetMonth(0)" title="К текущему месяцу">—</button>
+        <button class="icon-btn boxed" onclick="shiftCabinetMonth(1)" title="Следующий месяц" aria-label="Следующий месяц">
+          <svg class="ic ic-sm"><use href="#i-chevron-right"></use></svg></button>
+      </div>
+    </div>
+    <div class="tiles stat-tiles me-tiles" id="meTiles"></div>
+    <p class="field-hint me-rules" id="meRules"></p>
+    <p class="me-journal" id="meJournal"></p>
+    <div class="card ck-list" id="meLessons" hidden></div>
+  </section>
+</main>
+
+<main class="page" id="page-schools">
+  <div id="schoolsHome">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Школы</h1>
+        <p class="page-sub">У каждой школы — свои сотрудники и должности, место на карте для отметок учителей,
+          время уроков и оформление.</p>
+      </div>
+      <button class="btn" onclick="openSchool()">
+        <svg class="ic"><use href="#i-plus"></use></svg>Добавить школу
+      </button>
+    </div>
+    <div class="school-grid" id="schoolTiles"></div>
+  </div>
+  <div id="schoolCard" hidden></div>
 </main>
 
 <!-- ── Боковая панель ученика (sky, clear, sticker) ────────── -->
@@ -485,6 +558,29 @@
   </div>
 </div>
 
+<div class="backdrop" id="modalSchoolStaff" onclick="if(event.target===this) closeModal('modalSchoolStaff')">
+  <div class="modal" style="max-width:520px;" role="dialog" aria-labelledby="ssTitle">
+    <div>
+      <div class="modal-title" id="ssTitle">Добавить из сотрудников</div>
+      <p class="modal-sub" id="ssSub"></p>
+    </div>
+    <div class="field" id="ssSearchField">
+      <label for="ssSearch">Сотрудник</label>
+      <input type="search" id="ssSearch" placeholder="Имя или логин" autocomplete="off" oninput="renderSchoolStaffPick()">
+    </div>
+    <div class="ss-list" id="ssList"></div>
+    <div class="field">
+      <span class="field-label">Должности в этой школе</span>
+      <div class="post-chips" id="ssPosts" role="group" aria-label="Должности в этой школе"></div>
+      <p class="field-hint">Можно несколько: завуч, который ведёт уроки, — «завуч» и «учитель».</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalSchoolStaff')">Отмена</button>
+      <button class="btn" id="ssSave" onclick="saveSchoolStaff()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <div class="backdrop" id="modalSchool" onclick="if(event.target===this) closeModal('modalSchool')">
   <div class="modal" style="max-width:440px;">
     <div>
@@ -570,40 +666,6 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalClasses')">Отмена</button>
       <button class="btn" id="classGridSubmit" onclick="submitClassGrid()" disabled>Создать</button>
-    </div>
-  </div>
-</div>
-
-<div class="backdrop" id="modalProfile" onclick="if(event.target===this) closeModal('modalProfile')">
-  <div class="modal" style="max-width:480px;" role="dialog" aria-labelledby="profileName">
-    <div class="profile-top">
-      <span class="profile-av" id="profileAvatar"></span>
-      <div class="profile-who">
-        <div class="modal-title" id="profileName">—</div>
-        <p class="modal-sub" id="profileRole"></p>
-        <div class="row">
-          <label class="btn btn-ghost btn-sm">
-            <svg class="ic ic-sm"><use href="#i-camera"></use></svg><span id="profilePhotoLabel">Загрузить фото</span>
-            <input type="file" id="profilePhoto" accept="image/*" hidden onchange="uploadMyPhoto(this)">
-          </label>
-          <button class="btn btn-quiet btn-sm" id="profileDrop" onclick="dropMyPhoto()">Убрать фото</button>
-        </div>
-      </div>
-    </div>
-    <div class="profile-grid">
-      <span class="muted">Логин</span><span class="mono" id="profileLogin">—</span>
-      <span class="muted">Школы</span><span id="profileSchools">—</span>
-    </div>
-    <section class="profile-month">
-      <h3 class="caps" id="profileMonthTitle">В этом месяце</h3>
-      <div class="profile-tiles" id="profileMonth"></div>
-      <p class="field-hint">Отработанные часы появятся здесь, когда подключим отметки преподавателей.</p>
-    </section>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('modalProfile'); openMyPassword()">
-        <svg class="ic ic-sm"><use href="#i-key"></use></svg>Сменить пароль</button>
-      <span class="grow"></span>
-      <button class="btn" onclick="closeModal('modalProfile')">Готово</button>
     </div>
   </div>
 </div>
@@ -1053,5 +1115,7 @@
 <script src="{{BASE}}/static/js/m-builder.js"></script>
 <script src="{{BASE}}/static/js/checkin.js"></script>
 <script src="{{BASE}}/static/js/checkin-page.js"></script>
+<script src="{{BASE}}/static/js/schools.js"></script>
+<script src="{{BASE}}/static/js/cabinet.js"></script>
 </body>
 </html>

@@ -1,23 +1,26 @@
 """Раздел «Отметки преподавателей» в панели: сегодня, очередь, решения, календарь,
 настройки, отчёт и журнал правок.
 
-Весь роутер — администратор и ответственный за отметки (require_checkin_admin),
-в том числе чтение: там часы, ставки и суммы. Логика — в backend/checkin/service.py.
+Весь роутер — только администратор (require_checkin_admin), в том числе чтение: там часы,
+ставки и суммы. Кабинет преподавателя (свои уроки и часы, без денег) — отдельный my_router:
+его открывает любой сотрудник, и только про себя. Логика — в backend/checkin/service.py.
 """
 import re
+import secrets
 from datetime import date
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
 
-from .. import schemas
+from .. import config, db, schemas
 from ..checkin import clock, service
 from ..excel import build_hours_report
-from ..security import require_checkin_admin
+from ..security import require_checkin_admin, require_panel
 from .common import bad_request, not_found
 from .excel import _xlsx
 
 router = APIRouter(prefix="/api/checkin", tags=["checkin"], dependencies=[Depends(require_checkin_admin)])
+my_router = APIRouter(prefix="/api/checkin/my", tags=["checkin"], dependencies=[Depends(require_panel)])
 
 _MONTH = re.compile(r"^(\d{4})-(\d{2})$")
 
@@ -150,3 +153,44 @@ def school_location(school_id: int, item: schemas.SchoolLocation,
                     user: Dict[str, Any] = Depends(require_checkin_admin)):
     school = _call(service.set_school_location, user, school_id, item.address, item.lat, item.lon, item.radius_m)
     return {"ok": True, "school": {k: school.get(k) for k in ("id", "name", "address", "lat", "lon", "radius_m")}}
+
+
+# ── Кабинет преподавателя: только свои данные ─────────────────────────────────
+
+def _telegram(user: Dict[str, Any]) -> Dict[str, Any]:
+    return {"bound": bool(user.get("tg_id")), "username": user.get("tg_username"),
+            "blocked": bool(user.get("tg_blocked_at")), "consent": bool(user.get("consent_at"))}
+
+
+@my_router.get("")
+def my_work(month: Optional[str] = None, user: Dict[str, Any] = Depends(require_panel)):
+    """Мои уроки сегодня и за месяц: статус отметки, часы, опоздания. Ставки и сумм нет."""
+    year, number = _month(month)
+    data = _call(service.teacher_cabinet, user["id"], year, number)
+    data.update(tracked=bool(user.get("checkin_tracked")), telegram=_telegram(user),
+                bot={"ready": bool(config.BOT_ENABLED and config.BOT_USERNAME), "username": config.BOT_USERNAME or None})
+    return data
+
+
+@my_router.post("/invite")
+def my_invite(user: Dict[str, Any] = Depends(require_panel)):
+    """Ссылка-приглашение в бот — себе. Только тем, у кого администратор включил отметки:
+    кто отмечается, решает администратор, а привязать свой Telegram сотрудник может сам."""
+    if not user.get("checkin_tracked"):
+        raise bad_request("Отметки для вас не включены — их включает администратор")
+    if user.get("tg_id"):
+        raise bad_request("Telegram уже привязан")
+    link_code = secrets.token_urlsafe(9)
+    before: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        me = db.find_user(database, user["id"])
+        before.update(me)
+        me["invite_code"] = link_code
+        me["invite_created_at"] = clock.iso(clock.now_utc())
+        return me
+
+    after = db.transaction(_apply)
+    service.audit_staff(user, user["id"], "invite", before, after)
+    link = config.checkin_invite_link(link_code)
+    return {"ok": True, "link": link or None, "days": config.CHECKIN_INVITE_DAYS}

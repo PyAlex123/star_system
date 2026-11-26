@@ -20,7 +20,7 @@ LAT, LON = 41.311, 69.279
 def checkin_routes():
     """Все маршруты раздела — и чтение тоже: там часы, ставки и суммы."""
     for path, methods in app.openapi()["paths"].items():
-        if path.startswith("/api/checkin"):
+        if path.startswith("/api/checkin") and not path.startswith("/api/checkin/my"):   # кабинет — свой
             for method in methods:
                 yield method.upper(), re.sub(r"\{[^}]+\}", "1", path)
 

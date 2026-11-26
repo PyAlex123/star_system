@@ -136,6 +136,7 @@ async function saveSchoolLocation() {
     Object.assign(schoolById(locationTarget) || {}, result.school);
     closeModal("modalLocation");
     renderSchoolMenu();
+    if (typeof renderSchoolsPage === "function") renderSchoolsPage();
     toast(point ? "Точка школы сохранена" : "Координаты школы очищены", "success");
   } catch (error) {
     toast(error.message, "error");

@@ -256,7 +256,7 @@ function applyRole() {
   document.body.classList.toggle("is-sadmin", managesHere());
   document.body.classList.toggle("can-checkin", canManageCheckins());
   renderMe();
-  if (!isAdmin() && currentPage() === "users") showPage(canEdit() ? "journal" : "stats");
+  if (!isAdmin() && ["users", "schools"].includes(currentPage())) showPage(canEdit() ? "journal" : "stats");
   // showPage, а не switchPage: адрес не трогаем — иначе ссылка #prizes или #cards
   // при загрузке перезаписалась бы на #stats раньше, чем её прочитает applyRoute()
   if (!canManageCheckins() && currentPage() === "checkin") showPage(canEdit() ? "journal" : "stats");
@@ -279,7 +279,8 @@ function renderAll() {
   else refreshCheckinBadge();
   if (currentPage() === "monitor") loadMonitor();
   if (currentPage() === "lessons") loadLessonRuns();
-  if (isAdmin()) renderUsers();
+  if (isAdmin()) { renderUsers(); renderSchoolsPage(); }
+  if (currentPage() === "me") renderCabinet();
   if (isSchoolAdmin()) renderCardsPage();
 }
 
@@ -293,16 +294,10 @@ function renderSchoolMenu() {
             onclick="selectSchool(${s.id})"><span>${escapeHtml(s.name)}</span>${s.id === activeSchool ? icon("check", "ic ic-sm") : ""}</button>`);
   if (state.schools.length) items.push(`<div class="menu-sep"></div>`);
   if (school) items.push(`<button role="menuitem" onclick="openTheme()">${icon("palette", "ic ic-sm")}Оформление школы…</button>`);
-  if (school && canManageCheckins()) {
-    const placed = school.lat !== null && school.lat !== undefined;
-    items.push(`<button role="menuitem" onclick="openSchoolLocation()">${icon("pin", "ic ic-sm")}Место на карте…${placed ? "" : `<span class="menu-note">не задано</span>`}</button>`);
-  }
+  // Сотрудники, место на карте, переименование и удаление — в разделе «Школы»
   if (isAdmin()) {
-    items.push(`<button role="menuitem" onclick="openSchool()">${icon("plus", "ic ic-sm")}Добавить школу</button>`);
-    if (school) {
-      items.push(`<button role="menuitem" onclick="openSchool(activeSchool)">${icon("pencil", "ic ic-sm")}Переименовать</button>`);
-      items.push(`<button role="menuitem" class="danger" onclick="removeSchool()">${icon("trash", "ic ic-sm")}Удалить школу…</button>`);
-    }
+    items.push(`<button role="menuitem" onclick="closeMenus(); ${school ? `openSchoolCard(${school.id})` : "switchPage('schools')"}">${icon("school", "ic ic-sm")}Карточка школы…</button>`);
+    items.push(`<button role="menuitem" onclick="closeMenus(); switchPage('schools')">${icon("grid", "ic ic-sm")}Все школы</button>`);
   }
   $("schoolMenuList").innerHTML = items.join("");
   $("pasteSchoolName").textContent = school?.name || "—";
@@ -312,18 +307,25 @@ function selectSchool(id) {
   closeMenus();
   if (id === activeSchool) return;
   leaveDraftGuard(() => {
-    activeSchool = id;
-    jointClasses = null;
-    journalView = "home";
-    activeClass = sortedClasses(id)[0]?.id ?? null;
-    lessonClass = activeClass;
-    draft = {};
-    panelId = null;
-    rowPop = null;
-    syncSchoolTheme();
+    useSchool(id);
     setRoute();
-    renderAll();
   });
+}
+
+/** Сделать школу выбранной: журнал — к плиткам, тема панели — её. В разделе «Школы»
+ *  открытая карточка тоже переходит на эту школу. */
+function useSchool(id) {
+  activeSchool = id;
+  jointClasses = null;
+  journalView = "home";
+  activeClass = sortedClasses(id)[0]?.id ?? null;
+  lessonClass = activeClass;
+  draft = {};
+  panelId = null;
+  rowPop = null;
+  if (typeof schoolView !== "undefined" && schoolView) schoolView = id;
+  syncSchoolTheme();
+  renderAll();
 }
 
 /* ── Журнал: «Сегодня» (плитки) и журнал класса ───────────── */
@@ -658,6 +660,7 @@ function removeSchool() {
     `Пропадут классы (${classes.length}) и ученики (${count}) вместе со звёздами и историей. Это нельзя отменить.`,
     async () => {
       await api(`/api/schools/${activeSchool}`, { method: "DELETE" });
+      if (typeof schoolView !== "undefined") schoolView = null;
       activeSchool = null;
       activeClass = null;
       await loadState();
@@ -807,6 +810,7 @@ async function pickTheme(theme) {
     school.theme = theme;
     applyTheme(theme);
     renderThemeTiles();
+    if (currentPage() === "schools") renderSchoolsPage();
     toast(`Тема «${THEME_NAMES[theme]}» — для всей школы`, "success");
   } catch (error) {
     toast(error.message, "error");
@@ -2090,7 +2094,7 @@ function renderMe() {
   $("meAvatar").innerHTML = staffAvatar(me);
   $("meName").textContent = me.name;
   $("meRole").textContent = postsLabel(me);
-  $("meBtn").title = `${me.name} — мой профиль`;
+  $("meBtn").title = `${me.name} — мой кабинет`;
 }
 
 /** Уроки, звёзды и классы сотрудника за месяц. Общий урок (несколько записей с одним group)
@@ -2105,33 +2109,6 @@ function monthWork(userId, now = new Date()) {
   };
 }
 
-function openProfile() {
-  renderProfile();
-  openModal("modalProfile");
-}
-
-function renderProfile() {
-  const me = state.me;
-  if (!me) return;
-  const photo = me.avatar?.type === "photo";
-  $("profileAvatar").innerHTML = staffAvatar(me, "xl");
-  $("profileName").textContent = me.name;
-  $("profileRole").textContent = postsLabel(me);
-  $("profilePhotoLabel").textContent = photo ? "Другое фото" : "Загрузить фото";
-  $("profileDrop").hidden = !photo;
-  $("profileLogin").textContent = me.login || "—";
-  const schools = isAdmin() ? ["все школы"] : (me.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean);
-  $("profileSchools").textContent = schools.join(", ") || "—";
-  const work = monthWork(me.id);
-  const month = new Date().toLocaleDateString("ru-RU", { month: "long" });
-  $("profileMonthTitle").textContent = `За ${month}`;
-  $("profileMonth").innerHTML = [
-    [work.lessons, plural(work.lessons, "урок", "урока", "уроков")],
-    [work.stars, `${stars(work.stars)} выдано`],
-    [work.classes, plural(work.classes, "класс", "класса", "классов")],
-  ].map(([n, label]) => `<div class="profile-tile"><b>${fmt(n)}</b><span>${label}</span></div>`).join("");
-}
-
 async function uploadMyPhoto(input) {
   const file = input.files?.[0];
   input.value = "";
@@ -2141,7 +2118,7 @@ async function uploadMyPhoto(input) {
   try {
     await api("/api/auth/teacher/photo", { method: "POST", body: form });
     await loadState();
-    renderProfile();
+    renderCabinet();
     toast("Фото обновлено", "success");
   } catch (error) {
     toast(error.message, "error");
@@ -2152,7 +2129,7 @@ async function dropMyPhoto() {
   try {
     await api("/api/auth/teacher/photo", { method: "DELETE" });
     await loadState();
-    renderProfile();
+    renderCabinet();
     toast("Фото убрано — снова инициалы", "success");
   } catch (error) {
     toast(error.message, "error");
@@ -2423,6 +2400,7 @@ function currentPage() { return document.querySelector(".page.active")?.id.repla
 /** Раздел из меню. Повторное нажатие «Журнал» из журнала класса — назад к плиткам. */
 function switchPage(name) {
   if (name === "journal" && currentPage() === "journal" && journalView === "class") { closeMenus(); return goJournalHome(); }
+  if (name === "schools") schoolView = null;          // из меню — список школ
   showPage(name);
   setRoute();
 }
@@ -2430,7 +2408,7 @@ function switchPage(name) {
 function showPage(name) {
   if (!canEdit() && name === "journal") name = "stats";
   if (!isSchoolAdmin() && name === "cards") name = canEdit() ? "journal" : "stats";
-  if (!isAdmin() && name === "users") name = canEdit() ? "journal" : "stats";
+  if (!isAdmin() && (name === "users" || name === "schools")) name = canEdit() ? "journal" : "stats";
   closeMenus();
   document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === `page-${name}`));
   document.querySelectorAll(".nav button[data-page]").forEach((button) => {
@@ -2442,6 +2420,8 @@ function showPage(name) {
   renderPanel();
   if (name === "journal") renderJournal();
   if (name === "cards") renderCardsPage();
+  if (name === "schools") renderSchoolsPage();
+  if (name === "me") loadCabinet();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
   if (name === "checkin") loadCheckin();
@@ -2450,10 +2430,12 @@ function showPage(name) {
   window.scrollTo(0, 0);
 }
 
-/* Адрес помнит место: #schedule, #journal, #journal/12 (класс), #journal/12+13 (общий урок).
+/* Адрес помнит место: #schedule, #journal, #journal/12 (класс), #journal/12+13 (общий урок),
+   #schools/3 (карточка школы).
    После обновления страницы открывается то же самое, «Назад» в браузере работает. */
 function routeHash() {
   const page = currentPage();
+  if (page === "schools") return schoolView ? `#schools/${schoolView}` : "#schools";
   if (page !== "journal") return `#${page}`;
   return journalView === "class" ? `#journal/${(jointClasses || [activeClass]).join("+")}` : "#journal";
 }
@@ -2467,6 +2449,12 @@ function setRoute(replace = false) {
 function applyRoute() {
   const [page, arg] = decodeURIComponent(location.hash.slice(1)).split("/");
   if (!page || !$(`page-${page}`)) return;
+  if (page === "schools") {
+    const id = Number(arg);
+    schoolView = arg && schoolById(id) ? id : null;
+    if (schoolView && schoolView !== activeSchool) useSchool(schoolView);
+    if (schoolView) loadCheckinRules();
+  }
   if (page === "journal") {
     const known = sortedClasses(activeSchool).map((c) => c.id);
     const wanted = String(arg || "").split("+").map(Number);

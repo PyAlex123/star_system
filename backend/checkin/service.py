@@ -927,6 +927,54 @@ def today_for(user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
     return {"date": day, "lessons": [dict(_summary(l), late_minutes=l.get("late_minutes")) for l in lessons]}
 
 
+# Поля урока для кабинета преподавателя — белый список: без ставки, сумм и служебного
+CABINET_LESSON_FIELDS = ("id", "date", "start", "end", "school", "class", "room", "state", "status_label",
+                         "late_minutes", "minutes", "hours", "flag_labels")
+CABINET_SUMMARY_FIELDS = ("planned", "confirmed", "late", "late_minutes", "rejected", "pending", "ahead",
+                          "cancelled", "minutes")
+
+
+def _cabinet_lesson(item: Dict[str, Any]) -> Dict[str, Any]:
+    out = {k: item.get(k) for k in CABINET_LESSON_FIELDS}
+    out["checkin_at"] = (item.get("checkin") or {}).get("at")
+    return out
+
+
+def teacher_cabinet(user_id: int, year: int, month: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+    """Кабинет преподавателя в панели: уроки сегодня и за месяц со статусом отметки, часы
+    и опоздания. Денег (ставки и сумм) здесь нет — их видит только администратор."""
+    now = now or clock.now_utc()
+    if not 1 <= month <= 12 or not 2020 <= year <= 2100:
+        raise CheckinError("Такого месяца нет")
+    database = db.load_db()
+    reconcile(now, database)
+    today = clock.today(now)
+    first, last = clock.month_bounds(year, month)
+    with store.tx() as conn:
+        settings = store.get_settings(conn)
+        lessons = store.rows(conn.execute(
+            "SELECT * FROM planned_lessons WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY starts_at, id",
+            (user_id, first.isoformat(), last.isoformat())))
+        todays = store.rows(conn.execute(
+            "SELECT * FROM planned_lessons WHERE user_id = ? AND date = ? ORDER BY starts_at, id",
+            (user_id, today.isoformat())))
+        shown = _present_many(conn, lessons, database, now)
+        shown_today = _present_many(conn, todays, database, now)
+    mine = [u for u in database.get("users", []) if u["id"] == user_id]
+    report = d.report(lessons, mine, first, last, now, settings["grace_minutes"])
+    row = report["teachers"][0] if report["teachers"] else {}
+    summary = {k: int(row.get(k) or 0) for k in CABINET_SUMMARY_FIELDS}
+    summary["hours"] = d.hours(summary["minutes"])
+    return {
+        "year": year, "month": month, "today": today.isoformat(),
+        "summary": summary,
+        "lessons": [_cabinet_lesson(item) for item in shown],
+        "today_lessons": [_cabinet_lesson(item) for item in shown_today],
+        "rules": {"before": settings["checkin_window_before_min"], "grace": settings["grace_minutes"],
+                  "merge_gap": settings["merge_gap_min"]},
+    }
+
+
 def month_for(user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
     """Свой месяц: уроки, подтверждено, опоздания, часы. Сумм здесь нет — их видит администратор."""
     now = now or clock.now_utc()
