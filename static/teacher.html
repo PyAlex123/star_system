@@ -15,79 +15,82 @@
 
 {{ICONS}}
 
-<header class="topbar">
-  <div class="topbar-in">
-    <div class="brand">
-      <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
-      <span class="brand-text">
-        <span class="brand-title">Журнал звёзд</span>
-        <span class="brand-sub" id="brandSub"></span>
-      </span>
-    </div>
-
-    <nav class="nav" aria-label="Разделы">
-      <button data-page="journal" class="editor-only" aria-current="page" onclick="switchPage('journal')">
-        <svg class="ic"><use href="#i-book"></use></svg>Журнал
-      </button>
-      <button data-page="schedule" onclick="switchPage('schedule')">
-        <svg class="ic"><use href="#i-clock"></use></svg>Расписание
-      </button>
-      <button data-page="prizes" class="editor-only" onclick="switchPage('prizes')">
-        <svg class="ic"><use href="#i-gift"></use></svg>Призы
-      </button>
-      <button data-page="lessons" onclick="switchPage('lessons')">
-        <svg class="ic"><use href="#i-calendar"></use></svg>Уроки
-      </button>
-      <button data-page="monitor" class="editor-only" onclick="switchPage('monitor')">
-        <svg class="ic"><use href="#i-activity"></use></svg>Мониторинг
-      </button>
-      <button data-page="stats" onclick="switchPage('stats')">
-        <svg class="ic"><use href="#i-chart"></use></svg>Статистика
-      </button>
-      <button data-page="checkin" class="checkin-only" onclick="switchPage('checkin')">
-        <svg class="ic"><use href="#i-check-circle"></use></svg>Отметки<span class="nav-count" id="checkinNavCount" hidden></span>
-      </button>
-      <button data-page="users" class="admin-only" onclick="switchPage('users')">
-        <svg class="ic"><use href="#i-users"></use></svg>Сотрудники
-      </button>
-    </nav>
-
-    <div class="topbar-end">
-      <button class="btn btn-ghost btn-sm" onclick="openMyPassword()" title="Сменить свой пароль" aria-label="Сменить свой пароль">
-        <svg class="ic ic-sm"><use href="#i-key"></use></svg><span class="tb-label">Пароль</span>
-      </button>
-      <button class="btn btn-ghost btn-sm" onclick="logout()" title="Выйти" aria-label="Выйти">
-        <svg class="ic ic-sm"><use href="#i-logout"></use></svg><span class="tb-label">Выйти</span>
-      </button>
-    </div>
+<!-- Каркас: меню разделов сбоку (на телефоне — строка сверху и панель снизу), справа — раздел -->
+<aside class="side" id="side">
+  <div class="brand">
+    <span class="brand-mark"><svg class="ic"><use href="#i-star"></use></svg></span>
+    <span class="brand-text">
+      <span class="brand-title">Журнал звёзд</span>
+      <span class="brand-sub" id="brandSub"></span>
+    </span>
   </div>
-</header>
 
-<!-- ── Журнал (T1) ─────────────────────────────────────────── -->
+  <div class="menu-wrap side-school" id="schoolMenu">
+    <button class="chip-btn" onclick="toggleMenu('schoolMenu', event)" aria-haspopup="menu" aria-expanded="false"
+            title="Школа" aria-label="Школа">
+      <svg class="ic ic-sm"><use href="#i-school"></use></svg>
+      <span class="chip-text"><span class="chip-main" id="schoolLabel">—</span><span class="chip-dim" id="schoolCount"></span></span>
+      <svg class="ic ic-sm chev"><use href="#i-chevron-down"></use></svg>
+    </button>
+    <div class="menu" role="menu" id="schoolMenuList"></div>
+  </div>
+
+  <nav class="nav" aria-label="Разделы">
+    <button data-page="journal" class="editor-only" aria-current="page" title="Журнал" onclick="switchPage('journal')">
+      <svg class="ic"><use href="#i-book"></use></svg><span>Журнал</span>
+    </button>
+    <button data-page="schedule" title="Расписание" onclick="switchPage('schedule')">
+      <svg class="ic"><use href="#i-clock"></use></svg><span>Расписание</span>
+    </button>
+    <button data-page="prizes" class="editor-only" title="Призы" onclick="switchPage('prizes')">
+      <svg class="ic"><use href="#i-gift"></use></svg><span>Призы</span>
+    </button>
+    <button data-page="lessons" title="Уроки" onclick="switchPage('lessons')">
+      <svg class="ic"><use href="#i-calendar"></use></svg><span>Уроки</span>
+    </button>
+    <!-- На телефоне эта группа — лист «Ещё» над нижней панелью -->
+    <div class="nav-rest" id="navRest">
+      <button data-page="monitor" class="editor-only" title="Мониторинг" onclick="switchPage('monitor')">
+        <svg class="ic"><use href="#i-activity"></use></svg><span>Мониторинг</span>
+      </button>
+      <button data-page="stats" title="Статистика" onclick="switchPage('stats')">
+        <svg class="ic"><use href="#i-chart"></use></svg><span>Статистика</span>
+      </button>
+      <button data-page="checkin" class="checkin-only" title="Отметки" onclick="switchPage('checkin')">
+        <svg class="ic"><use href="#i-check-circle"></use></svg><span>Отметки</span><span class="nav-count" id="checkinNavCount" hidden></span>
+      </button>
+      <button data-page="users" class="admin-only" title="Сотрудники" onclick="switchPage('users')">
+        <svg class="ic"><use href="#i-users"></use></svg><span>Сотрудники</span>
+      </button>
+      <span class="nav-gap"></span>
+      <button class="nav-act" title="Сменить свой пароль" onclick="closeMenus(); openMyPassword()">
+        <svg class="ic"><use href="#i-key"></use></svg><span>Пароль</span>
+      </button>
+      <button class="nav-act" title="Выйти" onclick="logout()">
+        <svg class="ic"><use href="#i-logout"></use></svg><span>Выйти</span>
+      </button>
+    </div>
+    <button class="nav-more" id="navMore" onclick="toggleNavMore(event)" aria-haspopup="menu" aria-expanded="false">
+      <svg class="ic"><use href="#i-more"></use></svg><span>Ещё</span>
+    </button>
+  </nav>
+</aside>
+
+<div class="shell-main">
+
+<!-- ── Журнал: «Сегодня» (плитки уроков и классов) и журнал класса (T1) ── -->
 <main class="page active" id="page-journal">
 
-  <div class="toolbar card">
-    <div class="menu-wrap tool" id="schoolMenu">
-      <span class="caps">Школа</span>
-      <button class="chip-btn" onclick="toggleMenu('schoolMenu', event)" aria-haspopup="menu" aria-expanded="false">
-        <span class="chip-main" id="schoolLabel">—</span><span class="chip-dim" id="schoolCount"></span>
-        <svg class="ic ic-sm"><use href="#i-chevron-down"></use></svg>
-      </button>
-      <div class="menu" role="menu" id="schoolMenuList"></div>
-    </div>
-
-    <span class="vrule"></span>
+  <div class="j-head">
+    <div class="j-title" id="journalTitle"></div>
 
     <label class="tool">
-      <span class="caps">Дата урока</span>
-      <span class="chip-btn date-chip">
+      <span class="chip-btn date-chip" title="Дата урока">
         <svg class="ic ic-sm"><use href="#i-calendar"></use></svg>
         <span id="lessonDateText">—</span><span class="chip-dim" id="lessonWeekday"></span>
         <input type="date" id="lessonDate" onchange="onLessonDateChange()" aria-label="Дата урока">
       </span>
     </label>
-
-    <span class="vrule"></span>
 
     <div class="bank" id="bank">
       <span class="caps">Банк дня</span>
@@ -95,8 +98,6 @@
       <span class="bank-dots" id="bankDots" aria-hidden="true"></span>
       <span class="bank-text" id="bankText"></span>
     </div>
-
-    <span class="grow"></span>
 
     <div class="menu-wrap" id="excelMenu">
       <button class="btn btn-ghost btn-md" onclick="toggleMenu('excelMenu', event)" aria-haspopup="menu" aria-expanded="false">
@@ -128,9 +129,21 @@
     </div>
   </div>
 
-  <div class="today-strip" id="todayStrip" hidden></div>
+  <!-- «Сегодня»: уроки на выбранную дату и все классы -->
+  <div id="journalHome">
+    <section class="j-sec" aria-labelledby="todayTitle">
+      <h2 class="caps j-sec-title" id="todayTitle">Уроки на эту дату</h2>
+      <div id="todayTiles"></div>
+    </section>
+    <section class="j-sec" aria-labelledby="classesTitle">
+      <h2 class="caps j-sec-title" id="classesTitle">Все классы</h2>
+      <div id="classTiles"></div>
+    </section>
+  </div>
 
-  <div class="class-tabs" id="classTabs" role="tablist" aria-label="Классы"></div>
+  <!-- Журнал выбранного класса или общего урока -->
+  <div id="journalClass" hidden>
+  <div class="today-strip" id="todayStrip" hidden></div>
 
   <section class="sheet" id="journalSheet">
     <div class="sheet-head">
@@ -172,6 +185,7 @@
         <svg class="ic"><use href="#i-check"></use></svg>Завершить урок и начислить
       </button>
     </div>
+  </div>
   </div>
 </main>
 
@@ -299,6 +313,8 @@
 </main>
 
 <!-- ── Боковая панель ученика (sky, clear, sticker) ────────── -->
+</div><!-- /.shell-main -->
+
 <aside class="side-panel" id="sidePanel" role="dialog" aria-label="Карточка ученика" hidden></aside>
 
 <!-- ── Окна ────────────────────────────────────────────────── -->

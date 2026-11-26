@@ -163,7 +163,7 @@ function renderTodayStrip() {
   const host = $("todayStrip");
   if (!host) return;
   const day = lessonDay();
-  const entries = schoolSchedule().filter((e) => e.weekday === isoWeekday(day) && entryActiveOn(e, day));
+  const entries = schoolSchedule().filter((e) => e.weekday === isoWeekday(day) && entryShownOn(e, day));
   host.hidden = !entries.length || !canEdit();
   if (host.hidden) return;
   const joint = typeof jointClasses !== "undefined" ? jointClasses : null;
@@ -172,7 +172,8 @@ function renderTodayStrip() {
     const done = ids.every((id) => lessonHeld(id, day));
     const room = group.find((e) => e.room)?.room || "";
     const together = ids.length > 1;
-    const on = together ? joint?.join() === ids.join() : !joint && ids[0] === activeClass;
+    const inClass = typeof journalView === "undefined" || journalView === "class";
+    const on = inClass && (together ? joint?.join() === ids.join() : !joint && ids[0] === activeClass);
     const names = group.map((e) => classById(e.class_id)?.name || "").join(", ");
     return `<button class="ts-chip ${on ? "on" : ""} ${done ? "done" : ""}"
         onclick="${together ? `openJoint([${ids.join(",")}])` : `selectClass(${ids[0]})`}"
@@ -181,6 +182,16 @@ function renderTodayStrip() {
       ${room ? `<span class="ts-room">каб. ${escapeHtml(room)}</span>` : ""}
       ${done ? icon("check", "ic ic-xs") : ""}</button>`;
   }).join("");
+}
+
+/** Состояние плитки урока на дату date: done — проведён; past — время прошло, урок
+ *  не отмечен; now — идёт сейчас; later — впереди. nowMinutes — минуты от полуночи. */
+function lessonTileState(start, end, date, today, nowMinutes, held) {
+  if (held) return "done";
+  if (date < today) return "past";
+  if (date > today) return "later";
+  if (nowMinutes >= clockMinutes(end)) return "past";
+  return nowMinutes >= clockMinutes(start) ? "now" : "later";
 }
 
 /** Занятия дня по урокам: объединённые классы одной клетки таблицы — вместе. */
@@ -430,7 +441,7 @@ function placeCellPop() {
   const a = anchor?.getBoundingClientRect();
   if (!a || !a.width) { closeCellPop(); return; }
   const gap = 6;
-  const top0 = (document.querySelector(".topbar")?.getBoundingClientRect().bottom || 0) + gap;
+  const top0 = popTopEdge() + gap;
   const h = pop.offsetHeight;
   const w = pop.offsetWidth;
   let top = a.bottom + gap;

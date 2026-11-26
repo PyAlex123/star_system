@@ -1,11 +1,13 @@
 /* ──────────────────────────────────────────────────────────────
-   Панель учителя — по макету docs/design/«Звёзды - Учитель.dc.html»
+   Панель учителя — компоненты по макету docs/design/«Звёзды - Учитель.dc.html»
    (T1 журнал, T1a итог урока, T2 призы, T2a/T2b окна, T3 уроки).
+   Каркас — свой: меню разделов сбоку, журнал начинается с плиток уроков и классов.
    Только var(--…) из tokens.css. Различия тем — переключатели --show-*
    и --ov*, а не копии экранов.
    ────────────────────────────────────────────────────────────── */
 
-body.teacher { min-height: 100vh; display: flex; flex-direction: column; }
+body.teacher { --side-w: 224px; min-height: 100vh; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
+.shell-main { min-width: 0; min-height: 100vh; display: flex; flex-direction: column; }
 
 /* Роли: кнопки администратора учитель не видит (сервер проверяет сам) */
 body:not(.is-admin) .admin-only { display: none !important; }
@@ -18,64 +20,120 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .grow { flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-/* ── Шапка ─────────────────────────────────────────────────── */
+/* ── Меню разделов ─────────────────────────────────────────
+   ≥ 1280 px — колонка со значками и подписями; 701–1279 — полоса значков;
+   ≤ 700 (телефон) — строка сверху (название, школа) и панель разделов снизу. */
 
-.topbar {
+.side {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 35;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 12px 12px;
   background: var(--surface);
   background-image: var(--head-grid, none);
   background-size: 24px 24px;
-  border-bottom: var(--bw) solid var(--line);
+  border-right: var(--bw) solid var(--line);
 }
-.topbar-in {
-  max-width: 1344px;
-  margin: 0 auto;
-  padding: 0 32px;
-  height: 64px;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-}
-.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 0 4px; }
 .brand-text { min-width: 0; display: flex; flex-direction: column; }
 .brand-title { font: var(--dw) 18px/22px var(--font-display); white-space: nowrap; }
 .brand-sub { font-size: 12px; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.nav {
-  display: flex;
-  padding: 3px;
-  gap: 3px;
-  border: 1px solid var(--accent);
-  border-radius: var(--r11);
-  background: var(--surface);
-}
+.side-school .chip-btn { width: 100%; height: 48px; gap: 10px; padding: 0 10px; }
+.side-school .chip-btn > .ic:first-child { flex: none; color: var(--accent-text); }
+.side-school .chip-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.side-school .chip-main { max-width: 100%; font-size: 14px; }
+.side-school .chip-dim { font-size: 12px; }
+.side-school .chev { flex: none; }
+
+.nav { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding: 2px; margin: -2px; }
+.nav-rest { display: contents; }
+.nav-gap { flex: 1; min-height: 12px; }
+.nav .nav-more { display: none; }
 .nav button {
-  display: inline-flex;
+  flex: none;
+  display: flex;
   align-items: center;
-  gap: 7px;
-  height: 36px;
-  padding: 0 16px;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
   border: 0;
-  border-radius: var(--r8);
+  border-radius: var(--r10);
   background: transparent;
-  color: var(--accent-text);
-  font: 600 14px/1 var(--font-ui);
+  color: var(--text);
+  font: 600 15px/1 var(--font-ui);
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
 }
-.nav button .ic { width: 17px; height: 17px; }
+.nav button .ic { flex: none; width: 20px; height: 20px; color: var(--accent-text); }
 .nav button:hover { background: var(--surface-2); }
+.nav button:focus-visible { outline: 3px solid var(--star); outline-offset: -1px; }
 .nav button[aria-current="page"] { background: var(--primary); color: var(--on-primary); }
-.topbar-end { justify-self: end; display: flex; gap: 8px; }
-/* Семь разделов не помещаются рядом с полными кнопками «Пароль» и «Выйти» (шапка не шире
-   1344 px при любом окне): эти две — значки с подсказкой, отступы разделов поменьше */
-.topbar-in { grid-template-columns: minmax(0, 1fr) auto auto; }
-.nav button { padding: 0 11px; gap: 6px; }
-.topbar-end .tb-label { display: none; }
-.topbar-end .btn { width: 36px; padding: 0; }
+.nav button[aria-current="page"] .ic { color: inherit; }
+.nav .nav-act { min-height: 40px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.nav .nav-act .ic { color: inherit; }
+
+@media (min-width: 701px) and (max-width: 1279px) {
+  body.teacher { --side-w: 68px; }
+  .side { padding: 14px 8px 10px; }
+  .brand { justify-content: center; padding: 0; }
+  .brand-text, .side-school .chip-text, .side-school .chev, .nav button span { display: none; }
+  .side-school .chip-btn, .nav button { justify-content: center; padding: 0; }
+}
+
+@media (max-width: 700px) {
+  body.teacher { display: block; padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
+  .shell-main { min-height: 0; }
+  .side { height: auto; flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px; border-right: 0; border-bottom: var(--bw) solid var(--line); }
+  .brand { flex: 1; padding: 0; }
+  .brand-sub, .side-school .chip-dim { display: none; }
+  .side-school { flex: 0 1 auto; min-width: 0; max-width: 56%; }
+  .side-school .chip-btn { height: 40px; }
+  #schoolMenu .menu { left: auto; right: 0; }
+
+  .nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 36;
+    flex-direction: row;
+    gap: 2px;
+    margin: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+    overflow: visible;
+    background: var(--surface);
+    border-top: var(--bw) solid var(--line);
+  }
+  .nav > button { flex: 1 1 0; min-width: 0; min-height: 54px; flex-direction: column; justify-content: center; gap: 4px; padding: 0 2px; font-size: 11px; }
+  .nav > button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .nav > button[aria-current="page"], .nav-more.on { background: var(--accent-soft); color: var(--accent-text); }
+  .nav .nav-more { display: flex; }
+  /* Лист «Ещё»: остальные разделы, пароль и выход */
+  .nav-rest {
+    display: none;
+    position: absolute;
+    right: 8px;
+    bottom: calc(100% + 8px);
+    width: min(264px, calc(100vw - 16px));
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+    background: var(--surface);
+    border: var(--bw) solid var(--line);
+    border-radius: var(--r12);
+    box-shadow: var(--shadow-pop);
+  }
+  .nav-rest.open { display: flex; }
+  .nav-gap { flex: none; min-height: 0; height: 1px; margin: 4px 0; background: var(--line); }
+  .lesson-bar { bottom: calc(62px + env(safe-area-inset-bottom, 0px)); }
+}
 
 /* ── Страницы ──────────────────────────────────────────────── */
 
@@ -86,19 +144,21 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .page-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
 .page-head > div:first-child { flex: 1; min-width: 260px; }
 
-/* ── Панель урока: школа, дата, банк, Excel ────────────────── */
+/* ── Шапка журнала: заголовок, дата, банк, Excel ───────────── */
 
-.toolbar {
-  position: relative;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 10px 12px 10px 16px;
-}
+.j-head { position: relative; z-index: 20; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 56px; margin-bottom: 20px; }
+.j-title { flex: 1 1 300px; min-width: 0; display: flex; align-items: center; gap: 14px; }
+.j-title-text { min-width: 0; }
+.j-title .page-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.j-title .page-sub { margin-top: 2px; }
+.j-title .page-sub .btn-link { height: 24px; padding: 0 6px; vertical-align: baseline; }
+.j-back { flex: none; }
+.j-class { display: flex; align-items: center; gap: 10px; }
+.j-class .ic { flex: none; color: var(--accent-text); }
+.j-class span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bank[hidden] { display: none; }
+
 .tool { display: flex; align-items: center; gap: 10px; }
-.vrule { width: 1px; height: 28px; background: var(--line); }
 
 /* Кнопка-поле: «Наша школа · 3 класса», «21.11.2026 · сб» */
 .chip-btn {
@@ -119,7 +179,7 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .chip-btn:hover { border-color: var(--accent-text); }
 .chip-dim { color: var(--muted); font-weight: 500; }
 .chip-main { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
-#schoolMenu .menu { left: 58px; width: 270px; }
+#schoolMenu .menu { width: 270px; }
 
 /* Дата — настоящее поле date под плашкой: клик открывает календарь */
 .date-chip { padding: 0 12px; font-variant-numeric: tabular-nums; }
@@ -157,77 +217,153 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 
 .menu.wide { width: 280px; }
 
-/* ── Вкладки классов ───────────────────────────────────────── */
+/* ── Журнал: плитки уроков и классов ───────────────────────── */
 
-.class-tabs {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  margin-top: 20px;
-  padding-left: 16px;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: thin;
-}
-.class-tab {
-  flex: none;
-  height: 38px;
-  padding: 0 18px;
-  background: var(--tab-off);
-  border: var(--bw) solid var(--line);
-  border-bottom: 0;
-  border-radius: var(--r12) var(--r12) 0 0;
-  font: var(--nw) 16px/1 var(--font-num);
-  color: var(--muted);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.class-tab:hover { background: var(--bg); color: var(--text); }
-/* «Стикербук»: у классов свои цвета (по порядку), неактивные — тоже цветные */
-.class-tab.c0 { background: var(--cls-a-bg, var(--tab-off)); }
-.class-tab.c1 { background: var(--cls-b-bg, var(--tab-off)); }
-.class-tab.c2 { background: var(--cls-c-bg, var(--tab-off)); }
-[data-theme="sticker"] .class-tab { color: var(--text); }
+.j-sec { margin-bottom: 28px; }
+.j-sec-title { margin: 0 0 12px; }
+.tile-grid { display: grid; gap: 12px; }
+.tile-grid.lessons { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); }
+.tile-grid.classes { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; }
 
-.class-tab.active {
+/* Плитка урока: время, класс, кабинет, состояние. Полоса слева — как у клетки расписания */
+.lesson-tile {
   display: flex;
-  align-items: center;
-  height: 44px;
-  padding: 0 4px 0 18px;
-  margin-bottom: -1px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 136px;
+  padding: 14px 16px;
   background: var(--surface);
-  color: var(--accent-text);
-  font-size: 17px;
-  box-shadow: inset 0 3px 0 var(--accent);
-  cursor: default;
+  border: var(--bw) solid var(--line);
+  border-left: 5px solid var(--primary);
+  border-radius: var(--r14);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s ease-out, border-color .12s ease-out;
 }
-.class-tab.active.c0 { background: var(--cls-a-bg, var(--surface)); }
-.class-tab.active.c1 { background: var(--cls-b-bg, var(--surface)); }
-.class-tab.active.c2 { background: var(--cls-c-bg, var(--surface)); }
-.class-tab.active .icon-btn { margin-left: 6px; width: 32px; height: 32px; }
-.class-tab-wrap { position: static; flex: none; }
-.class-tab-wrap .menu { top: auto; margin-top: 4px; }
-.class-add {
-  flex: none;
+.lesson-tile:hover, .class-tile:hover { border-color: var(--accent-text); transform: translateY(-2px); }
+.lesson-tile:hover { border-left-color: var(--primary); }
+.lesson-tile:focus-visible, .class-tile:focus-visible { outline: 3px solid var(--star); outline-offset: 2px; }
+.lt-time { font: var(--nw) 22px/24px var(--font-num); font-variant-numeric: tabular-nums; }
+.lt-time span { margin-left: 2px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.lt-class { display: flex; align-items: center; gap: 8px; max-width: 100%; font: var(--dw) 22px/26px var(--font-display); color: var(--accent-text); }
+.lt-class .ic { flex: none; width: 20px; height: 20px; }
+.lt-class span { min-width: 0; text-wrap: balance; }
+.lt-class .nw { white-space: nowrap; }
+.lt-meta { font-size: 13px; line-height: 18px; color: var(--muted); }
+.lt-state {
+  margin-top: auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 38px;
-  padding: 0 14px;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--r12);
+  background: var(--surface-2);
+  color: var(--muted);
+  font: 600 12px/1 var(--font-ui);
+}
+.lesson-tile.done, .lesson-tile.done:hover { border-left-color: var(--success); }
+.lesson-tile.done .lt-state { background: var(--success-bg, var(--accent-soft)); color: var(--success); }
+[data-theme="sticker"] .lesson-tile.done .lt-state { color: var(--text); }
+.lesson-tile.now { border-color: var(--accent); background: color-mix(in srgb, var(--accent-soft) 40%, var(--surface)); }
+.lesson-tile.now .lt-state { background: var(--primary); color: var(--on-primary); }
+.lesson-tile.next .lt-state { background: var(--accent-soft); color: var(--accent-text); }
+.lesson-tile.past .lt-state { background: var(--star-bg); color: var(--star-text); }
+
+.j-empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r14);
+  color: var(--muted);
+  font-size: 15px;
+}
+.j-empty > .ic { flex: none; }
+
+/* Классы по параллелям: слева название параллели, справа плитки; на широком экране — в две колонки */
+.par-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); column-gap: 32px; align-items: start; }
+.par-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; margin-bottom: 10px; }
+.par-name { align-self: center; font: 600 13px/16px var(--font-ui); color: var(--muted); }
+.class-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--r12);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .12s ease-out, border-color .12s ease-out;
+}
+/* «Стикербук»: у классов свои цвета (по порядку) */
+.class-tile.c0 { background: var(--cls-a-bg, var(--surface)); }
+.class-tile.c1 { background: var(--cls-b-bg, var(--surface)); }
+.class-tile.c2 { background: var(--cls-c-bg, var(--surface)); }
+.class-tile b { font: var(--nw) 20px/24px var(--font-num); }
+.ct-count { font-size: 12px; line-height: 16px; color: var(--muted); }
+[data-theme="sticker"] .ct-count { color: var(--text); }
+.ct-got {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: var(--r8);
+  background: var(--star-bg);
+  color: var(--star-text);
+  font: var(--nw) 12px/16px var(--font-num);
+}
+.ct-got .ic { color: var(--star); --ic-stroke: var(--star-depth); }
+.class-tile.add {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   background: none;
   border: 1px dashed var(--line-strong);
-  border-bottom: 0;
-  border-radius: var(--r12) var(--r12) 0 0;
+  box-shadow: none;
   color: var(--accent-text);
-  font: 600 14px/1 var(--font-ui);
-  white-space: nowrap;
-  cursor: pointer;
+  font: 600 14px/18px var(--font-ui);
 }
-.class-add:hover { background: var(--surface-2); }
+.class-tile.add:hover { background: var(--surface-2); }
+#journalClass .today-strip { margin: 0 0 14px; }
 
-/* Меню класса выносим из прокручиваемого ряда, иначе его обрежет */
+@media (max-width: 700px) {
+  .j-head { gap: 8px; margin-bottom: 16px; }
+  .j-title { flex-basis: 100%; gap: 10px; }
+  .j-title .page-title { font-size: 22px; line-height: 28px; white-space: normal; }
+  .j-back span { display: none; }
+  .j-back { width: 44px; height: 44px; padding: 0; }
+  .tile-grid.lessons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .lesson-tile { min-height: 124px; padding: 12px; }
+  .lt-class { font-size: 19px; line-height: 24px; }
+  .par-grid { grid-template-columns: 1fr; }
+  .par-row { grid-template-columns: 1fr; gap: 6px; margin-bottom: 14px; }
+  .tile-grid.classes { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+  .class-tile { min-height: 64px; padding: 8px 10px; }
+  .bank .caps, .bank-dots { display: none; }
+  .j-head.in-class #excelMenu { display: none; }   /* Excel — на «Сегодня»: это действие для всей школы */
+}
+
+/* Меню класса — в слое поверх страницы */
 .class-menu { position: fixed; width: 230px; }
 
 /* ── Лист журнала ──────────────────────────────────────────── */
@@ -237,7 +373,7 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
   z-index: 1;
   background: var(--surface);
   border: var(--bw) solid var(--line);
-  border-radius: 0 var(--r18) var(--r18) var(--r18);
+  border-radius: var(--r18);
   box-shadow: var(--shadow-card);
 }
 .sheet-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px 12px; flex-wrap: wrap; }
@@ -250,7 +386,8 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
    У «Ясно и быстро» колонки «Вход» нет: данные входа — в боковой панели. */
 .jt { --cols: 40px minmax(200px, 1fr) 214px 130px 170px 250px; border-top: 1px solid var(--line); }
 [data-theme="clear"] .jt { --cols: 40px minmax(220px, 1fr) 270px 150px 250px; }
-@media (max-width: 1279px) {
+/* Порог учитывает меню сбоку: журналу остаётся ширина окна минус меню */
+@media (max-width: 1339px) {
   .jt { --cols: 36px minmax(160px, 1fr) 214px 120px 150px 130px; }
   [data-theme="clear"] .jt { --cols: 36px minmax(160px, 1fr) 270px 120px 130px; }
   .jt .act-label { display: none; }
@@ -280,7 +417,6 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .jt-group > span { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 36px; color: var(--muted); font-size: 13px; }
 .jt-group b { font: var(--nw) 16px/1 var(--font-num); color: var(--accent-text); }
 .jt-group .ic { color: var(--accent-text); }
-.class-tab.joint > span[role="tab"] { display: inline-flex; align-items: center; gap: 6px; }
 
 .cell-num { font: var(--nw) 16px/1 var(--font-num); color: var(--muted); }
 .cell-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -489,7 +625,7 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 
 .side-panel {
   position: fixed;
-  top: 65px;
+  top: 0;
   right: 0;
   bottom: 0;
   z-index: 40;
@@ -855,8 +991,6 @@ code { font: 500 12px var(--font-mono); background: var(--surface-2); border: va
 /* ── Узкие экраны (планшет) ────────────────────────────────── */
 
 @media (max-width: 1100px) {
-  .topbar-in { grid-template-columns: auto 1fr auto; padding: 0 16px; }
-  .brand-sub { display: none; }
   .page { padding: 16px 16px 0; }
   #page-prizes, #page-lessons, #page-users { padding: 20px 16px 40px; }
   .kbd-hints { display: none; }
@@ -1076,6 +1210,7 @@ button.sch-card:hover { border-color: var(--line-strong); border-left-color: var
 
 .nav-count { display: inline-block; min-width: 20px; height: 20px; margin-left: 2px; padding: 0 6px; border-radius: 999px;
   background: var(--danger-bg); color: var(--danger); font: 700 11px/20px var(--font-ui); text-align: center; }
+.nav button .nav-count { margin-left: auto; }
 .ck-tabs { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
 .ck-tabs::-webkit-scrollbar { display: none; }
 .ck-tabs > button { white-space: nowrap; }
@@ -1123,7 +1258,7 @@ button.ck-row:hover { background: var(--surface-2); }
 .ck-ready li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; line-height: 20px; }
 .ck-ready li > span { flex: 1 1 300px; }
 
-.ck-bulk { position: sticky; top: 64px; z-index: 5; padding: 8px 12px; border: var(--bw) solid var(--line);
+.ck-bulk { position: sticky; top: 8px; z-index: 5; padding: 8px 12px; border: var(--bw) solid var(--line);
   border-radius: var(--r12); background: var(--surface); }
 .ck-bulk .check { min-height: 36px; padding: 0 6px; }
 
@@ -1214,18 +1349,9 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
   .sg-num .sg-end { display: none; }
 }
 @media (max-width: 700px) {
-  /* Шапка: логотип и «Пароль / Выйти» в первой строке, разделы — прокручиваемой строкой под ними */
-  .topbar-in { height: auto; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand end" "nav nav";
-    row-gap: 8px; padding: 10px 16px; }
-  .topbar-in > .brand { grid-area: brand; }
-  .topbar-in > .topbar-end { grid-area: end; }
-  .topbar-in > .nav { grid-area: nav; overflow-x: auto; scrollbar-width: none; }
-  .topbar-in > .nav::-webkit-scrollbar { display: none; }
-  .nav button { height: 40px; padding: 0 12px; }
-  .brand-title { overflow: hidden; text-overflow: ellipsis; }
   .ck-ready { padding: 14px 16px; }
   .ck-ready .btn { min-height: 44px; }
-  .ck-bulk { top: 0; }
+  .ck-bulk { top: 64px; }
   .ck-row, .ck-row.pick { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "time chip" "who who" "meta meta";
     row-gap: 6px; padding: 12px 16px; }
   .ck-row.pick { grid-template-columns: 36px minmax(0, 1fr) auto 44px; grid-template-areas: "check time chip open" "check who who who" "check meta meta meta"; }
@@ -1291,4 +1417,50 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
   .st-table.cls .st-row > :nth-child(n+4) { display: none; }
   .st-table.rank .st-row { grid-template-columns: 24px 32px minmax(0, 1fr) 70px; }
   .st-table.rank .st-row > .muted, .st-table.rank .st-row > .meter { display: none; }
+}
+
+/* ── Каркас: узкие окна и телефон ──────────────────────────────
+   Меню сбоку забирает ширину — шапка журнала ужимается раньше. */
+@media (max-width: 1439px) {
+  .j-head .bank-dots { display: none; }
+}
+@media (max-width: 700px) {
+  /* Уроки дня в журнале класса — одна строка с прокруткой, а не четыре */
+  #journalClass .today-strip { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 12px; padding: 2px 16px 4px; scrollbar-width: none; }
+  #journalClass .today-strip .caps { display: none; }
+  #journalClass .ts-chip { flex: none; }
+
+  /* Строка ученика на телефоне: имя и меню сверху, звёзды и баланс снизу — без прокрутки вбок.
+     Вход и QR — в меню «⋯» строки, приз — значком. */
+  .jt { overflow-x: visible; }
+  .jt-head { display: none; }
+  .jt-group { display: block; padding: 0 12px; }
+  .jt-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-areas: "num name act" "num stars bal";
+    row-gap: 4px;
+    column-gap: 8px;
+    padding: 10px 12px;
+  }
+  .jt-row .cell-num { grid-area: num; align-self: start; padding-top: 8px; font-size: 14px; }
+  .jt-row .cell-name { grid-area: name; }
+  .jt-row .cell-stars { grid-area: stars; min-width: 0; }
+  .jt-row .cell-bal { grid-area: bal; justify-self: end; }
+  .jt-row .cell-bal .after { display: none; }
+  .jt-row .cell-login { display: none !important; }
+  .jt-row .cell-act { grid-area: act; gap: 4px; }
+  .jt-row .act-btn:first-child { display: none; }
+  .jt-row .act-btn { width: 40px; height: 40px; padding: 0; justify-content: center; }
+  .jt-row .act-label { display: none; }
+  .jt-row .star-num { display: none; }
+  .star-btn { width: 36px; height: 44px; }
+  .seg-stars button { min-width: 36px; height: 44px; }
+  .star-btn svg { width: 26px; height: 26px; }
+  .sheet-head { padding: 12px; }
+  .add-row { flex-wrap: wrap; }
+  /* Итог урока: сумма и кнопка — подписи «Итог урока» и «кому» не помещаются */
+  .lesson-bar-in { gap: 10px; padding: 8px 8px 8px 14px; }
+  .lesson-bar-in > .caps, .lesson-who { display: none; }
+  .lesson-bar-in .grow { display: none; }
+  .finish-btn { flex: 1; min-width: 0; min-height: 48px; height: auto; white-space: normal; line-height: 18px; }
 }

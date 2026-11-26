@@ -18,6 +18,7 @@ let activeClass = null;    // id класса
 let draft = {};            // { student_id: звёзды за текущий урок }
 let jointClasses = null;   // общий урок объединённых классов: [id, …] (2 и больше) или null
 let jointPick = new Set(); // окно «Провести вместе с…»
+let journalView = "home";  // журнал: "home" — плитки уроков и классов, "class" — журнал класса
 
 let rowPop = null;         // { kind: "code" | "more", id } — открытое окошко в строке
 let panelId = null;        // ученик в боковой панели
@@ -179,11 +180,13 @@ async function loadState() {
   if (!classes.some((c) => c.id === activeClass)) {
     activeClass = classes[0]?.id ?? null;
     draft = {};
+    journalView = "home";
   }
   if (!classes.some((c) => c.id === lessonClass)) lessonClass = activeClass;
   if (jointClasses && !jointClasses.every((id) => classes.some((c) => c.id === id))) {
     jointClasses = null;
     draft = {};
+    journalView = "home";
   }
   if (panelId && !studentById(panelId)) panelId = null;
   syncSchoolTheme();
@@ -226,7 +229,7 @@ function applyRole() {
 function renderAll() {
   applyRole();
   renderSchoolMenu();
-  renderClassTabs();
+  renderJournal();
   renderTable();
   renderPanel();
   renderPrizes();
@@ -245,7 +248,7 @@ function renderSchoolMenu() {
   const school = schoolById(activeSchool);
   const count = sortedClasses(activeSchool).length;
   $("schoolLabel").textContent = school?.name || "Нет школы";
-  $("schoolCount").textContent = school ? `· ${count} ${plural(count, "класс", "класса", "классов")}` : "";
+  $("schoolCount").textContent = school ? `${count} ${plural(count, "класс", "класса", "классов")}` : "";
   const items = state.schools.map((s) => `
     <button role="menuitemradio" aria-checked="${s.id === activeSchool}" class="${s.id === activeSchool ? "checked" : ""}"
             onclick="selectSchool(${s.id})"><span>${escapeHtml(s.name)}</span>${s.id === activeSchool ? icon("check", "ic ic-sm") : ""}</button>`);
@@ -268,45 +271,179 @@ function renderSchoolMenu() {
 
 function selectSchool(id) {
   closeMenus();
-  activeSchool = id;
-  jointClasses = null;
-  activeClass = sortedClasses(id)[0]?.id ?? null;
-  lessonClass = activeClass;
-  draft = {};
-  panelId = null;
-  rowPop = null;
-  syncSchoolTheme();
-  renderAll();
-}
-
-function renderClassTabs() {
-  const host = $("classTabs");
-  if (!activeSchool) { host.innerHTML = ""; return; }
-  const tabs = sortedClasses(activeSchool).map((c, i) => {
-    const color = `c${i % 3}`;
-    if (c.id === activeClass && !jointClasses) {
-      return `<div class="class-tab active ${color}">
-        <span role="tab" aria-selected="true">${escapeHtml(c.name)}</span>
-        <button class="icon-btn" id="classMenuBtn" onclick="openClassMenu(event)"
-                aria-label="Действия с классом ${escapeHtml(c.name)}" title="Действия с классом"
-                aria-haspopup="menu">${icon("more", "ic ic-sm")}</button>
-      </div>`;
-    }
-    return `<button class="class-tab ${color}" role="tab" aria-selected="false"
-                    onclick="selectClass(${c.id})">${escapeHtml(c.name)}</button>`;
+  if (id === activeSchool) return;
+  leaveDraftGuard(() => {
+    activeSchool = id;
+    jointClasses = null;
+    journalView = "home";
+    activeClass = sortedClasses(id)[0]?.id ?? null;
+    lessonClass = activeClass;
+    draft = {};
+    panelId = null;
+    rowPop = null;
+    syncSchoolTheme();
+    setRoute();
+    renderAll();
   });
-  if (jointClasses) {
-    tabs.unshift(`<div class="class-tab active joint">
-        <span role="tab" aria-selected="true" title="Общий урок: ${escapeHtml(jointTitle())}">${icon("users", "ic ic-sm")}${escapeHtml(jointName())}</span>
-        <button class="icon-btn" onclick="closeJoint()" aria-label="Выйти из общего урока" title="Выйти из общего урока">${icon("close", "ic ic-sm")}</button>
-      </div>`);
-  }
-  tabs.push(`<button class="class-add" onclick="openClassGrid()">${icon("plus", "ic ic-sm")}Класс</button>`);
-  host.innerHTML = tabs.join("");
-  host.querySelector(".class-tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
-/** Меню класса живёт поверх страницы: ряд вкладок прокручивается и обрезал бы его. */
+/* ── Журнал: «Сегодня» (плитки) и журнал класса ───────────── */
+
+function renderJournal() {
+  if (journalView === "class" && !classById(activeClass)) journalView = "home";
+  const inClass = journalView === "class";
+  $("journalHome").hidden = inClass;
+  $("journalClass").hidden = !inClass;
+  $("bank").hidden = !inClass;
+  document.querySelector(".j-head").classList.toggle("in-class", inClass);
+  renderJournalHead();
+  renderJournalHome();
+}
+
+/** Заголовок журнала: дата и школа на экране «Сегодня»; «← Все классы», класс и меню ⋯ — в классе. */
+function renderJournalHead() {
+  const host = $("journalTitle");
+  if (!host) return;
+  if (journalView !== "class") {
+    const school = schoolById(activeSchool);
+    const day = lessonDay();
+    const isToday = day === localToday();
+    const [y, m, d] = day.split("-").map(Number);
+    const weekday = new Date(y, m - 1, d).toLocaleDateString("ru-RU", { weekday: "long" });
+    const date = formatDay(day, { year: false });
+    const count = sortedClasses(activeSchool).length;
+    host.innerHTML = `<div class="j-title-text">
+      <h1 class="page-title">${isToday ? `Сегодня — ${escapeHtml(weekday)}, ${escapeHtml(date)}`
+        : `${escapeHtml(weekday.charAt(0).toUpperCase() + weekday.slice(1))}, ${escapeHtml(date)}`}</h1>
+      <p class="page-sub">${school ? `${escapeHtml(school.name)} · ${count} ${plural(count, "класс", "класса", "классов")}` : "Школ пока нет"}${
+        isToday ? "" : ` · <button class="btn btn-link btn-sm" onclick="setLessonDate(localToday())">вернуться к сегодня</button>`}</p>
+    </div>`;
+    return;
+  }
+  const cls = classById(activeClass);
+  const count = journalStudents().length;
+  const name = jointClasses ? jointTitle() : cls?.name || "";
+  host.innerHTML = `
+    <button class="btn btn-ghost btn-md j-back" onclick="goJournalHome()" title="К плиткам уроков и классов (Esc)">
+      ${icon("arrow-left", "ic ic-sm")}<span>Все классы</span></button>
+    <div class="j-title-text">
+      <h1 class="page-title j-class" title="${escapeHtml(name)}">${jointClasses ? icon("users") : ""}<span>${escapeHtml(name)}</span></h1>
+      <p class="page-sub">${jointClasses ? "Общий урок · " : ""}${count} ${kids(count)}</p>
+    </div>
+    ${jointClasses ? "" : `<button class="icon-btn" id="classMenuBtn" onclick="openClassMenu(event)"
+        aria-label="Действия с классом ${escapeHtml(name)}" title="Действия с классом"
+        aria-haspopup="menu">${icon("more", "ic ic-sm")}</button>`}`;
+}
+
+function classStarsOn(classId, day) {
+  return (state.lessons || [])
+    .filter((l) => l.class_id === classId && l.date === day)
+    .reduce((sum, l) => sum + (l.total_stars || 0), 0);
+}
+
+function parallelTitle(parallel) {
+  if (!parallel) return "Другие";
+  return `${parallel}-${parallel === 3 ? "и" : "е"} классы`;
+}
+
+const TILE_STATE = { done: "проведён", now: "идёт сейчас", next: "следующий", past: "не отмечен", later: "" };
+
+/** Экран «Сегодня»: крупные плитки уроков на выбранную дату и все классы по параллелям. */
+function renderJournalHome() {
+  const tiles = $("todayTiles");
+  if (!tiles || journalView === "class") return;
+  const school = schoolById(activeSchool);
+  const classes = sortedClasses(activeSchool);
+  const day = lessonDay();
+  const today = localToday();
+  $("todayTitle").textContent = day === today ? "Уроки на сегодня" : `Уроки на ${dotted(day)}`;
+  if (!school) {
+    tiles.innerHTML = `<div class="card empty">${icon("school", "ic ic-xl")}${isAdmin()
+      ? "<b>Школ пока нет</b>Добавьте первую в меню «Школа»."
+      : "<b>Вам пока не открыта ни одна школа</b>Обратитесь к администратору."}</div>`;
+    $("classTiles").innerHTML = "";
+    return;
+  }
+
+  const clock = new Date();
+  const nowMinutes = clock.getHours() * 60 + clock.getMinutes();
+  const lessons = todayLessons(schoolSchedule().filter((e) => e.weekday === isoWeekday(day) && entryShownOn(e, day)));
+  let nextFound = false;
+  tiles.innerHTML = lessons.length ? `<div class="tile-grid lessons">${lessons.map((group) => {
+    const ids = group.map((e) => e.class_id);
+    const first = group[0];
+    const together = ids.length > 1;
+    let kind = lessonTileState(first.start, first.end, day, today, nowMinutes, ids.every((id) => lessonHeld(id, day)));
+    if (kind === "later" && day === today && !nextFound) { kind = "next"; nextFound = true; }
+    if (kind === "past" && day < String(first.created_at || "").slice(0, 10)) kind = "later";   // занятия тогда ещё не было
+    const room = group.find((e) => e.room)?.room || "";
+    const count = ids.reduce((sum, id) => sum + classStudents(id).length, 0);
+    const names = group.map((e) => classById(e.class_id)?.name || "").join(", ");
+    const label = TILE_STATE[kind];
+    return `<button type="button" class="lesson-tile ${kind}"
+        onclick="${together ? `openJoint([${ids.join(",")}])` : `selectClass(${ids[0]})`}"
+        aria-label="${escapeHtml(first.start)}, ${escapeHtml(names)}${label ? `, ${label}` : ""}. Открыть журнал">
+      <span class="lt-time">${escapeHtml(first.start)}<span>–${escapeHtml(first.end)}</span></span>
+      <b class="lt-class">${together ? icon("users") : ""}<span>${entriesName(group).split(" + ").map((n) => `<span class="nw">${escapeHtml(n)}</span>`).join(" + ")}</span></b>
+      <span class="lt-meta">${[together ? "общий урок" : "", room ? `каб. ${escapeHtml(room)}` : "", `${count} ${kids(count)}`].filter(Boolean).join(" · ")}</span>
+      ${label ? `<span class="lt-state">${kind === "done" ? icon("check", "ic ic-xs") : ""}${label}</span>` : ""}
+    </button>`;
+  }).join("")}</div>`
+    : `<div class="j-empty">${icon("calendar")}<span>На эту дату занятий по расписанию нет.</span>
+        <button class="btn btn-ghost btn-sm" onclick="switchPage('schedule')">${icon("clock", "ic ic-sm")}Открыть расписание</button></div>`;
+
+  const order = new Map(classes.map((c, i) => [c.id, i]));
+  const add = `<button type="button" class="class-tile add" onclick="openClassGrid()">${icon("plus")}<span>Добавить классы</span></button>`;
+  $("classTiles").innerHTML = classes.length
+    ? `<div class="par-grid">` + groupByParallel(classes).map((group) => `
+      <div class="par-row">
+        <span class="par-name">${parallelTitle(group.parallel)}</span>
+        <div class="tile-grid classes">${group.classes.map((c) => {
+          const count = classStudents(c.id).length;
+          const got = classStarsOn(c.id, day);
+          return `<button type="button" class="class-tile c${order.get(c.id) % 3}" onclick="selectClass(${c.id})"
+              aria-label="${escapeHtml(c.name)}, ${count} ${kids(count)}. Открыть журнал">
+            <b>${escapeHtml(c.name)}</b>
+            <span class="ct-count">${count ? `${count} ${kids(count)}` : "нет учеников"}</span>
+            ${got ? `<span class="ct-got" title="Начислено за ${dotted(day)}">${icon("star", "ic ic-xs")}+${got}</span>` : ""}
+          </button>`;
+        }).join("")}</div>
+      </div>`).join("") + `<div class="par-row"><span class="par-name"></span><div class="tile-grid classes">${add}</div></div></div>`
+    : `<div class="card empty">${icon("users", "ic ic-xl")}<b>В школе ${quoted(escapeHtml(school.name))} пока нет классов</b>
+        <button class="btn btn-md" onclick="openClassGrid()">${icon("plus", "ic ic-sm")}Добавить классы</button></div>`;
+}
+
+function setLessonDate(iso) {
+  $("lessonDate").value = iso;
+  onLessonDateChange();
+}
+
+/** Звёзды поставлены, но урок не завершён: прежде чем уйти из класса — спросить.
+ *  next() выполняется сразу, если терять нечего. */
+function leaveDraftGuard(next) {
+  const sum = journalView === "class" ? usedBank() : 0;
+  if (!sum) return next();
+  confirmAction("Звёзды не начислены",
+    `Вы поставили ${sum} ${stars(sum)}, но урок не завершён. Если уйти, они пропадут.`,
+    async () => { draft = {}; next(); }, "Уйти без начисления");
+}
+
+/** Назад к плиткам уроков и классов. */
+function goJournalHome() {
+  if (journalView !== "class") return;
+  leaveDraftGuard(() => {
+    jointClasses = null;
+    journalView = "home";
+    draft = {};
+    panelId = null;
+    rowPop = null;
+    setRoute();
+    renderAll();
+    window.scrollTo(0, 0);
+  });
+}
+
+/** Меню класса живёт поверх страницы — как остальные меню «⋯». */
 function openClassMenu(event) {
   event.stopPropagation();
   let menu = $("classMenu");
@@ -331,14 +468,21 @@ function openClassMenu(event) {
   menu.classList.add("shown");
 }
 
+/** Открыть журнал класса (из плитки или полоски уроков дня). */
 function selectClass(id) {
-  jointClasses = null;
-  activeClass = id;
-  lessonClass = id;
-  draft = {};
-  panelId = null;
-  rowPop = null;
-  renderAll();
+  if (journalView === "class" && !jointClasses && activeClass === id) return;
+  leaveDraftGuard(() => {
+    jointClasses = null;
+    activeClass = id;
+    lessonClass = id;
+    journalView = "class";
+    draft = {};
+    panelId = null;
+    rowPop = null;
+    setRoute();
+    renderAll();
+    window.scrollTo(0, 0);
+  });
 }
 
 /** «5-А», «5а», «5 А» — один и тот же класс. */
@@ -512,19 +656,19 @@ function confirmJoint() {
 function openJoint(ids) {
   const list = sortedClasses(activeSchool).map((c) => c.id).filter((id) => ids.includes(id));
   if (list.length < 2) { if (list.length) selectClass(list[0]); return; }
-  if (jointClasses?.join() !== list.join()) {
+  if (journalView === "class" && jointClasses?.join() === list.join()) return;
+  leaveDraftGuard(() => {
     draft = {};
     panelId = null;
     rowPop = null;
-  }
-  jointClasses = list;
-  activeClass = list[0];
-  lessonClass = list[0];
-  renderAll();
-}
-
-function closeJoint() {
-  selectClass(jointClasses?.[0] ?? activeClass);
+    jointClasses = list;
+    activeClass = list[0];
+    lessonClass = list[0];
+    journalView = "class";
+    setRoute();
+    renderAll();
+    window.scrollTo(0, 0);
+  });
 }
 
 /** Все ученики класса — разом: класс, его расписание и карточки других классов остаются. */
@@ -632,9 +776,7 @@ function renderDate() {
    за день, ученику — 5. Решает сервер, а панель показывает остаток, чтобы учитель
    не упирался в ошибку. Правило подсчёта то же, что в backend/routers/lessons.py. */
 function classGotOn(day) {
-  return (state.lessons || [])
-    .filter((l) => journalClassIds().includes(l.class_id) && l.date === day)
-    .reduce((sum, l) => sum + (l.total_stars || 0), 0);
+  return journalClassIds().reduce((sum, id) => sum + classStarsOn(id, day), 0);
 }
 
 function studentGotOn(student, day) {
@@ -673,6 +815,8 @@ function onLessonDateChange() {
     draft[student.id] = value;
     room -= value;
   }
+  renderJournalHead();
+  renderJournalHome();
   renderTable();
   renderPanel();
 }
@@ -813,7 +957,7 @@ function floatRowPop() {
   document.body.appendChild(pop);
   pop.classList.add("row-float");
   const gap = 6;
-  const top0 = document.querySelector(".topbar").getBoundingClientRect().bottom + gap;
+  const top0 = popTopEdge() + gap;
   const h = pop.offsetHeight;
   const w = pop.offsetWidth;
   let top = a.bottom + gap;
@@ -1780,6 +1924,8 @@ function closeMenus(withRows = true) {
   });
   const classMenu = $("classMenu");
   if (classMenu) { classMenu.style.display = "none"; classMenu.classList.remove("shown"); }
+  $("navRest")?.classList.remove("open");
+  $("navMore")?.setAttribute("aria-expanded", "false");
   if (withRows && rowPop) { rowPop = null; renderTable(); }
   if (!rowPop) document.querySelectorAll("body > .row-float").forEach((el) => el.remove());
   if (typeof closeCellPop === "function") closeCellPop();      // окошко ячейки расписания
@@ -2042,21 +2188,94 @@ async function saveMyPassword() {
 
 function currentPage() { return document.querySelector(".page.active")?.id.replace("page-", "") || "journal"; }
 
+/** Раздел из меню. Повторное нажатие «Журнал» из журнала класса — назад к плиткам. */
 function switchPage(name) {
+  if (name === "journal" && currentPage() === "journal" && journalView === "class") { closeMenus(); return goJournalHome(); }
+  showPage(name);
+  setRoute();
+}
+
+function showPage(name) {
   if (!canEdit() && ["journal", "prizes"].includes(name)) name = "stats";
+  if (!isAdmin() && name === "users") name = canEdit() ? "journal" : "stats";
   closeMenus();
   document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === `page-${name}`));
-  document.querySelectorAll(".nav button").forEach((button) => {
+  document.querySelectorAll(".nav button[data-page]").forEach((button) => {
     if (button.dataset.page === name) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
+  // На телефоне раздел из листа «Ещё» подсвечивает саму кнопку «Ещё»
+  $("navMore").classList.toggle("on", Boolean($("navRest").querySelector(`[data-page="${name}"]`)));
   renderPanel();
+  if (name === "journal") renderJournal();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
   if (name === "checkin") loadCheckin();
   if (name === "monitor") loadMonitor();
   if (name === "lessons") loadLessonRuns();
   window.scrollTo(0, 0);
+}
+
+/* Адрес помнит место: #schedule, #journal, #journal/12 (класс), #journal/12+13 (общий урок).
+   После обновления страницы открывается то же самое, «Назад» в браузере работает. */
+function routeHash() {
+  const page = currentPage();
+  if (page !== "journal") return `#${page}`;
+  return journalView === "class" ? `#journal/${(jointClasses || [activeClass]).join("+")}` : "#journal";
+}
+
+function setRoute(replace = false) {
+  const hash = routeHash();
+  if (location.hash === hash) return;
+  history[replace ? "replaceState" : "pushState"](null, "", location.pathname + location.search + hash);
+}
+
+function applyRoute() {
+  const [page, arg] = decodeURIComponent(location.hash.slice(1)).split("/");
+  if (!page || !$(`page-${page}`)) return;
+  if (page === "journal") {
+    const known = sortedClasses(activeSchool).map((c) => c.id);
+    const wanted = String(arg || "").split("+").map(Number);
+    const ids = known.filter((id) => wanted.includes(id));
+    const open = journalView === "class" ? (jointClasses || [activeClass]).join("+") : "";
+    if (open !== ids.join("+")) {
+      draft = {};
+      panelId = null;
+      rowPop = null;
+      jointClasses = ids.length > 1 ? ids : null;
+      journalView = ids.length ? "class" : "home";
+      if (ids.length) { activeClass = ids[0]; lessonClass = ids[0]; }
+    }
+  }
+  showPage(page);
+  if (page === "journal") renderTable();
+}
+
+/** «Назад» и «Вперёд» в браузере. С неначисленными звёздами сначала спрашиваем. */
+function onHistoryMove() {
+  if (location.hash === routeHash()) return;
+  if (journalView === "class" && usedBank()) {
+    const target = location.href;
+    history.pushState(null, "", location.pathname + location.search + routeHash());   // пока остаёмся
+    return leaveDraftGuard(() => { history.replaceState(null, "", target); applyRoute(); });
+  }
+  applyRoute();
+}
+
+/** Верхний край для всплывающих окошек: на телефоне сверху липкая строка с названием. */
+function popTopEdge() {
+  const side = $("side");
+  return side && getComputedStyle(side).position === "sticky" ? Math.max(0, side.getBoundingClientRect().bottom) : 0;
+}
+
+/** Лист «Ещё» нижней панели на телефоне. */
+function toggleNavMore(event) {
+  event?.stopPropagation();
+  const rest = $("navRest");
+  const open = !rest.classList.contains("open");
+  closeMenus();
+  rest.classList.toggle("open", open);
+  $("navMore").setAttribute("aria-expanded", String(open));
 }
 
 async function logout() {
@@ -2072,7 +2291,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("classNameInput").addEventListener("keydown", (e) => { if (e.key === "Enter") saveClassName(); });
   // Путь события, а не e.target.closest(): окошко ячейки перерисовывается по клику,
   // и к этому моменту нажатая кнопка уже вне страницы — closest() её «потерял» бы.
-  const insidePop = ".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop";
+  const insidePop = ".menu-wrap, #classMenu, .cell-login, .cell-act, .row-float, .sg-cell, #cellPop, #navRest, #navMore";
   document.addEventListener("click", (e) => {
     if (!e.composedPath().some((el) => el.matches?.(insidePop))) closeMenus();
   });
@@ -2084,11 +2303,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       const modal = topModal();
       if (!modal && liveRunId) return closeLive();
       if (modal) return closeModal(modal.id);
-      if (anyPopOpen() || document.querySelector(".menu-wrap.open, #classMenu.shown")) return closeMenus();
+      if (anyPopOpen() || document.querySelector(".menu-wrap.open, #classMenu.shown, #navRest.open")) return closeMenus();
       if (panelId) return closePanel();
+      // Из журнала класса Esc возвращает к плиткам (не из поля ввода — там Esc отменяет ввод)
+      if (currentPage() === "journal" && journalView === "class" && !e.target.closest?.("input, select, textarea")) return goJournalHome();
     }
-    // Ctrl+Enter — итог урока из любого места журнала
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && currentPage() === "journal" && !topModal() && usedBank()) {
+    // Ctrl+Enter — итог урока из любого места журнала класса
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && currentPage() === "journal" && journalView === "class" && !topModal() && usedBank()) {
       e.preventDefault();
       openFinish();
     }
@@ -2102,12 +2323,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Вернулись на вкладку — проверим, не сменился ли вход в другой вкладке
   document.addEventListener("visibilitychange", () => { if (!document.hidden) sessionSwitched(); });
+  window.addEventListener("popstate", onHistoryMove);
+  // Закрытие или обновление вкладки с неначисленными звёздами — браузер переспросит
+  window.addEventListener("beforeunload", (e) => {
+    if (journalView === "class" && usedBank()) { e.preventDefault(); e.returnValue = ""; }
+  });
+  // «Идёт сейчас» и «следующий» на плитках зависят от часов
+  setInterval(() => {
+    if (!document.hidden && currentPage() === "journal" && journalView === "home") renderJournalHome();
+  }, 60000);
 
   // Кнопка «Открыть в панели» из группы «Отметки» ведёт на /teacher#checkin-lesson-<номер>
   window.addEventListener("hashchange", openCheckinFromHash);
 
   try {
     await loadState();
+    applyRoute();
+    setRoute(true);
     reportSwitchedLogin();
     openCheckinFromHash();
     openLiveFromAddress();

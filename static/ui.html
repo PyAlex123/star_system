@@ -125,6 +125,41 @@
     <div class="toast" style="margin-top:16px;width:max-content"><span class="toast-mark"><svg class="ic"><use href="#i-star"></use></svg></span>Начислено 7 звёзд · урок сохранён в «Уроках»</div>
   </section>
 
+  <section>
+    <h2 class="eyebrow">07 · Каркас панели: меню разделов и плитки журнала</h2>
+    <div class="ui-row" style="align-items:flex-start">
+      <!-- Образец меню: в панели оно липкое сбоку, здесь — просто блок -->
+      <div class="side" style="position:static;height:auto;width:224px;border:var(--bw) solid var(--line);border-radius:var(--r14)">
+        <nav class="nav" style="position:static;flex-direction:column;border:0;padding:0;margin:0">
+          <button aria-current="page"><svg class="ic"><use href="#i-book"></use></svg><span>Журнал</span></button>
+          <button><svg class="ic"><use href="#i-clock"></use></svg><span>Расписание</span></button>
+          <button><svg class="ic"><use href="#i-gift"></use></svg><span>Призы</span></button>
+          <button class="nav-act"><svg class="ic"><use href="#i-logout"></use></svg><span>Выйти</span></button>
+        </nav>
+      </div>
+      <div class="tile-grid lessons" style="flex:1;min-width:280px">
+        <button class="lesson-tile done"><span class="lt-time">11:40<span>–12:25</span></span><b class="lt-class"><span>4-А</span></b>
+          <span class="lt-meta">13 учеников</span><span class="lt-state"><svg class="ic ic-xs"><use href="#i-check"></use></svg>проведён</span></button>
+        <button class="lesson-tile now"><span class="lt-time">13:35<span>–14:20</span></span><b class="lt-class"><span>3-В</span></b>
+          <span class="lt-meta">каб. 12 · 12 учеников</span><span class="lt-state">идёт сейчас</span></button>
+        <button class="lesson-tile next"><span class="lt-time">15:05<span>–15:50</span></span>
+          <b class="lt-class"><svg class="ic"><use href="#i-users"></use></svg><span><span class="nw">9-В</span> + <span class="nw">10-А</span></span></b>
+          <span class="lt-meta">общий урок · 28 учеников</span><span class="lt-state">следующий</span></button>
+        <button class="lesson-tile past"><span class="lt-time">08:00<span>–08:45</span></span><b class="lt-class"><span>2-Б</span></b>
+          <span class="lt-meta">16 учеников</span><span class="lt-state">не отмечен</span></button>
+      </div>
+    </div>
+    <div class="par-row" style="margin-top:16px">
+      <span class="par-name">5-е классы</span>
+      <div class="tile-grid classes">
+        <button class="class-tile c0"><b>5-А</b><span class="ct-count">16 учеников</span></button>
+        <button class="class-tile c1"><b>5-Б</b><span class="ct-count">16 учеников</span><span class="ct-got"><svg class="ic ic-xs"><use href="#i-star"></use></svg>+7</span></button>
+        <button class="class-tile c2"><b>5-В</b><span class="ct-count">15 учеников</span></button>
+        <button class="class-tile add"><svg class="ic"><use href="#i-plus"></use></svg><span>Добавить классы</span></button>
+      </div>
+    </div>
+  </section>
+
   <section class="only-sky">
     <h2 class="eyebrow">06 · Ночная палитра (кабинет ученика)</h2>
     <div class="night" data-night>

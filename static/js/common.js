@@ -37,6 +37,27 @@ function plural(n, one, few, many) {
   return many;
 }
 
+/** Параллель класса: «5-А», «5 Б», «10-Ф1» → 5, 5, 10; кружок без номера — null.
+ *  То же правило, что parallel_of в backend/stats.py. */
+function parallelOf(name) {
+  const m = /^\s*(\d{1,2})(?!\d)/.exec(String(name || ""));
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/** Классы по параллелям по возрастанию, без параллели — в конце:
+ *  [{ parallel: 5 | null, classes: [...] }]. Порядок классов внутри сохраняется. */
+function groupByParallel(classes) {
+  const groups = new Map();
+  for (const item of classes) {
+    const parallel = parallelOf(item.name);
+    if (!groups.has(parallel)) groups.set(parallel, []);
+    groups.get(parallel).push(item);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === null) - (b === null) || a - b)
+    .map(([parallel, list]) => ({ parallel, classes: list }));
+}
+
 /** Всплывающее уведомление в духе макета: тёмная плашка внизу по центру,
  *  слева круглый значок (звезда, галочка или восклицательный знак). */
 function makeToast({ duration = 3200 } = {}) {

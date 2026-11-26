@@ -294,7 +294,8 @@ function defaultLaunchClasses() {
   const toMin = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
   const weekday = isoWeekday(isoDate(now));
   const near = schoolSchedule()
-    .filter((e) => e.weekday === weekday && toMin(e.start) - 15 <= minutes && minutes <= toMin(e.end) + 15)
+    .filter((e) => e.weekday === weekday && entryShownOn(e, isoDate(now))
+      && toMin(e.start) - 15 <= minutes && minutes <= toMin(e.end) + 15)
     .map((e) => e.class_id);
   const busy = busyClassIds();
   return [...new Set(near.length ? near : [activeClass])].filter((id) => id && !busy.has(id));
