@@ -13,11 +13,11 @@ from .students import import_rows
 router = APIRouter(prefix="/api/excel", tags=["excel"])
 
 
-def _xlsx(data: bytes, filename: str) -> Response:
+def _xlsx(data: bytes, filename: str, fallback: str = "students.xlsx") -> Response:
     quoted = urllib.parse.quote(filename)
     return Response(data, media_type=excel.XLSX_TYPE, headers={
         # Русское имя файла — по RFC 5987; ASCII-запасное для старых браузеров
-        "Content-Disposition": f"attachment; filename=\"students.xlsx\"; filename*=UTF-8''{quoted}",
+        "Content-Disposition": f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quoted}",
         "Cache-Control": "no-store",
     })
 

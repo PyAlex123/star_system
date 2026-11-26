@@ -27,8 +27,8 @@ def add_school(item: schemas.SchoolCreate):
     def _apply(database: Dict[str, Any]):
         if any(s["name"].strip().lower() == name.lower() for s in database["schools"]):
             raise bad_request("Такая школа уже есть")
-        school = {"id": db.next_id(database["schools"]), "name": name,
-                  "theme": themes.DEFAULT_THEME, "bells": db.default_bells(), "days": db.SCHOOL_DAYS[0]}
+        school = {"id": db.next_counted_id(database, "schools"), "name": name, "theme": themes.DEFAULT_THEME,
+                  "bells": db.default_bells(), "days": db.SCHOOL_DAYS[0], **db.SCHOOL_CHECKIN_DEFAULTS}
         database["schools"].append(school)
         return school
 

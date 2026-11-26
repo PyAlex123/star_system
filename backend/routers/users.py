@@ -1,11 +1,13 @@
 """Учётные записи панели: суперадмин заводит сотрудников — учителей и администрацию
 школы — и раздаёт им школы. Пароль сотрудника виден суперадмину, пока сотрудник
 не сменит его сам (как у учеников)."""
+import secrets
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
 
-from .. import db, images, passwords, schemas
+from .. import config, db, images, passwords, schemas
+from ..checkin import clock as checkin_clock, service as checkin
 from ..security import require_superadmin
 from .common import bad_request, clean_name, not_found
 
@@ -57,10 +59,14 @@ def create_user(item: schemas.UserCreate):
 
 
 @router.patch("/{user_id}")
-def update_user(user_id: int, item: schemas.UserUpdate):
-    """Имя и школы учителя. Снятая школа пропадает у него сразу, без повторного входа."""
+def update_user(user_id: int, item: schemas.UserUpdate, me: Dict[str, Any] = Depends(require_superadmin)):
+    """Имя и школы учителя. Снятая школа пропадает у него сразу, без повторного входа.
+    Здесь же поля отметок: ставка, «отмечается в боте», «ведёт отметки»."""
+    before: Dict[str, Any] = {}
+
     def _apply(database: Dict[str, Any]):
         user = _user_or_404(database, user_id)
+        before.update(user)
         if item.name is not None:
             user["name"] = clean_name(item.name, "Введите имя учителя")
         if item.school_ids is not None:
@@ -70,9 +76,66 @@ def update_user(user_id: int, item: schemas.UserUpdate):
                 raise bad_request("Роль администратора не меняется")
             user["role"] = item.role
             user["session_key"] = db.new_session_key()   # новые права — с нового входа
+        if "hourly_rate" in item.model_fields_set:
+            user["hourly_rate"] = item.hourly_rate
+        if item.checkin_tracked is not None:
+            user["checkin_tracked"] = item.checkin_tracked
+        if item.checkin_manager is not None:
+            if item.checkin_manager and user.get("role") != db.ROLE_TEACHER:
+                raise bad_request("Вести отметки можно поручить только учителю: "
+                                  "администрация школы только смотрит, администратору раздел открыт и так")
+            user["checkin_manager"] = item.checkin_manager
+        if user.get("role") != db.ROLE_TEACHER and user.get("checkin_manager"):
+            user["checkin_manager"] = False                # стал администрацией школы — поручение снято
         return user
 
-    return {"ok": True, "user": db.public_user(db.transaction(_apply), with_password=True)}
+    user = db.transaction(_apply)
+    checkin.audit_staff(me, user_id, "update", before, user)
+    return {"ok": True, "user": db.public_user(user, with_password=True)}
+
+
+@router.post("/{user_id}/invite")
+def invite_to_checkins(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
+    """Ссылка-приглашение в бот отметок: одноразовая, живёт неделю.
+    Сотрудник сразу начинает отмечаться — его уроки появятся в «Сегодня»."""
+    code = secrets.token_urlsafe(9)
+    before: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        user = _user_or_404(database, user_id)
+        before.update(user)
+        user["invite_code"] = code
+        user["invite_created_at"] = checkin_clock.iso(checkin_clock.now_utc())
+        # Администратору Telegram нужен для кнопок в группе «Отметки», а не для отметок:
+        # его занятия (он внёс их сам) в проверку не попадают
+        if not db.is_superadmin(user):
+            user["checkin_tracked"] = True
+        return user
+
+    user = db.transaction(_apply)
+    checkin.audit_staff(me, user_id, "invite", before, user)
+    link = config.checkin_invite_link(code)
+    return {"ok": True, "link": link or None, "bot_connected": bool(link), "days": config.CHECKIN_INVITE_DAYS,
+            "user": db.public_user(user, with_password=True)}
+
+
+@router.delete("/{user_id}/telegram")
+def unbind_telegram(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
+    """Отвязать Telegram преподавателя (новый телефон, чужой аккаунт). Согласие
+    на отметки спросим заново; для новой привязки — новое приглашение."""
+    before: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        user = _user_or_404(database, user_id)
+        before.update(user)
+        for field in ("tg_id", "tg_username", "tg_bound_at", "tg_blocked_at", "consent_at",
+                      "invite_code", "invite_created_at"):
+            user[field] = None
+        return user
+
+    user = db.transaction(_apply)
+    checkin.audit_staff(me, user_id, "unbind_telegram", before, user)
+    return {"ok": True, "user": db.public_user(user, with_password=True)}
 
 
 @router.post("/{user_id}/password")

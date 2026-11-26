@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Резервная копия системы наград: база звёзд и загруженные фотографии.
+# Резервная копия системы наград: база звёзд, опросы «Мониторинга», отметки преподавателей
+# и загруженные фотографии.
 #
 # Запуск вручную:
 #   bash deploy/backup.sh
@@ -21,23 +22,34 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 
-# Опросы «Мониторинга» лежат в SQLite (data/monitoring.sqlite3) в режиме WAL: копия файла
-# во время записи может оказаться несогласованной. Поэтому сначала — снимок изнутри
-# контейнера средствами SQLite; он попадает в архив рядом с рабочим файлом.
+STAMP="$(date +%Y-%m-%d_%H-%M)"
+ARCHIVE="${BACKUP_DIR}/stars_${STAMP}.tar.gz"
+
+# Две SQLite-базы рядом с JSON: живой файл посреди записи может попасть в архив несогласованным,
+# поэтому сначала — снимки изнутри контейнера средствами SQLite.
+#  - Опросы «Мониторинга» (data/monitoring.sqlite3, WAL): снимок кладётся в архив рядом с рабочим файлом.
+#  - Отметки преподавателей (data/checkin.sqlite): в архив идёт только снимок — его делает приложение
+#    по команде ниже и само каждую ночь; при восстановлении оно само сделает снимок базой
+#    (backend/checkin/store.py).
 COMPOSE=(docker compose -f "$PROJECT_DIR/docker-compose.yml")
-if command -v docker >/dev/null 2>&1 && [ -n "$("${COMPOSE[@]}" ps -q stars 2>/dev/null)" ]; then
+if command -v docker >/dev/null 2>&1 && "${COMPOSE[@]}" ps --status running -q stars 2>/dev/null | grep -q .; then
     if "${COMPOSE[@]}" exec -T stars python -c \
         "from backend.monitoring import store; store.backup_to('/app/data/monitoring.backup.sqlite3')"; then
         echo "снимок опросов: data/monitoring.backup.sqlite3"
     else
         echo "снимок опросов сделать не удалось — архив всё равно создаётся"
     fi
+    if "${COMPOSE[@]}" exec -T stars python -m backend.checkin.store snapshot >/dev/null; then
+        echo "снимок отметок обновлён"
+    else
+        echo "снимок отметок не обновился — в архив пойдёт ночной"
+    fi
+else
+    echo "Контейнер не запущен — опросы копируются как есть, отметки — из ночного снимка"
 fi
 
-STAMP="$(date +%Y-%m-%d_%H-%M)"
-ARCHIVE="${BACKUP_DIR}/stars_${STAMP}.tar.gz"
-
-tar -czf "$ARCHIVE" -C "$PROJECT_DIR" data
+tar -czf "$ARCHIVE" -C "$PROJECT_DIR" \
+    --exclude=data/checkin.sqlite --exclude=data/checkin.sqlite-journal data
 
 SIZE="$(du -h "$ARCHIVE" | cut -f1)"
 echo "$(date '+%Y-%m-%d %H:%M')  создана копия: $(basename "$ARCHIVE") ($SIZE)"

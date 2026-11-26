@@ -228,10 +228,12 @@ function applyRole() {
   document.body.classList.toggle("is-admin", isAdmin());
   document.body.classList.toggle("is-teacher", state.me?.role === "teacher");
   document.body.classList.toggle("is-sadmin", isSchoolAdmin());
+  document.body.classList.toggle("can-checkin", canManageCheckins());
   renderMe();
   if (!isAdmin() && currentPage() === "users") showPage(canEdit() ? "journal" : "stats");
   // showPage, а не switchPage: адрес не трогаем — иначе ссылка #prizes или #cards
   // при загрузке перезаписалась бы на #stats раньше, чем её прочитает applyRoute()
+  if (!canManageCheckins() && currentPage() === "checkin") showPage(canEdit() ? "journal" : "stats");
   if (!canEdit() && currentPage() === "journal") showPage("stats");
   if (!isSchoolAdmin() && currentPage() === "cards") showPage(canEdit() ? "journal" : "stats");
 }
@@ -247,6 +249,8 @@ function renderAll() {
   renderTodayStrip();
   renderSchedule();
   if (currentPage() === "stats") loadStats();
+  if (currentPage() === "checkin") loadCheckin();
+  else refreshCheckinBadge();
   if (currentPage() === "monitor") loadMonitor();
   if (currentPage() === "lessons") loadLessonRuns();
   if (isAdmin()) renderUsers();
@@ -263,6 +267,10 @@ function renderSchoolMenu() {
             onclick="selectSchool(${s.id})"><span>${escapeHtml(s.name)}</span>${s.id === activeSchool ? icon("check", "ic ic-sm") : ""}</button>`);
   if (state.schools.length) items.push(`<div class="menu-sep"></div>`);
   if (school) items.push(`<button role="menuitem" onclick="openTheme()">${icon("palette", "ic ic-sm")}Оформление школы…</button>`);
+  if (school && canManageCheckins()) {
+    const placed = school.lat !== null && school.lat !== undefined;
+    items.push(`<button role="menuitem" onclick="openSchoolLocation()">${icon("pin", "ic ic-sm")}Место на карте…${placed ? "" : `<span class="menu-note">не задано</span>`}</button>`);
+  }
   if (isAdmin()) {
     items.push(`<button role="menuitem" onclick="openSchool()">${icon("plus", "ic ic-sm")}Добавить школу</button>`);
     if (school) {
@@ -372,7 +380,7 @@ function renderJournalHome() {
 
   const clock = new Date();
   const nowMinutes = clock.getHours() * 60 + clock.getMinutes();
-  const lessons = todayLessons(schoolSchedule().filter((e) => e.weekday === isoWeekday(day)));
+  const lessons = todayLessons(schoolSchedule().filter((e) => e.weekday === isoWeekday(day) && entryShownOn(e, day)));
   let nextFound = false;
   tiles.innerHTML = lessons.length ? `<div class="tile-grid lessons">${lessons.map((group) => {
     const ids = group.map((e) => e.class_id);
@@ -2185,19 +2193,20 @@ function renderUsers() {
     const schools = admin
       ? `<span class="muted">все школы</span>`
       : (user.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean)
-          .map((name) => `<span class="tag">${escapeHtml(name)}</span>`).join("") || `<span class="muted">нет школ</span>`;
+          .map((name) => `<span class="tag" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`).join("") || `<span class="muted">нет школ</span>`;
     const roleTag = admin ? `<span class="tag tag-star">администратор</span>`
       : user.role === "school_admin" ? `<span class="tag tag-accent">администрация школы</span>`
       : `<span class="tag">учитель</span>`;
+    const badges = checkinBadges(user);
     return `
       <div class="user-row">
-        <span class="n">${staffAvatar(user)}<span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span></span>
+        <span class="n">${staffAvatar(user)}<span class="n-text"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}</span></span>
         <span class="login-cell"><span class="code-chip" title="${escapeHtml(user.login)}">${escapeHtml(user.login)}</span></span>
         <span>${staffPassword(user)}</span>
         <span>${roleTag}</span>
         <span class="tag-row">${schools}</span>
         <span class="acts">
-          <button class="icon-btn boxed" title="${admin ? "Имя" : "Имя, роль и школы"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
+          <button class="icon-btn boxed" title="${admin ? "Имя и отметки" : "Имя, роль, школы и отметки"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
           ${self ? "" : `<button class="icon-btn boxed" title="Выдать новый пароль" aria-label="Новый пароль" onclick="resetUserPassword(${user.id})">${icon("key", "ic ic-sm")}</button>`}
           ${self ? "" : `<button class="icon-btn boxed danger" title="Удалить" aria-label="Удалить" onclick="removeUser(${user.id})">${icon("trash", "ic ic-sm")}</button>`}
         </span>
@@ -2217,6 +2226,11 @@ function pickUserRole(role) {
   userRole = role;
   document.querySelectorAll("#userRole button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.role === role)));
   $("userRoleHint").textContent = ROLE_HINTS[role];
+  // Администрация школы только смотрит: ни отметок, ни раздела «Отметки»
+  const target = (state.users || []).find((u) => u.id === userTarget);
+  const admin = target?.role === "superadmin";
+  $("userCheckinField").hidden = role === "school_admin" && !admin;
+  $("userManagerRow").hidden = admin || role !== "teacher";
 }
 
 function openUser(id = null) {
@@ -2235,6 +2249,10 @@ function openUser(id = null) {
       ? `<button class="btn btn-quiet btn-sm user-photo-drop" onclick="dropUserPhoto(${user.id})">${staffAvatar(user)}Убрать фото сотрудника</button>` : "");
   }
   $("userRoleField").hidden = admin;
+  $("userTracked").checked = Boolean(user?.checkin_tracked);
+  $("userManager").checked = Boolean(user?.checkin_manager);
+  $("userRate").value = user?.hourly_rate ?? "";
+  renderUserTelegram(user);
   pickUserRole(user?.role === "school_admin" ? "school_admin" : "teacher");
   // Администратор видит все школы — галочки ему не нужны
   $("userSchoolsField").hidden = admin;
@@ -2250,10 +2268,19 @@ async function saveUser() {
   const login = $("userLogin").value.trim().toLowerCase();
   const school_ids = [...$("userSchools").querySelectorAll("input:checked")].map((i) => parseInt(i.value));
   if (!name) return toast("Введите имя", "error");
+  let checkin;
+  try {
+    checkin = { checkin_tracked: $("userTracked").checked, hourly_rate: readRate() };
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  if (userRole === "school_admin") checkin = { checkin_tracked: false };
   try {
     if (userTarget) {
       const target = (state.users || []).find((u) => u.id === userTarget);
-      const json = target?.role === "superadmin" ? { name } : { name, school_ids, role: userRole };
+      const json = target?.role === "superadmin" ? { name, ...checkin }
+        : { name, school_ids, role: userRole, ...checkin,
+            checkin_manager: userRole === "teacher" && $("userManager").checked };
       await api(`/api/users/${userTarget}`, { method: "PATCH", json });
       closeModal("modalUser");
       await loadState();
@@ -2263,6 +2290,10 @@ async function saveUser() {
       const result = await api("/api/users", {
         method: "POST", json: { name, login, school_ids, role: userRole, password: $("userPassword").value || null },
       });
+      const manager = userRole === "teacher" && $("userManager").checked;
+      if (checkin.checkin_tracked || checkin.hourly_rate !== null && checkin.hourly_rate !== undefined || manager) {
+        await api(`/api/users/${result.user.id}`, { method: "PATCH", json: { ...checkin, checkin_manager: manager } });
+      }
       closeModal("modalUser");
       await loadState();
       showCredentials(result.user, result.password);
@@ -2355,6 +2386,7 @@ function showPage(name) {
   if (name === "cards") renderCardsPage();
   if (name === "stats") loadStats();
   if (name === "schedule") renderSchedule();
+  if (name === "checkin") loadCheckin();
   if (name === "monitor") loadMonitor();
   if (name === "lessons") loadLessonRuns();
   window.scrollTo(0, 0);
@@ -2480,11 +2512,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!document.hidden && currentPage() === "journal" && journalView === "home") renderJournalHome();
   }, 60000);
 
+  // Кнопка «Открыть в панели» из группы «Отметки» ведёт на /teacher#checkin-lesson-<номер>
+  window.addEventListener("hashchange", openCheckinFromHash);
+
   try {
     await loadState();
     applyRoute();
     setRoute(true);
     reportSwitchedLogin();
+    openCheckinFromHash();
     openLiveFromAddress();
   } catch (error) {
     toast(error.message, "error");

@@ -132,7 +132,7 @@ def test_v8_schedule_gets_bells_and_cells():
     school = migrated["schools"][0]
     assert school["bells"] == db.default_bells() and school["days"] == 5
     assert [e["lesson"] for e in migrated["schedule"]] == [1, None, None]
-    assert migrated["version"] == db.DB_VERSION == 9
+    assert migrated["version"] == db.DB_VERSION
 
 
 def test_migration_is_idempotent():

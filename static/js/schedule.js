@@ -16,9 +16,12 @@ const MAX_BELLS = 12;
 let scheduleClass = null;     // фильтр на вкладке «Расписание»: null — все классы
 let scheduleTarget = null;    // занятие в окне правки; null — новое
 let scheduleDays = new Set();
-let cellPick = null;          // открытая ячейка: { school, weekday, lesson, combine, draft }
-                              // combine — выбор нескольких классов, draft — отмеченные id
+let cellPick = null;          // открытая ячейка: { school, weekday, lesson, date, combine, draft }
+                              // date — день открытой недели, combine — выбор нескольких классов,
+                              // draft — отмеченные id
 let bellsDraft = [];          // время уроков в окне «Время уроков»
+let scheduleWeek = 0;         // 0 — эта неделя, −1 — прошлая, 1 — следующая
+let scheduleSplit = false;    // окно занятия в режиме «новое время с даты»
 
 /** День недели ISO-даты: 1 — понедельник … 7 — воскресенье. */
 function isoWeekday(iso) {
@@ -30,11 +33,27 @@ function isoDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Даты текущей недели: понедельник … воскресенье. */
-function thisWeekDates() {
+/** Даты недели: понедельник … воскресенье. offset — сколько недель от текущей. */
+function thisWeekDates(offset = 0) {
   const now = new Date();
-  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7) + offset * 7);
   return Array.from({ length: 7 }, (_, i) => isoDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)));
+}
+
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа",
+                    "сентября", "октября", "ноября", "декабря"];
+
+/** «23–29 ноября» или «30 ноября – 6 декабря». */
+function weekRangeLabel(dates) {
+  const [, m1, d1] = dates[0].split("-").map(Number);
+  const [, m2, d2] = dates[6].split("-").map(Number);
+  return m1 === m2 ? `${d1}–${d2} ${MONTHS_GEN[m2 - 1]}` : `${d1} ${MONTHS_GEN[m1 - 1]} – ${d2} ${MONTHS_GEN[m2 - 1]}`;
+}
+
+function shiftScheduleWeek(step) {
+  scheduleWeek = step === 0 ? 0 : scheduleWeek + step;
+  closeCellPop();
+  renderSchedule();
 }
 
 /* ── Время уроков: чистые функции (проверяются через Node) ───── */
@@ -106,12 +125,17 @@ function schoolSchedule() {
     .sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start));
 }
 
+/** Занятия открытой в таблице недели: каждое — если действует в свой день этой недели. */
+function weekSchedule(dates = thisWeekDates(scheduleWeek)) {
+  return schoolSchedule().filter((e) => entryShownOn(e, dates[e.weekday - 1]));
+}
+
 function schoolBells() {
   return schoolById(activeSchool)?.bells || [];
 }
 
 /** Занятия ячейки — классы урока в порядке списка классов. */
-function cellEntries(weekday, lesson, all = schoolSchedule()) {
+function cellEntries(weekday, lesson, all = weekSchedule()) {
   const order = new Map(sortedClasses(activeSchool).map((c, i) => [c.id, i]));
   return all.filter((e) => e.weekday === weekday && e.lesson === lesson)
     .sort((a, b) => (order.get(a.class_id) ?? 0) - (order.get(b.class_id) ?? 0));
@@ -177,7 +201,7 @@ function renderTodayStrip() {
   const host = $("todayStrip");
   if (!host) return;
   const day = lessonDay();
-  const entries = schoolSchedule().filter((e) => e.weekday === isoWeekday(day));
+  const entries = schoolSchedule().filter((e) => e.weekday === isoWeekday(day) && entryShownOn(e, day));
   host.hidden = !entries.length || !canEdit();
   if (host.hidden) return;
   const joint = typeof jointClasses !== "undefined" ? jointClasses : null;
@@ -241,11 +265,14 @@ function renderSchedule() {
     closeCellPop();
     return;
   }
-  const all = schoolSchedule();
+  const dates = thisWeekDates(scheduleWeek);
+  const all = weekSchedule(dates);
   const bells = schoolBells();
   const days = visibleDays(schoolById(activeSchool)?.days, all);
-  const dates = thisWeekDates();
   const today = isoDate(new Date());
+  const range = weekRangeLabel(dates);
+  $("weekLabel").textContent = scheduleWeek === 0 ? `Эта неделя · ${range}` : range;
+  $("weekLabel").setAttribute("aria-current", String(scheduleWeek === 0));
   grid.style.setProperty("--days", days);
 
   const head = `<div class="sg-row sg-head" role="row">
@@ -291,12 +318,14 @@ function scheduleCell(weekday, lesson, all, date, today) {
     const room = entries.find((e) => e.room)?.room || "";
     const teachers = [...new Set(entries.map((e) => staffName(e.user_id)).filter(Boolean))].join(", ");
     const meta = [room ? `каб. ${escapeHtml(room)}` : "", escapeHtml(teachers)].filter(Boolean).join(" · ");
+    const bounds = entries.map((e) => entryBoundsLabel(e, today)).find(Boolean) || "";
     inner = `<span class="sg-fill ${done ? "done" : ""}">
       <b class="sg-class ${entries.length > 1 ? "joint" : ""}" title="${escapeHtml(full)}">${escapeHtml(name)}</b>
       ${meta ? `<span class="sg-meta">${meta}</span>` : ""}
+      ${bounds ? `<span class="sg-valid">${escapeHtml(bounds)}</span>` : ""}
       ${done ? `<span class="sg-state ok">${icon("check", "ic ic-xs")}проведён</span>`
         : missed ? `<span class="sg-state">не отмечен</span>` : ""}</span>`;
-    label = `${where}: ${entries.length > 1 ? "вместе " : ""}${full}${done ? ", проведён" : ""}`;
+    label = `${where}: ${entries.length > 1 ? "вместе " : ""}${full}${bounds ? `, ${bounds}` : ""}${done ? ", проведён" : ""}`;
   } else {
     inner = scheduleEditable() ? `<span class="sg-add">${icon("plus", "ic ic-sm")}</span>` : "";
     label = `${where}: свободно`;
@@ -315,8 +344,9 @@ function scheduleCard(entry, date, today) {
   const teacher = staffName(entry.user_id);
   const tag = done ? `<span class="sch-state ok">${icon("check", "ic ic-xs")}проведён</span>`
     : missed ? `<span class="sch-state">не отмечен</span>` : "";
+  const bounds = entryBoundsLabel(entry, today);
   const inner = `
-    <span class="sch-time">${WEEKDAYS[entry.weekday - 1]} · ${escapeHtml(entry.start)}–${escapeHtml(entry.end)}</span>
+    <span class="sch-time">${WEEKDAYS[entry.weekday - 1]} · ${escapeHtml(entry.start)}–${escapeHtml(entry.end)}${bounds ? `<span class="sch-valid">${escapeHtml(bounds)}</span>` : ""}</span>
     <span class="sch-class">${escapeHtml(cls?.name || "")}</span>
     <span class="sch-meta">${entry.room ? `каб. ${escapeHtml(entry.room)}` : ""}${entry.room && teacher ? " · " : ""}${escapeHtml(teacher)}</span>
     ${tag}`;
@@ -340,7 +370,8 @@ function openCell(event, weekday, lesson) {
   closeMenus();
   if (!sortedClasses(activeSchool).length) return toast("Сначала добавьте классы", "error");
   const ids = cellEntries(weekday, lesson).map((e) => e.class_id);
-  cellPick = { school: activeSchool, weekday, lesson, combine: ids.length > 1, draft: new Set(ids) };
+  const date = thisWeekDates(scheduleWeek)[weekday - 1];
+  cellPick = { school: activeSchool, weekday, lesson, date, combine: ids.length > 1, draft: new Set(ids) };
   document.querySelectorAll("#weekGrid .sg-cell[aria-expanded]").forEach((b) =>
     b.setAttribute("aria-expanded", String(b.dataset.cell === `${weekday}-${lesson}`)));
   renderCellPop();
@@ -382,6 +413,8 @@ function renderCellPop() {
   pop.innerHTML = `
     <div class="cp-head"><b id="cellPopTitle">${WEEKDAYS[weekday - 1]} · ${lesson}-й урок</b>
       <span>${escapeHtml(bell.start)}–${escapeHtml(bell.end)}</span></div>
+    ${cellPick.date > isoDate(new Date()) && scheduleWeek > 0
+      ? `<p class="cp-hint">Правка действует с ${escapeHtml(dotted(cellPick.date))}; прошлые недели не меняются.</p>` : ""}
     <div class="cp-classes" role="${combine ? "group" : "radiogroup"}" aria-label="${combine ? "Классы урока" : "Класс"}">
       ${buttons.join("")}
     </div>
@@ -460,10 +493,10 @@ function placeCellPop() {
 
 /** Классы урока целиком: [] — убрать урок. */
 async function saveCell(classIds, teacherId) {
-  const { weekday, lesson } = cellPick;
+  const { weekday, lesson, date } = cellPick;
   await api("/api/schedule/cell", {
     method: "PUT",
-    json: { school_id: activeSchool, weekday, lesson, class_ids: classIds, user_id: teacherId },
+    json: { school_id: activeSchool, weekday, lesson, date, class_ids: classIds, user_id: teacherId },
   });
 }
 
@@ -506,7 +539,8 @@ function editCellEntry(id) {
 /* ── Окно «Время уроков» ──────────────────────────────────── */
 
 function lessonsInUse() {
-  return new Set(schoolSchedule().filter((e) => e.lesson).map((e) => e.lesson));
+  const today = isoDate(new Date());
+  return new Set(schoolSchedule().filter((e) => e.lesson && !(e.valid_to && e.valid_to < today)).map((e) => e.lesson));
 }
 
 function openBells() {
@@ -628,6 +662,7 @@ function openScheduleEntry(id = null) {
   const classes = sortedClasses(activeSchool);
   if (!classes.length) return toast("Сначала добавьте классы", "error");
   scheduleTarget = id;
+  scheduleSplit = false;
   const entry = id ? (state.schedule || []).find((e) => e.id === id) : null;
   $("scheduleTitle").textContent = entry ? "Занятие" : "Занятие в другое время";
   const together = entry?.lesson ? cellEntries(entry.weekday, entry.lesson) : [];
@@ -649,8 +684,39 @@ function openScheduleEntry(id = null) {
   $("schTeacher").innerHTML = `<option value="">не указан</option>` +
     teachers.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join("");
   $("schTeacher").value = String(entry ? entry.user_id ?? "" : state.me?.id ?? "");
+  $("schFromLabel").textContent = "Действует с";
+  $("schFrom").value = entry?.valid_from || "";
+  $("schTo").value = entry?.valid_to || "";
+  $("schDatesHint").textContent = entry && !entry.valid_from && entry.created_at
+    ? `Пусто — с ${dotted(entry.created_at.slice(0, 10))}, когда занятие внесли, и без конца.`
+    : "Пусто — с сегодняшнего дня и без конца.";
   $("schDelete").hidden = !entry;
+  $("schSplit").hidden = !entry;
   openModal("modalSchedule");
+}
+
+/** Ближайший после сегодняшнего день с этим днём недели — «с какого дня» по умолчанию. */
+function nextWeekdayDate(weekday) {
+  const now = new Date();
+  const ahead = ((weekday - (((now.getDay() + 6) % 7) + 1)) + 7) % 7 || 7;
+  return isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + ahead));
+}
+
+/** Окно переходит в «новое время с даты»: старое занятие закроется накануне, новое начнётся с даты. */
+function startScheduleSplit() {
+  const entry = (state.schedule || []).find((e) => e.id === scheduleTarget);
+  if (!entry) return;
+  scheduleSplit = true;
+  $("scheduleTitle").textContent = "Новое время с даты";
+  $("scheduleSub").textContent = "Старое занятие будет действовать до этого дня, новое — с него. "
+    + "Прошедшие уроки и отметки не изменятся.";
+  $("schFromLabel").textContent = "С какого дня";
+  $("schFrom").value = nextWeekdayDate(entry.weekday);
+  $("schTo").value = "";
+  $("schDatesHint").textContent = "«По» — если новое время тоже временное. Пусто — без конца.";
+  $("schSplit").hidden = true;
+  $("schDelete").hidden = true;
+  $("schStart").focus();
 }
 
 async function saveScheduleEntry() {
@@ -659,25 +725,56 @@ async function saveScheduleEntry() {
   if (!scheduleDays.size) return toast("Отметьте хотя бы один день недели", "error");
   if (!start || !end || end <= start) return toast("Конец занятия должен быть позже начала", "error");
   const teacher = $("schTeacher").value ? parseInt($("schTeacher").value) : null;
+  const validFrom = $("schFrom").value || null;
+  const validTo = $("schTo").value || null;
+  if (validFrom && validTo && validTo < validFrom) return toast("«По» не может быть раньше «с»", "error");
+  const room = $("schRoom").value.trim();
   try {
-    if (scheduleTarget) {
+    if (scheduleSplit) {
+      await splitScheduleEntry({ start, end, room, user_id: teacher, valid_from: validFrom, valid_to: validTo });
+    } else if (scheduleTarget) {
       await api(`/api/schedule/${scheduleTarget}`, {
         method: "PATCH",
-        json: { weekday: [...scheduleDays][0], start, end, room: $("schRoom").value.trim(), user_id: teacher },
+        json: { weekday: [...scheduleDays][0], start, end, room, user_id: teacher,
+                valid_from: validFrom, valid_to: validTo },
       });
     } else {
       await api("/api/schedule", {
         method: "POST",
-        json: { class_id: parseInt($("schClass").value), weekdays: [...scheduleDays], start, end,
-                room: $("schRoom").value.trim(), user_id: teacher },
+        json: { class_id: parseInt($("schClass").value), weekdays: [...scheduleDays], start, end, room,
+                user_id: teacher, valid_from: validFrom, valid_to: validTo },
       });
     }
     closeModal("modalSchedule");
     await loadState();
-    toast("Расписание сохранено", "success");
+    if (!scheduleSplit) toast("Расписание сохранено", "success");
   } catch (error) {
     toast(error.message, "error");
   }
+}
+
+/** Смена с даты: старому занятию — «по» накануне, затем новое с даты.
+    Не сохранилось новое — старому возвращаем прежний срок, ничего не теряется. */
+async function splitScheduleEntry(fields) {
+  const old = (state.schedule || []).find((e) => e.id === scheduleTarget);
+  if (!old) throw new Error("Занятие не найдено");
+  if (!fields.valid_from) throw new Error("Укажите, с какого дня новое время");
+  const oldFrom = old.valid_from || (old.created_at || "").slice(0, 10);
+  if (oldFrom && fields.valid_from <= oldFrom) {
+    throw new Error("Новое время должно начинаться позже, чем действует старое — или просто измените занятие");
+  }
+  const until = dayBefore(fields.valid_from);
+  await api(`/api/schedule/${old.id}`, { method: "PATCH", json: { valid_to: until } });
+  try {
+    await api("/api/schedule", {
+      method: "POST",
+      json: { class_id: old.class_id, weekdays: [...scheduleDays], ...fields },
+    });
+  } catch (error) {
+    await api(`/api/schedule/${old.id}`, { method: "PATCH", json: { valid_to: old.valid_to ?? null } }).catch(() => {});
+    throw error;
+  }
+  toast(`Старое время — по ${dotted(until)}, новое — с ${dotted(fields.valid_from)}`, "success");
 }
 
 function removeScheduleEntry() {

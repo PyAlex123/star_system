@@ -230,6 +230,56 @@ def _as_text(sheet) -> None:
             cell.data_type = "s"
 
 
+# ── Отчёт по отметкам преподавателей ─────────────────────────────────────────
+
+def _append_text_safe(sheet, values) -> None:
+    """Строка в лист; текст, начинающийся с «=», остаётся текстом, а не формулой."""
+    sheet.append(list(values))
+    _as_text(sheet)
+
+
+def build_hours_report(report: Dict[str, Any], title: str) -> bytes:
+    """Месячный отчёт: преподаватели (часы и суммы), школы (часы для счёта),
+    уроки по одному — чтобы сверить с ручным подсчётом."""
+    book = Workbook()
+    teachers = book.active
+    teachers.title = "Преподаватели"
+    teachers.append(["Преподаватель", "Уроков по плану", "Подтверждено", "Опозданий", "Минут опоздания",
+                     "Не засчитано", "Ждут решения", "Отменено", "Часы", "Ставка, сум/ч", "Сумма, сум"])
+    _style_header(teachers, (30, 14, 14, 12, 14, 13, 13, 11, 10, 14, 14))
+    for row in report["teachers"]:
+        _append_text_safe(teachers, [row["name"], row["planned"], row["confirmed"], row["late"],
+                                     row["late_minutes"], row["rejected"], row["pending"], row["cancelled"],
+                                     row["hours"], row["rate"], row["amount"]])
+    totals = report["totals"]
+    teachers.append(["Итого", totals["lessons"], totals["confirmed"], totals["late"], None, None,
+                     totals["pending"], None, totals["hours"], None, totals["amount"]])
+    for cell in teachers[teachers.max_row]:
+        cell.font = Font(bold=True)
+
+    schools = book.create_sheet("Школы")
+    schools.append(["Школа", "Преподаватель", "Уроков засчитано", "Часы"])
+    _style_header(schools, (30, 30, 16, 10))
+    for school in report["schools"]:
+        _append_text_safe(schools, [school["name"], "Всего", school["lessons"], school["hours"]])
+        for cell in schools[schools.max_row]:
+            cell.font = Font(bold=True)
+        for teacher in school["teachers"]:
+            _append_text_safe(schools, ["", teacher["name"], None, teacher["hours"]])
+
+    lessons = book.create_sheet("Уроки")
+    lessons.append(["Дата", "Начало", "Конец", "Школа", "Класс", "Преподаватель", "Статус",
+                    "Опоздание, мин", "Часы", "Причина проверки", "Примечание"])
+    _style_header(lessons, (12, 8, 8, 26, 10, 28, 14, 14, 8, 30, 30))
+    for item in report.get("lessons", []):
+        _append_text_safe(lessons, [item["date"], item["start"], item["end"], item["school"], item["class"],
+                                    item["teacher"], item["status_label"], item["late_minutes"], item["hours"],
+                                    ", ".join(item["flag_labels"]), item["note"]])
+    lessons.auto_filter.ref = f"A1:K{lessons.max_row}"
+    book.properties.title = title
+    return _to_bytes(book)
+
+
 def build_monitoring_export(report: Dict[str, Any]) -> bytes:
     """Два листа: «Сводка» (доли по вариантам, среднее, тексты) и «Ответы» (участник × вопрос)."""
     book = Workbook()

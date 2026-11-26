@@ -1,5 +1,5 @@
 """Расписание занятий: права, пересечения, каскад, расписание в кабинете ученика."""
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -330,3 +330,72 @@ def test_unchanged_edit_is_not_logged(teacher):
     entry = load_db()["schedule"][0]
     teacher.patch(f"/api/schedule/{entry['id']}", json={"room": ""})
     assert len(load_db()["schedule_log"]) == 1
+
+
+# ── Таблица и срок действия занятия (отметки преподавателей) ────────────────
+
+def _monday(weeks=1):
+    today = date.today()
+    return today - timedelta(days=today.weekday()) + timedelta(weeks=weeks)
+
+
+def test_cell_on_future_week_changes_from_that_date(teacher):
+    """Правка ячейки на будущей неделе действует с её даты: прежний класс стоит до неё,
+    новый — с неё; эта неделя не меняется."""
+    monday = _monday(1)
+    first = cell(teacher, class_id=1).json()["entry"]
+    r = cell(teacher, class_id=2, date=monday.isoformat())
+    assert r.status_code == 200, r.text
+    second = r.json()["entry"]
+    assert second["valid_from"] == monday.isoformat() and second["lesson"] == 1
+    saved = {e["id"]: e for e in load_db()["schedule"]}
+    assert saved[first["id"]]["valid_to"] == (monday - timedelta(days=1)).isoformat(), "5-А — до будущей недели"
+    assert cell(teacher, class_id=1).json().get("unchanged") is True, "на этой неделе в ячейке по-прежнему 5-А"
+    assert cell(teacher, class_id=2, date=monday.isoformat()).json().get("unchanged") is True
+
+    assert cell(teacher, class_id=None, date=monday.isoformat()).status_code == 200
+    assert [e["id"] for e in load_db()["schedule"]] == [first["id"]], "убранный с будущей недели класс удалён"
+
+
+def test_cell_future_week_keeps_current_class_until_then(teacher):
+    """Убрать урок на будущей неделе — занятие заканчивается накануне, а не исчезает."""
+    monday = _monday(2)
+    entry = cell(teacher, class_id=1).json()["entry"]
+    assert cell(teacher, class_id=None, date=monday.isoformat()).status_code == 200
+    saved = load_db()["schedule"]
+    assert [(e["id"], e["valid_to"]) for e in saved] == [(entry["id"], (monday - timedelta(days=1)).isoformat())]
+
+
+def test_cell_date_checks(teacher):
+    monday = _monday(1)
+    r = cell(teacher, weekday=2, class_id=1, date=monday.isoformat())
+    assert r.status_code == 400 and "днём недели" in r.json()["detail"]
+    assert cell(teacher, class_id=1, date="31.12.2026").status_code == 422
+    past = cell(teacher, class_id=1, date=_monday(-2).isoformat()).json()["entry"]
+    assert past["valid_from"] is None, "прошлую неделю не переписать — правка действует с сегодня"
+
+
+def test_closed_entry_frees_the_cell(teacher):
+    """Закончившееся занятие класса не мешает поставить тот же класс в то же время позже."""
+    monday = _monday(1)
+    first = cell(teacher, class_id=1).json()["entry"]
+    sunday = (monday - timedelta(days=1)).isoformat()
+    assert teacher.patch(f"/api/schedule/{first['id']}", json={"valid_to": sunday}).status_code == 200
+    r = cell(teacher, class_id=1, date=monday.isoformat())
+    assert r.status_code == 200, r.text
+    assert r.json()["entry"]["id"] != first["id"] and r.json()["entry"]["valid_from"] == monday.isoformat()
+    r = add(teacher, class_id=1, weekdays=[1], start="08:00", end="08:45")
+    assert r.status_code == 400 and "уже есть занятие" in r.json()["detail"], "без срока — пересекается с обоими"
+
+
+def test_bells_ignore_ended_entries(teacher):
+    """Закончившееся занятие на уроке, которого больше нет, — история: уходит «в другое время»."""
+    entry = cell(teacher, weekday=1, lesson=3, class_id=1).json()["entry"]
+    old = (date.today() - timedelta(days=30)).isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    assert teacher.patch(f"/api/schedule/{entry['id']}",
+                         json={"valid_from": old, "valid_to": yesterday}).status_code == 200
+    r = bells(teacher, [("08:00", "08:45"), ("08:55", "09:40")])
+    assert r.status_code == 200, r.text
+    saved = load_db()["schedule"][0]
+    assert saved["lesson"] is None and saved["start"] == "09:50", "время прошлых уроков не меняется"

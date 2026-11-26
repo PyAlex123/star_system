@@ -11,9 +11,10 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
+from .checkin import bot as checkin_bot, scheduler as checkin_scheduler, store as checkin_store
 from .monitoring import store as monitoring_store
-from .routers import (auth, cards, excel, lessons, m_public, me, monitoring, prizes, schedule, schools, settings,
-                      stats, students, telegram, users)
+from .routers import (auth, cards, checkin, excel, lessons, m_public, me, monitoring, prizes, schedule, schools,
+                      settings, stats, students, telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
@@ -40,6 +41,9 @@ def _startup_banner() -> None:
     if config.DEV_LOGIN:
         log.warning("DEV_LOGIN включён: вход в кабинет возможен без Telegram. "
                     "На боевом сервере выключите его!")
+    if config.CHECKIN_TOKEN_CLASH:
+        log.error("Бот отметок не запущен: у него тот же токен, что у бота учеников. "
+                  "Создайте отдельного бота в @BotFather.")
     if not config.BOT_TOKEN:
         log.warning("BOT_TOKEN пуст — бот выключен. Заполните .env и перезапустите.")
     elif not config.BOT_USERNAME:
@@ -51,10 +55,15 @@ async def lifespan(app: FastAPI):
     for directory in (config.AVATARS_UPLOAD_DIR, config.PRIZES_UPLOAD_DIR):
         directory.mkdir(parents=True, exist_ok=True)
     _startup_banner()
+    checkin_store.restore_if_missing()
     await start_bot()
+    await checkin_bot.start()
+    checkin_scheduler.start()
     try:
         yield
     finally:
+        await checkin_scheduler.stop()
+        await checkin_bot.stop()
         await stop_bot()
 
 
@@ -212,6 +221,7 @@ app.include_router(cards.router)
 app.include_router(users.router)
 app.include_router(settings.router)
 app.include_router(excel.router)
+app.include_router(checkin.router)
 app.include_router(monitoring.router)
 app.include_router(monitoring.pages)
 app.include_router(m_public.router)
@@ -346,4 +356,5 @@ def healthz():
         "bot_mode": ("webhook" if config.USE_WEBHOOK else "polling") if config.BOT_ENABLED else None,
         "bot_username": config.BOT_USERNAME or None,
         "base_url": config.site_url("/"),
+        "checkin": {**checkin_bot.status(), **checkin_scheduler.status()},
     }
