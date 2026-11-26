@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
 
-from .. import db, passwords, schemas
+from .. import db, images, passwords, schemas
 from ..security import require_superadmin
 from .common import bad_request, clean_name, not_found
 
@@ -91,16 +91,35 @@ def reset_user_password(user_id: int, item: schemas.PasswordReset):
     return {"ok": True, "password": password}
 
 
+@router.delete("/{user_id}/photo")
+def drop_user_photo(user_id: int):
+    """Убрать фото сотрудника (например, неподходящее) — снова инициалы."""
+    removed: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        user = _user_or_404(database, user_id)
+        removed["url"] = images.avatar_upload_url(user)
+        user["avatar"] = None
+        return user
+
+    user = db.transaction(_apply)
+    images.drop_upload(removed.get("url"))
+    return {"ok": True, "user": db.public_user(user, with_password=True)}
+
+
 @router.delete("/{user_id}")
 def delete_user(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
     """Удалить учителя. Себя удалить нельзя — иначе можно остаться без администратора."""
     if user_id == me["id"]:
         raise bad_request("Нельзя удалить самого себя")
 
+    removed: Dict[str, Any] = {}
+
     def _apply(database: Dict[str, Any]):
         user = db.find_user(database, user_id)
         if not user:
             return db.NO_SAVE
+        removed["url"] = images.avatar_upload_url(user)
         if db.is_superadmin(user):
             admins = [u for u in database["users"] if db.is_superadmin(u)]
             if len(admins) == 1:
@@ -112,4 +131,5 @@ def delete_user(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
         return None
 
     db.transaction(_apply)
+    images.drop_upload(removed.get("url"))
     return {"ok": True}

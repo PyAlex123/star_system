@@ -164,3 +164,17 @@ body.picking .pick { display: flex; }
   .a4:last-child { break-after: auto; page-break-after: auto; }
   .cell[data-unsel="1"] { visibility: hidden; }
 }
+
+/* Без бота: логин и пароль — главное на карточке, крупнее */
+.c-side.web-only .c-hint { margin-top: 1mm; }
+.c-side.web-only .c-web { margin-top: auto; border-top: 0; padding-top: 0; gap: 0.8mm; }
+.c-side.web-only .c-site { font-size: 8pt; }
+/* подпись над значением — логину достаётся вся ширина колонки рядом с QR */
+.c-cred.big { flex-direction: column; gap: 0; font-size: 6.5pt; line-height: 1.2; }
+.c-cred.big b { font-size: 9.5pt; line-height: 1.25; white-space: nowrap; overflow-wrap: normal; }
+.c-cred.big.long b { font-size: 7pt; }
+
+/* Галочка «QR и вход через Telegram-бота» в панели над листами */
+.pswitch { display: inline-flex; align-items: center; gap: 8px; min-height: 38px; font: 500 14px/18px var(--font-ui); color: var(--text); cursor: pointer; }
+.pswitch input { width: 18px; height: 18px; accent-color: var(--primary); cursor: inherit; }
+.pswitch:has(input:disabled) { color: var(--muted); cursor: not-allowed; }

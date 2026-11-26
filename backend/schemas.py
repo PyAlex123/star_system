@@ -63,6 +63,10 @@ class BulkImportItem(BaseModel):
     total_stars: int = Field(default=0, ge=0, le=100_000)
 
 
+class TelegramLogin(BaseModel):
+    enabled: bool
+
+
 class LessonAward(BaseModel):
     student_id: int
     stars: int

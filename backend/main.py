@@ -12,8 +12,8 @@ from starlette.middleware.gzip import GZipMiddleware
 from . import assets, config, db, themes
 from .bot.bot import start_bot, stop_bot
 from .monitoring import store as monitoring_store
-from .routers import (auth, cards, excel, lessons, m_public, me, monitoring, prizes, schedule, schools, stats,
-                      students, telegram, users)
+from .routers import (auth, cards, excel, lessons, m_public, me, monitoring, prizes, schedule, schools, settings,
+                      stats, students, telegram, users)
 from .security import panel_user, require_superadmin_page, require_teacher_page
 
 logging.basicConfig(
@@ -209,6 +209,7 @@ app.include_router(prizes.router)
 app.include_router(me.router)
 app.include_router(cards.router)
 app.include_router(users.router)
+app.include_router(settings.router)
 app.include_router(excel.router)
 app.include_router(monitoring.router)
 app.include_router(monitoring.pages)

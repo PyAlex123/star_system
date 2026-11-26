@@ -3,10 +3,14 @@
 Вид — по макету docs/design/«Звёзды - Печать.dc.html»: лист А4, 8 карточек
 (2×4, 95×69,25 мм), метки реза на полях, двойная рамка, QR 32 мм. Оформление —
 тема школы; сам лист всегда светлый (data-light): печать в любой теме белая.
+
+Вход через Telegram-бота можно выключить (settings.telegram_login): тогда QR ведёт
+на страницу входа сайта с подставленным логином, а код для бота не печатается.
 """
 import html
 import io
 from typing import Any, Dict, List
+from urllib.parse import quote
 
 import qrcode
 from fastapi import APIRouter, Depends, Request, Response
@@ -43,10 +47,18 @@ def _qr_png(data: str, box_size: int = 10) -> bytes:
     return buffer.getvalue()
 
 
+def qr_target(database: Dict[str, Any], student: Dict[str, Any]) -> str:
+    """Куда ведёт QR ученика: в бота или — пока бот выключен — на вход через сайт."""
+    if db.telegram_login(database):
+        return config.deep_link(student["token"])
+    return config.site_url(f"/enter?login={quote(student.get('login') or '')}")
+
+
 @router.get("/api/students/{student_id}/qr.png")
 def student_qr(student_id: int, size: int = 10, user: Dict[str, Any] = Depends(require_teacher)):
-    student = student_or_404(db.load_db(), student_id, user)
-    png = _qr_png(config.deep_link(student["token"]), box_size=max(4, min(20, size)))
+    database = db.load_db()
+    student = student_or_404(database, student_id, user)
+    png = _qr_png(qr_target(database, student), box_size=max(4, min(20, size)))
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
@@ -71,8 +83,9 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
-def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str) -> str:
+def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str, bot: bool = True) -> str:
     """Одна карточка: школа и класс, имя, QR, код 4+4, вход через сайт.
+    Без бота (bot=False) — QR на страницу входа, вместо кода — логин и пароль крупно.
     Украшение темы — печать (тетрадь), лента (квест), созвездие, скотч (стикербук)."""
     name = html.escape(student["name"])
     token = html.escape(student["token"])
@@ -97,7 +110,14 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str
         <div class="c-name{size}" title="{name}">{name}</div>
         <div class="c-row">
           <img class="qr" src="{base}/api/students/{student['id']}/qr.png?size=10" alt="QR-код входа: {name}">
-          <div class="c-side">
+          {_card_side(token, site, login, password, long_login) if bot else _card_side_web(site, login, password, long_login)}
+        </div>
+      </div></div>
+    </div>"""
+
+
+def _card_side(token: str, site: str, login: str, password: str, long_login: str) -> str:
+    return f"""<div class="c-side">
             <span class="c-caps">Код для бота</span>
             <span class="c-code" aria-label="{token}">{token[:4]}<span class="gap"></span>{token[4:]}</span>
             <span class="c-hint">Наведи камеру на QR — откроется бот. Если камера не читает, отправь боту код.</span>
@@ -107,10 +127,20 @@ def _card_html(student: Dict[str, Any], school: str, class_label: str, site: str
               <span class="c-cred{long_login}">логин <b>{login}</b></span>
               <span class="c-cred">пароль {password}</span>
             </span>
-          </div>
-        </div>
-      </div></div>
-    </div>"""
+          </div>"""
+
+
+def _card_side_web(site: str, login: str, password: str, long_login: str) -> str:
+    """Карточка без бота: QR открывает страницу входа с логином — остаётся ввести пароль."""
+    return f"""<div class="c-side web-only">
+            <span class="c-caps">Вход на сайте</span>
+            <span class="c-hint">Наведи камеру на QR — откроется страница входа. Введи пароль с карточки.</span>
+            <span class="c-web">
+              <span class="c-site">{site}</span>
+              <span class="c-cred big{long_login}">логин <b>{login}</b></span>
+              <span class="c-cred big">пароль {password}</span>
+            </span>
+          </div>"""
 
 
 _SCRIPT = """
@@ -133,6 +163,20 @@ function togglePickMode() {
   document.querySelectorAll(".pick").forEach((b) => b.setAttribute("aria-pressed", "true"));
   updatePickLabel();
 }
+async function setBot(input) {
+  input.disabled = true;
+  try {
+    const r = await fetch(document.body.dataset.base + "/api/settings/telegram-login", {
+      method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled: input.checked}),
+    });
+    if (!r.ok) throw new Error();
+    location.reload();
+  } catch (e) {
+    input.checked = !input.checked;
+    input.disabled = false;
+    alert("Не удалось сохранить. Обновите страницу и попробуйте ещё раз.");
+  }
+}
 function togglePick(button) {
   const cell = button.closest(".cell");
   const off = cell.getAttribute("data-unsel") !== "1";
@@ -148,7 +192,9 @@ function togglePick(button) {
 def class_cards(class_id: int, request: Request):
     """Печатная страница: листы А4 по 8 карточек (2×4) с метками реза."""
     database = db.load_db()
-    cls = class_or_404(database, class_id, panel_user(request))
+    user = panel_user(request)
+    cls = class_or_404(database, class_id, user)
+    bot = db.telegram_login(database)
 
     school = db.school_name_of_class(database, class_id) or config.SCHOOL_NAME
     theme = themes.theme_of_class(database, class_id)
@@ -159,7 +205,7 @@ def class_cards(class_id: int, request: Request):
     sheets = []
     for start in range(0, len(students), CARDS_PER_SHEET):
         chunk = students[start:start + CARDS_PER_SHEET]
-        cells = "".join(_card_html(s, school, cls["name"], site) for s in chunk)
+        cells = "".join(_card_html(s, school, cls["name"], site, bot) for s in chunk)
         cells += '<div class="cell blank"></div>' * (CARDS_PER_SHEET - len(chunk))
         sheets.append(f'<section class="a4"><div class="a4-grid">{cells}</div>{_MARKS}</section>')
 
@@ -174,6 +220,11 @@ def class_cards(class_id: int, request: Request):
 
     base = config.URL_PREFIX
     title = html.escape(f"{cls['name']} — {school}")
+    # Галочку меняет только администратор: бот один на все школы
+    admin = db.is_superadmin(user)
+    bot_switch = f"""<label class="pswitch" title="{'Бот один на все школы — настройка общая' if admin else 'Меняет администратор'}">
+      <input type="checkbox" {'checked' if bot else ''} {'' if admin else 'disabled'} onchange="setBot(this)">
+      <span>QR и вход через Telegram-бота</span></label>"""
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ru" {themes.html_attrs(theme, themes.page_mode(request))}>
 <head>
@@ -185,7 +236,7 @@ def class_cards(class_id: int, request: Request):
 <link rel="stylesheet" href="{base}{assets.versioned('css/theme.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/cards.css')}">
 </head>
-<body class="print-page">
+<body class="print-page" data-base="{base}">
 {ICONS_FILE.read_text(encoding="utf-8")}
 <div class="ptoolbar no-print">
   <div class="ptoolbar-in">
@@ -193,6 +244,7 @@ def class_cards(class_id: int, request: Request):
       <span class="ptitle-main">Карточки класса {html.escape(cls['name'])}</span>
       <span class="ptitle-sub">{html.escape(school)} · учеников: {count}{sheets_text}</span>
     </div>
+    {bot_switch}
     <div class="seg" role="radiogroup" aria-label="Превью печати">
       <button type="button" role="radio" aria-checked="true" id="modeColor" onclick="setBw(false)">Цвет</button>
       <button type="button" role="radio" aria-checked="false" id="modeBw" onclick="setBw(true)">Ч/б-превью</button>

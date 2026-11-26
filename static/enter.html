@@ -63,6 +63,15 @@ fetch(BASE + "/healthz").then((r) => r.json()).then((info) => {
   ["tgButton", "tgHint", "tgDivider"].forEach((id) => { document.getElementById(id).hidden = false; });
 }).catch(() => {});
 
+// QR с карточки (пока бот выключен) открывает /enter?login=… — остаётся ввести пароль
+{
+  const fromCard = new URLSearchParams(location.search).get("login");
+  if (fromCard) {
+    document.getElementById("login").value = fromCard;
+    document.getElementById("password").focus();
+  }
+}
+
 function clearError() {
   document.getElementById("error").hidden = true;
   document.getElementById("password").classList.remove("invalid");

@@ -9,7 +9,8 @@ from conftest import load_db, panel_client
 SA_LOGIN, SA_PASSWORD = "director", "direktor-2026"
 
 # Не панель: вход, кабинет ученика, вебхук бота. Смена своего пароля и выход — всем ролям.
-ALLOWED_FOR_ALL = {"/api/auth/teacher", "/api/auth/teacher/password", "/api/auth/teacher/logout"}
+ALLOWED_FOR_ALL = {"/api/auth/teacher", "/api/auth/teacher/password", "/api/auth/teacher/logout",
+                   "/api/auth/teacher/photo"}   # своё фото в профиле — всем ролям
 # /api/m/… — страница опроса ученика: без входа, по ссылке школы.
 NOT_PANEL = re.compile(r"^/api/(me|m|telegram|auth/(twa|dev|student))(/|$)")
 
@@ -111,4 +112,61 @@ def test_role_can_be_changed_but_not_for_admin(teacher, school_admin):
 def test_teacher_sees_colleague_names_only(school_teacher):
     state = school_teacher.get("/api/state").json()
     assert "users" not in state
-    assert all(set(u) == {"id", "name", "role"} for u in state["staff"])
+    assert all(set(u) == {"id", "name", "role", "avatar"} for u in state["staff"])
+
+
+# ── Фото в профиле сотрудника ────────────────────────────────────────────────
+
+def _png():
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 300), (200, 120, 40)).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def test_staff_photo_upload_and_drop(teacher, school_admin):
+    from backend import images
+    r = school_admin.post("/api/auth/teacher/photo", files={"file": ("me.png", _png(), "image/png")})
+    assert r.status_code == 200, r.text
+    url = r.json()["avatar"]["value"]
+    path = images.upload_path(url)
+    assert path.exists(), "фото сохранено"
+    me = school_admin.get("/api/state").json()["me"]
+    assert me["avatar"] == {"type": "photo", "value": url}
+    sa = next(u for u in teacher.get("/api/state").json()["users"] if u["login"] == SA_LOGIN)
+    assert sa["avatar"]["value"] == url, "администратор видит фото в «Сотрудниках»"
+
+    again = school_admin.post("/api/auth/teacher/photo", files={"file": ("me.png", _png(), "image/png")}).json()
+    assert not path.exists(), "прежний файл удалён"
+    assert school_admin.delete("/api/auth/teacher/photo").json()["avatar"] is None
+    assert not images.upload_path(again["avatar"]["value"]).exists()
+    assert school_admin.get("/api/state").json()["me"]["avatar"] is None
+
+
+def test_staff_photo_rejects_non_image(school_admin):
+    r = school_admin.post("/api/auth/teacher/photo", files={"file": ("x.png", b"not an image", "image/png")})
+    assert r.status_code == 400
+
+
+def test_admin_drops_staff_photo_and_file_goes_with_user(teacher, school_admin):
+    from backend import images
+    url = school_admin.post("/api/auth/teacher/photo",
+                            files={"file": ("me.png", _png(), "image/png")}).json()["avatar"]["value"]
+    sa = next(u for u in load_db()["users"] if u["login"] == SA_LOGIN)
+    assert school_admin.delete(f"/api/users/{sa['id']}/photo").status_code == 403, "чужое фото — только администратор"
+    r = teacher.delete(f"/api/users/{sa['id']}/photo")
+    assert r.status_code == 200 and r.json()["user"]["avatar"] is None
+    assert not images.upload_path(url).exists()
+
+    url = school_admin.post("/api/auth/teacher/photo",
+                            files={"file": ("me.png", _png(), "image/png")}).json()["avatar"]["value"]
+    assert teacher.delete(f"/api/users/{sa['id']}").status_code == 200
+    assert not images.upload_path(url).exists(), "удалили сотрудника — удалили и фото"
+
+
+def test_colleague_sees_staff_avatar(teacher, school_teacher, school_admin):
+    url = school_admin.post("/api/auth/teacher/photo",
+                            files={"file": ("me.png", _png(), "image/png")}).json()["avatar"]["value"]
+    staff = {u["name"]: u for u in school_teacher.get("/api/state").json()["staff"]}
+    assert staff["Директор Иванова"]["avatar"]["value"] == url

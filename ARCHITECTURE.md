@@ -289,7 +289,8 @@ location /stars/ {
       "password_hash": "…", "session_key": "…", "created_at": "…" },
     { "id": 2, "login": "teacher", "name": "Учитель", "role": "teacher",
       "school_ids": [1],              // учитель видит только эти школы
-      "password_shown": "provod4696" },  // выданный пароль; null после смены самим сотрудником
+      "password_shown": "provod4696",    // выданный пароль; null после смены самим сотрудником
+      "avatar": { "type": "photo", "value": "/static/uploads/avatars/avatar-….webp" } },  // null — инициалы
     { "id": 3, "login": "direktor", "name": "…", "role": "school_admin", "school_ids": [1] }
   ],
   "schools":  [ { "id": 1, "name": "Наша школа", "theme": "notebook",
@@ -331,7 +332,8 @@ location /stars/ {
       "room": "12", "user_id": 2, "created_at": "2026-11-23",    // weekday: 1 — пн … 7 — вс
       "lesson": 1 }                   // № урока школы — ячейка таблицы; null — «в другое время»
   ],
-  "settings": { "last_student_id": 112 }   // номера не повторяются
+  "settings": { "last_student_id": 112,    // номера не повторяются
+                "telegram_login": false }  // вход через бота выключен — QR карточек ведёт на /enter (по умолчанию true)
 }
 ```
 
@@ -352,7 +354,8 @@ location /stars/ {
   `db.public_user()` убирают их из любого ответа API, включая панель.
 - **`/api/state` зависит от того, кто спрашивает** (`db.public_state(db, user)`): учителю —
   только его школы с их классами, учениками, уроками и расписанием; список `users` с
-  `password_shown` — только суперадмину, остальным — `staff` (id, имя, роль) для подписей.
+  `password_shown` — только суперадмину, остальным — `staff` (id, имя, роль, аватар) для подписей.
+  Всем — `telegram_login` (включён ли вход через бота).
   Администрации школы ученики отдаются **без** `LOGIN_FIELDS`: кода карточки, логина,
   пароля, Telegram-данных и времени входа.
 - **Место в рейтинге — по заработанным звёздам** (`stats.earned()`): баланс плюс всё
@@ -435,6 +438,7 @@ location /stars/ {
 | POST | `/api/auth/teacher` | логин и пароль → httpOnly-cookie на 12 часов; защищён от перебора по логину и адресу |
 | POST | `/api/auth/teacher/password` | сменить свой пароль (нужен текущий, любая роль панели); другие входы завершаются, `password_shown` стирается |
 | POST | `/api/auth/teacher/logout` | удаляет cookie |
+| POST / DELETE | `/api/auth/teacher/photo` | своё фото в профиле (любая роль панели): квадрат 320 px, прежний файл удаляется; DELETE — снова инициалы |
 | POST | `/api/auth/preview?student_id=` | учитель смотрит кабинет глазами ученика (только своих школ) |
 | POST | `/api/auth/dev?student_id=` | отладочный вход; при `DEV_LOGIN=0` отдаёт 404 |
 
@@ -542,7 +546,9 @@ location /stars/ {
 | POST | `/api/users` | имя, логин, школы, `role`: `teacher` или `school_admin`; пароль свой или придуманный, виден в списке до смены |
 | PATCH | `/api/users/{id}` | имя, школы, роль; смена роли завершает входы; снятая школа пропадает сразу |
 | POST | `/api/users/{id}/password` | новый пароль (снова виден в списке), все входы завершаются |
-| DELETE | `/api/users/{id}` | нельзя удалить себя и последнего суперадмина |
+| DELETE | `/api/users/{id}/photo` | убрать фото сотрудника |
+| DELETE | `/api/users/{id}` | нельзя удалить себя и последнего суперадмина; фото удаляется вместе с сотрудником |
+| PUT | `/api/settings/telegram-login` | `{enabled}` — вход учеников через бота (`settings.py`, только суперадмин; бот один, настройка общая) |
 
 ### Excel — `backend/excel.py`, `backend/routers/excel.py`
 
@@ -604,8 +610,13 @@ location /stars/ {
 
 | Метод | Адрес |
 |---|---|
-| GET | `/api/students/{id}/qr.png?size=` — PNG, `Cache-Control: no-store` |
+| GET | `/api/students/{id}/qr.png?size=` — PNG, `Cache-Control: no-store`; что в нём — `qr_target()` |
 | GET | `/cards/{class_id}` — печатная страница A4 |
+
+**Без бота** (`settings.telegram_login = false`, галочка «QR и вход через Telegram-бота» над листами —
+меняет суперадмин): QR ведёт на `/enter?login=<логин>` (страница подставляет логин, остаётся пароль),
+код для бота не печатается, логин и пароль — крупно (`_card_side_web()`). В панели окно «Данные
+для входа» и колонка «Вход» журнала показывают логин вместо кода (`botLogin()`).
 
 Название школы берётся **из базы** (`db.school_name_of_class`), а не из `.env` — школ теперь много.
 Если `BOT_USERNAME` не заполнен, на странице печатается предупреждение: QR будут вести на сайт,
@@ -796,6 +807,13 @@ JWT, алгоритм HS256, библиотека PyJWT. Секрет — из `
 Разделы: **журнал**, **расписание**, **призы**, **уроки**, **мониторинг**, **статистика**,
 **сотрудники** (только администратор). `switchPage()` → `showPage()` + `setRoute()`.
 `schedule.js` и `stats.js` подключаются после `teacher.js` и пользуются его `state` и помощниками.
+
+**Мой профиль:** внизу меню — блок с аватаром, именем и ролью (`renderMe()`); окно `modalProfile`
+(`openProfile()`): фото (`uploadMyPhoto()`, `dropMyPhoto()`), логин, школы, работа за месяц
+(`monthWork()`: уроки — общий считается один раз, звёзды, классы). Аватар сотрудника — `staffAvatar()`:
+фото или инициалы (`initials()` в `common.js`); виден в меню, «Сотрудниках», статистике учителей.
+Пароль сотрудника не сохранён (сменил сам или запись старая) — «не сохранён» и «Выдать новый»
+прямо в строке и в окне сотрудника (`staffPasswordBox()`).
 
 **Адрес помнит место:** `#schedule`, `#journal`, `#journal/12` (класс), `#journal/12+13` (общий урок).
 `routeHash()` / `setRoute()` пишут его, `applyRoute()` читает при запуске и на `popstate`

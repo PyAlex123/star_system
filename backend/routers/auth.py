@@ -1,9 +1,9 @@
 """Вход: ученик через Telegram Web App или по логину, панель — суперадмин и учителя."""
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 
-from .. import config, db, passwords, ratelimit, schemas, security, themes
+from .. import config, db, images, passwords, ratelimit, schemas, security, themes
 from .common import student_or_404
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -171,6 +171,45 @@ def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Re
     ratelimit.reset("teacher-login", login)
     _set_panel_cookie(response, user)
     return {"ok": True, "role": user["role"]}
+
+
+def _set_staff_avatar(user_id: int, avatar) -> Dict[str, Any]:
+    """Аватар сотрудника: фото или None (инициалы). Прежний файл удаляется."""
+    previous: Dict[str, Any] = {}
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_user(database, user_id)
+        if not fresh:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Нужен вход в панель учителя")
+        previous["url"] = images.avatar_upload_url(fresh)
+        fresh["avatar"] = avatar
+        return fresh
+
+    saved = db.transaction(_apply)
+    if previous.get("url") and previous["url"] != (avatar or {}).get("value"):
+        images.drop_upload(previous["url"])
+    return saved
+
+
+@router.post("/teacher/photo")
+async def upload_staff_photo(file: UploadFile = File(...), user: Dict[str, Any] = Depends(security.require_panel)):
+    """Своё фото в профиле панели: квадрат 320 px, как у учеников."""
+    data = await images.read_upload(file)
+    url = f"{images.UPLOADS_URL}avatars/{images.new_avatar_name()}"
+    images.save_square(data, config.AVATARS_UPLOAD_DIR / url.rsplit("/", 1)[1])
+    try:
+        _set_staff_avatar(user["id"], {"type": "photo", "value": url})
+    except Exception:
+        images.drop_upload(url)
+        raise
+    return {"ok": True, "avatar": {"type": "photo", "value": url}}
+
+
+@router.delete("/teacher/photo")
+def drop_staff_photo(user: Dict[str, Any] = Depends(security.require_panel)):
+    """Убрать своё фото — снова инициалы."""
+    _set_staff_avatar(user["id"], None)
+    return {"ok": True, "avatar": None}
 
 
 @router.post("/teacher/password")

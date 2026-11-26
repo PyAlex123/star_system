@@ -178,6 +178,12 @@ def public_user(user: Dict[str, Any], with_password: bool = False) -> Dict[str, 
     return {k: v for k, v in user.items() if k not in hidden}
 
 
+def telegram_login(database: Dict[str, Any]) -> bool:
+    """Вход учеников через Telegram-бота включён (по умолчанию да). Пока бот недоступен,
+    администратор выключает его: карточки печатаются с QR на страницу входа сайта."""
+    return database.get("settings", {}).get("telegram_login", True) is not False
+
+
 def is_superadmin(user: Optional[Dict[str, Any]]) -> bool:
     return bool(user) and user.get("role") == ROLE_SUPERADMIN
 
@@ -218,6 +224,7 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
                        if lesson.get("class_id") in class_ids]
     copy["schedule"] = [e for e in copy.get("schedule", []) if e.get("class_id") in class_ids]
     users = copy.pop("users", [])
+    copy["telegram_login"] = telegram_login(db)
     copy.pop("settings", None)
     if user is not None:
         copy["me"] = public_user(user)
@@ -226,7 +233,8 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
         else:
             # Коллеги по школам — только имена: для расписания и статистики по учителям
             mine = allowed_school_ids(db, user)
-            copy["staff"] = [{"id": u["id"], "name": u.get("name", ""), "role": u.get("role")}
+            copy["staff"] = [{"id": u["id"], "name": u.get("name", ""), "role": u.get("role"),
+                              "avatar": u.get("avatar")}
                              for u in users if is_superadmin(u) or mine & set(u.get("school_ids") or [])]
     return copy
 
@@ -256,6 +264,7 @@ def make_user(db: Dict[str, Any], login: str, name: str, role: str,
         "school_ids": sorted(set(school_ids or [])),
         "password_hash": passwords.hash_password(password),
         "password_shown": password if show_password and role != ROLE_SUPERADMIN else None,
+        "avatar": None,                  # {"type": "photo", "value": адрес} или None — инициалы
         "session_key": new_session_key(),
         "created_at": now_iso(),
     }
