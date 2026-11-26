@@ -99,14 +99,11 @@ def test_setchat_only_by_admin():
         assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'report_chat'").fetchone()[0] == 1
 
 
-def test_manager_teacher_can_setchat():
+def test_teacher_cannot_setchat():
+    """Группу «Отметки» подключает только суперадмин — поручения «ведёт отметки» больше нет."""
     prepare()
-
-    def _apply(database):
-        db.find_user(database, 2)["checkin_manager"] = True
-    db.transaction(_apply)
     Group(tg_id=900).say("/setchat")
-    assert store.get_settings()["report_chat_id"] == GROUP
+    assert not store.get_settings()["report_chat_id"]
 
 
 def test_supergroup_migration_and_removal():

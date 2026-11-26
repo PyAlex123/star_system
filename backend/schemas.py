@@ -140,25 +140,35 @@ class TeacherLogin(BaseModel):
 
 
 StaffRole = Annotated[str, Field(pattern="^(teacher|school_admin)$")]
+# Должность в школе: директор, завуч начальной / средней школы, учитель
+Post = Annotated[str, Field(pattern="^(director|head_primary|head_secondary|teacher)$")]
+PostList = Annotated[List[Post], Field(max_length=4)]
 
 
 class UserCreate(BaseModel):
-    """Новый сотрудник: учитель или администрация школы. Пароль пустой — система придумает сама."""
+    """Новый сотрудник. Должности — posts {школа: [должности]}; без них — по-старому:
+    role и school_ids. Пароль пустой — система придумает сама."""
     login: Login
     name: Name
     school_ids: List[int] = Field(default_factory=list, max_length=200)
     password: Optional[Secret] = None
     role: StaffRole = "teacher"
+    posts: Optional[Dict[int, PostList]] = Field(default=None, max_length=200)
 
 
 class UserUpdate(BaseModel):
     name: Optional[Name] = None
     school_ids: Optional[List[int]] = Field(default=None, max_length=200)
     role: Optional[StaffRole] = None
+    posts: Optional[Dict[int, PostList]] = Field(default=None, max_length=200)
     # Отметки преподавателей. hourly_rate: null — снять ставку (отчёт только в часах)
     hourly_rate: Optional[int] = Field(default=None, ge=0, le=10_000_000)
     checkin_tracked: Optional[bool] = None     # отмечается в боте
-    checkin_manager: Optional[bool] = None     # ведёт раздел «Отметки»
+
+
+class StaffPosts(BaseModel):
+    """Должности сотрудника в одной школе. Пустой список — убрать из школы."""
+    posts: PostList = Field(default_factory=list)
 
 
 Clock = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")]

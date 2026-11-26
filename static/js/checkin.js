@@ -7,9 +7,9 @@
 
 const INVITE_DAYS = 7;
 
-/** Раздел отметок: администратор и учитель, которому его поручили. */
+/** Раздел «Отметки» (приход, опоздания, часы, деньги) — только администратор. */
 function canManageCheckins() {
-  return isAdmin() || (state.me?.role === "teacher" && Boolean(state.me?.checkin_manager));
+  return isAdmin();
 }
 
 /* ── Срок действия занятия ────────────────────────────────── */
@@ -169,7 +169,6 @@ function checkinBadges(user) {
     else tags.push(`<span class="tag">Telegram не привязан</span>`);
   }
   if (user.hourly_rate !== null && user.hourly_rate !== undefined) tags.push(`<span class="tag">${fmt(user.hourly_rate)} сум/ч</span>`);
-  if (user.checkin_manager && user.role === "teacher") tags.push(`<span class="tag tag-star">ведёт отметки</span>`);
   return tags.join("");
 }
 

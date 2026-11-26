@@ -40,7 +40,7 @@ def test_checkin_routes_exist():
     assert len(routes) >= 15
 
 
-def test_only_admin_and_manager_see_the_section(teacher):
+def test_only_superadmin_sees_the_section(teacher):
     plain = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
     _, director = make_school_admin(teacher)
     for method, path in checkin_routes():
@@ -49,19 +49,12 @@ def test_only_admin_and_manager_see_the_section(teacher):
             assert r.status_code == 403, f"{who}: {method} {path} → {r.status_code}"
         assert teacher.request(method, path, json={}).status_code != 403, f"администратор: {method} {path}"
 
-    assert teacher.patch("/api/users/2", json={"checkin_manager": True}).status_code == 200
-    manager = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
+    # Поручения «ведёт отметки» больше нет: учитель с ним из старой базы — тоже 403
+    def _apply(database):
+        db.find_user(database, 2)["checkin_manager"] = True
+    db.transaction(_apply)
     for method, path in checkin_routes():
-        assert manager.request(method, path, json={}).status_code != 403, f"ответственный: {method} {path}"
-
-
-def test_school_admin_cannot_be_checkin_manager(teacher):
-    director_id, director = make_school_admin(teacher)
-    r = teacher.patch(f"/api/users/{director_id}", json={"checkin_manager": True})
-    assert r.status_code == 400 and "только учителю" in r.json()["detail"]
-    assert teacher.patch("/api/users/2", json={"checkin_manager": True}).status_code == 200
-    assert teacher.patch("/api/users/2", json={"role": "school_admin"}).status_code == 200
-    assert db.find_user(load_db(), 2)["checkin_manager"] is False, "стал администрацией — поручение снято"
+        assert plain.request(method, path, json={}).status_code == 403, f"бывший ответственный: {method} {path}"
 
 
 def test_staff_checkin_fields_are_superadmin_only(teacher):

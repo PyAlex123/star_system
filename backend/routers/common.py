@@ -20,6 +20,12 @@ def bad_request(message: str) -> HTTPException:
 
 User = Optional[Dict[str, Any]]
 
+# need — какая должность нужна в школе: TEACH — журнал, звёзды, ученики, опросы
+# (только учитель этой школы); None — любая должность в ней (расписание, карточки, тема).
+# Своя школа без нужной должности — 403 с объяснением, чужая — 404.
+TEACH = "teach"
+NO_TEACH_TEXT = "В этой школе вы не ведёте уроки — журнал и звёзды здесь недоступны"
+
 
 def _school_visible(database: Dict[str, Any], user: User, school_id: Optional[int]) -> bool:
     if user is None or db.is_superadmin(user):
@@ -27,28 +33,41 @@ def _school_visible(database: Dict[str, Any], user: User, school_id: Optional[in
     return school_id in db.allowed_school_ids(database, user)
 
 
-def school_or_404(database: Dict[str, Any], school_id: int, user: User = None) -> Dict[str, Any]:
+def _check_need(user: User, school_id: Optional[int], need: Optional[str]) -> None:
+    if need == TEACH and user is not None and not db.teaches_in(user, school_id):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NO_TEACH_TEXT)
+
+
+def school_or_404(database: Dict[str, Any], school_id: int, user: User = None,
+                  need: Optional[str] = None) -> Dict[str, Any]:
     school = db.find_school(database, school_id)
     if not school or not _school_visible(database, user, school_id):
         raise not_found("Школа не найдена")
+    _check_need(user, school_id, need)
     return school
 
 
-def class_or_404(database: Dict[str, Any], class_id: int, user: User = None) -> Dict[str, Any]:
+def class_or_404(database: Dict[str, Any], class_id: int, user: User = None,
+                 need: Optional[str] = None) -> Dict[str, Any]:
     cls = db.find_class(database, class_id)
     if not cls or not _school_visible(database, user, cls["school_id"]):
         raise not_found("Класс не найден")
+    _check_need(user, cls["school_id"], need)
     return cls
 
 
-def student_or_404(database: Dict[str, Any], student_id: int, user: User = None) -> Dict[str, Any]:
+def student_or_404(database: Dict[str, Any], student_id: int, user: User = None,
+                   need: Optional[str] = None) -> Dict[str, Any]:
     student = db.find_student(database, student_id)
+    cls = None
     if student and user is not None and not db.is_superadmin(user):
         cls = db.find_class(database, student.get("class_id"))
         if not cls or not _school_visible(database, user, cls["school_id"]):
             student = None
     if not student:
         raise not_found("Ученик не найден")
+    if cls is not None:
+        _check_need(user, cls["school_id"], need)
     return student
 
 

@@ -611,16 +611,8 @@
 <div class="backdrop" id="modalUser" onclick="if(event.target===this) closeModal('modalUser')">
   <div class="modal" style="max-width:460px;">
     <div>
-      <div class="modal-title" id="userModalTitle">Новый учитель</div>
-      <p class="modal-sub">Учитель войдёт на сайт по логину и паролю и увидит только отмеченные школы.</p>
-    </div>
-    <div class="field" id="userRoleField">
-      <span class="field-label">Роль</span>
-      <div class="seg seg-2" role="radiogroup" aria-label="Роль" id="userRole">
-        <button type="button" role="radio" data-role="teacher" onclick="pickUserRole('teacher')">Учитель</button>
-        <button type="button" role="radio" data-role="school_admin" onclick="pickUserRole('school_admin')">Администрация школы</button>
-      </div>
-      <p class="field-hint" id="userRoleHint"></p>
+      <div class="modal-title" id="userModalTitle">Новый сотрудник</div>
+      <p class="modal-sub">Сотрудник войдёт на сайт по логину и паролю и увидит только школы, где у него есть должность.</p>
     </div>
     <div class="field">
       <label for="userName">Имя</label>
@@ -638,16 +630,17 @@
       <label for="userPassword">Пароль</label>
       <input type="text" id="userPassword" class="input-mono" placeholder="пусто — придумаем сами" autocomplete="off">
     </div>
-    <div class="field" id="userSchoolsField">
-      <span class="field-label">Школы</span>
-      <div class="check-list" id="userSchools"></div>
+    <div class="field" id="userPostsField">
+      <span class="field-label">Должности в школах</span>
+      <div class="post-list" id="userPosts"></div>
+      <p class="field-hint">Можно несколько: завуч, который ведёт уроки, — «завуч» и «учитель».
+        Директор и завучи меняют оформление школы, добавляют призы школы, печатают карточки и правят
+        расписание. Учитель ведёт журнал и выдаёт звёзды.</p>
     </div>
     <div class="user-checkin" id="userCheckinField">
       <span class="field-label">Отметки в Telegram</span>
       <label class="check"><input type="checkbox" id="userTracked">
         <span>Отмечается в боте <span class="muted">— геолокация и кругляшок на уроках</span></span></label>
-      <label class="check" id="userManagerRow"><input type="checkbox" id="userManager">
-        <span>Ведёт раздел «Отметки» <span class="muted">— проверяет уроки и делает отчёт</span></span></label>
       <div class="field">
         <label for="userRate">Ставка, сум в час</label>
         <input type="text" id="userRate" inputmode="numeric" autocomplete="off" placeholder="пусто — в отчёте только часы">

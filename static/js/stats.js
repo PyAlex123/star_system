@@ -89,7 +89,7 @@ function renderStats() {
       ${rankingTable(d)}
     </section>
 
-    ${d.teachers.length && !(state.me?.role === "teacher") ? `
+    ${d.teachers.length && (isAdmin() || isSchoolAdmin()) ? `
     <section class="card stat-card">
       <h2 class="eyebrow">Учителя</h2>
       <div class="st-table">

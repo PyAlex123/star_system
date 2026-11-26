@@ -17,7 +17,7 @@ from .. import assets, config, db, excel, schemas, themes
 from ..monitoring import library, logic, store
 from ..security import panel_user, require_editor_page, require_teacher
 from .cards import FAVICON, ICONS_FILE, _qr_png
-from .common import bad_request, not_found, school_or_404
+from .common import TEACH, bad_request, not_found, school_or_404
 
 router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
 pages = APIRouter(tags=["monitoring"])        # печатный лист — страница, а не API
@@ -76,14 +76,14 @@ def _link(school: Dict[str, Any]) -> str:
 
 @router.get("/link")
 def get_link(school_id: int, user: User = Depends(require_teacher)):
-    school = school_or_404(db.load_db(), school_id, user)
+    school = school_or_404(db.load_db(), school_id, user, need=TEACH)
     code = _link(school)
     return {"code": code, "path": f"/m/{code}", "url": config.site_url(f"/m/{code}")}
 
 
 @router.get("/link/qr.png")
 def link_qr(school_id: int, size: int = 10, user: User = Depends(require_teacher)):
-    school = school_or_404(db.load_db(), school_id, user)
+    school = school_or_404(db.load_db(), school_id, user, need=TEACH)
     png = _qr_png(config.site_url(f"/m/{_link(school)}"), box_size=max(4, min(24, size)))
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
@@ -107,7 +107,7 @@ def _form_brief(form: Dict[str, Any]) -> Dict[str, Any]:
 @router.get("/forms")
 def list_forms(school_id: int, user: User = Depends(require_teacher)):
     """«Мои формы» школы; администратору — формы всех учителей школы."""
-    school_or_404(db.load_db(), school_id, user)
+    school_or_404(db.load_db(), school_id, user, need=TEACH)
     with store.read() as conn:
         forms = store.list_forms(conn, school_id, None if db.is_superadmin(user) else user["id"])
     return {"forms": [_form_brief(f) for f in forms]}
@@ -116,7 +116,7 @@ def list_forms(school_id: int, user: User = Depends(require_teacher)):
 @router.post("/forms")
 def create_form(item: schemas.MonitorFormCreate, user: User = Depends(require_teacher)):
     """Новая форма: пустая, копия готового набора или копия своей формы."""
-    school_or_404(db.load_db(), item.school_id, user)
+    school_or_404(db.load_db(), item.school_id, user, need=TEACH)
     with store.write() as conn:
         if item.from_form is not None:
             source = _form_or_404(conn, item.from_form, user)
@@ -172,7 +172,7 @@ def delete_form(form_id: int, user: User = Depends(require_teacher)):
 def list_runs(school_id: int, limit: int = 30, class_id: Optional[int] = None,
               user: User = Depends(require_teacher)):
     """Свои запуски (администратору — все), новые сверху. class_id — только опросы этого класса."""
-    school_or_404(db.load_db(), school_id, user)
+    school_or_404(db.load_db(), school_id, user, need=TEACH)
     owner = None if db.is_superadmin(user) else user["id"]
     with store.read() as conn:
         runs = _briefs(conn, store.list_runs(conn, school_id, owner, max(1, min(200, limit)), class_id))
@@ -182,7 +182,7 @@ def list_runs(school_id: int, limit: int = 30, class_id: Optional[int] = None,
 @router.post("/runs")
 def create_run(item: schemas.MonitorRunCreate, user: User = Depends(require_teacher)):
     database = db.load_db()
-    school = school_or_404(database, item.school_id, user)
+    school = school_or_404(database, item.school_id, user, need=TEACH)
     school_classes = {c["id"]: c for c in db.school_classes(database, school["id"])}
     if not school_classes:
         raise bad_request("В школе пока нет классов")
@@ -348,7 +348,7 @@ def delete_run(run_id: int, user: User = Depends(require_teacher)):
 def poster(school_id: int, request: Request):
     """Лист А4: QR и адрес ссылки школы — повесить в кабинете. Ссылка постоянная."""
     database = db.load_db()
-    school = school_or_404(database, school_id, panel_user(request))
+    school = school_or_404(database, school_id, panel_user(request), need=TEACH)
     url = config.site_url(f"/m/{_link(school)}")
     qr = base64.b64encode(_qr_png(url, box_size=16)).decode()
     shown = html.escape(url.replace("https://", "").replace("http://", ""))

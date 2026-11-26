@@ -201,10 +201,33 @@ function syncSchoolTheme() {
 }
 
 function isAdmin() { return state.me?.role === "superadmin"; }
-/** Администрация школы (директор, завуч) только смотрит: статистика, расписание, уроки. */
-function isSchoolAdmin() { return state.me?.role === "school_admin"; }
-function canEdit() { return !isSchoolAdmin(); }
-const ROLE_NAMES = { superadmin: "администратор", teacher: "учитель", school_admin: "администрация школы" };
+
+/* Должности в школе. У сотрудника в каждой школе свои (можно несколько): права — по должности
+   в выбранной школе. Руководство (директор, завучи) — оформление, призы школы, карточки,
+   расписание; учитель — журнал, звёзды, опросы. */
+const POSTS = { director: "Директор", head_primary: "Завуч начальной школы",
+                head_secondary: "Завуч средней школы", teacher: "Учитель" };
+const POSTS_SHORT = { director: "директор", head_primary: "завуч нач.", head_secondary: "завуч сред.", teacher: "учитель" };
+const ADMIN_POSTS = ["director", "head_primary", "head_secondary"];
+
+/** Должности сотрудника в школе (по умолчанию — в выбранной). */
+function postsOf(user, school = activeSchool) { return (user?.posts || {})[String(school)] || []; }
+/** Учитель в выбранной школе — журнал и звёзды. Администратору можно всё. */
+function teachesHere(school = activeSchool) { return isAdmin() || postsOf(state.me, school).includes("teacher"); }
+/** Руководство выбранной школы: директор или завуч. */
+function managesHere(school = activeSchool) {
+  return !isAdmin() && postsOf(state.me, school).some((p) => ADMIN_POSTS.includes(p));
+}
+/** «Администрация школы» в выбранной школе — карточки, призы школы (журнал — только если ещё и учитель). */
+function isSchoolAdmin() { return managesHere(); }
+/** Менять журнал (звёзды, учеников, классы) — учитель этой школы. */
+function canEdit() { return teachesHere(); }
+/** «учитель · завуч нач.» — должности в школе; у администратора — «администратор». */
+function postsLabel(user, school = activeSchool) {
+  if (user?.role === "superadmin") return "администратор";
+  const posts = postsOf(user, school);
+  return posts.length ? posts.map((p) => POSTS_SHORT[p] || p).join(" · ") : "нет должности в этой школе";
+}
 
 /** Имя сотрудника: администратору приходит полный список, остальным — коллеги по школам. */
 function staffList() { return state.users || state.staff || []; }
@@ -223,11 +246,14 @@ function staffAvatar(user, cls = "") {
 /** Вход учеников через Telegram-бота включён (настройка администратора). */
 function botLogin() { return state.telegram_login !== false; }
 
-/** Кнопки «.admin-only» видит только администратор, «.teacher-only» — только учитель. */
+/** Что видно — по должности в выбранной школе: «.editor-only» — учителю (журнал),
+ *  «.sadmin-only» — руководству школы, «.teacher-only» — учителю без руководства,
+ *  «.admin-only» — администратору. Зовётся и при смене школы. */
 function applyRole() {
   document.body.classList.toggle("is-admin", isAdmin());
-  document.body.classList.toggle("is-teacher", state.me?.role === "teacher");
-  document.body.classList.toggle("is-sadmin", isSchoolAdmin());
+  document.body.classList.toggle("can-teach", teachesHere());
+  document.body.classList.toggle("is-teacher", !isAdmin() && teachesHere() && !managesHere());
+  document.body.classList.toggle("is-sadmin", managesHere());
   document.body.classList.toggle("can-checkin", canManageCheckins());
   renderMe();
   if (!isAdmin() && currentPage() === "users") showPage(canEdit() ? "journal" : "stats");
@@ -2063,7 +2089,7 @@ function renderMe() {
   if (!me) return;
   $("meAvatar").innerHTML = staffAvatar(me);
   $("meName").textContent = me.name;
-  $("meRole").textContent = ROLE_NAMES[me.role] || "учитель";
+  $("meRole").textContent = postsLabel(me);
   $("meBtn").title = `${me.name} — мой профиль`;
 }
 
@@ -2090,7 +2116,7 @@ function renderProfile() {
   const photo = me.avatar?.type === "photo";
   $("profileAvatar").innerHTML = staffAvatar(me, "xl");
   $("profileName").textContent = me.name;
-  $("profileRole").textContent = ROLE_NAMES[me.role] || "учитель";
+  $("profileRole").textContent = postsLabel(me);
   $("profilePhotoLabel").textContent = photo ? "Другое фото" : "Загрузить фото";
   $("profileDrop").hidden = !photo;
   $("profileLogin").textContent = me.login || "—";
@@ -2183,57 +2209,90 @@ async function copyStaffPassword(id) {
   }
 }
 
+/** Должности сотрудника тегами: по всем школам, без повторов. */
+function postTags(user) {
+  const all = new Set(Object.values(user.posts || {}).flat());
+  return Object.keys(POSTS).filter((p) => all.has(p)).map((p) =>
+    `<span class="tag ${ADMIN_POSTS.includes(p) ? "tag-accent" : ""}" title="${POSTS[p]}">${POSTS_SHORT[p]}</span>`).join("");
+}
+
+/** Школы сотрудника; если в разных школах разные должности — они в теге школы. */
+function schoolTags(user) {
+  const entries = Object.entries(user.posts || {}).filter(([id]) => schoolById(Number(id)));
+  const same = new Set(entries.map(([, posts]) => posts.join())).size <= 1;
+  return entries.map(([id, posts]) => {
+    const name = schoolById(Number(id)).name;
+    const label = same ? name : `${name} · ${posts.map((p) => POSTS_SHORT[p]).join(", ")}`;
+    return `<span class="tag" title="${escapeHtml(`${name}: ${posts.map((p) => POSTS[p]).join(", ")}`)}">${escapeHtml(label)}</span>`;
+  }).join("");
+}
+
 function renderUsers() {
-  const order = { superadmin: 0, school_admin: 1, teacher: 2 };
+  const rank = (u) => u.role === "superadmin" ? 0
+    : Object.values(u.posts || {}).flat().some((p) => ADMIN_POSTS.includes(p)) ? 1 : 2;
   const users = (state.users || []).slice()
-    .sort((a, b) => (order[a.role] - order[b.role]) || a.name.localeCompare(b.name, "ru"));
+    .sort((a, b) => (rank(a) - rank(b)) || a.name.localeCompare(b.name, "ru"));
   const rows = users.map((user) => {
     const admin = user.role === "superadmin";
     const self = user.id === state.me?.id;
-    const schools = admin
-      ? `<span class="muted">все школы</span>`
-      : (user.school_ids || []).map((id) => schoolById(id)?.name).filter(Boolean)
-          .map((name) => `<span class="tag" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`).join("") || `<span class="muted">нет школ</span>`;
-    const roleTag = admin ? `<span class="tag tag-star">администратор</span>`
-      : user.role === "school_admin" ? `<span class="tag tag-accent">администрация школы</span>`
-      : `<span class="tag">учитель</span>`;
+    const schools = admin ? `<span class="muted">все школы</span>` : schoolTags(user) || `<span class="muted">нет школ</span>`;
+    const roleTag = admin ? `<span class="tag tag-star">администратор</span>` : postTags(user) || `<span class="muted">—</span>`;
     const badges = checkinBadges(user);
     return `
       <div class="user-row">
         <span class="n">${staffAvatar(user)}<span class="n-text"><span>${escapeHtml(user.name)}${self ? ` <span class="muted">(вы)</span>` : ""}</span>${badges ? `<span class="user-sub">${badges}</span>` : ""}</span></span>
         <span class="login-cell"><span class="code-chip" title="${escapeHtml(user.login)}">${escapeHtml(user.login)}</span></span>
         <span>${staffPassword(user)}</span>
-        <span>${roleTag}</span>
+        <span class="tag-row">${roleTag}</span>
         <span class="tag-row">${schools}</span>
         <span class="acts">
-          <button class="icon-btn boxed" title="${admin ? "Имя и отметки" : "Имя, роль, школы и отметки"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
+          <button class="icon-btn boxed" title="${admin ? "Имя и отметки" : "Имя, должности в школах и отметки"}" aria-label="Изменить" onclick="openUser(${user.id})">${icon("pencil", "ic ic-sm")}</button>
           ${self ? "" : `<button class="icon-btn boxed" title="Выдать новый пароль" aria-label="Новый пароль" onclick="resetUserPassword(${user.id})">${icon("key", "ic ic-sm")}</button>`}
           ${self ? "" : `<button class="icon-btn boxed danger" title="Удалить" aria-label="Удалить" onclick="removeUser(${user.id})">${icon("trash", "ic ic-sm")}</button>`}
         </span>
       </div>`;
   }).join("");
   $("userList").innerHTML = `
-    <div class="users-head"><span>Имя</span><span>Логин</span><span>Пароль</span><span>Роль</span><span>Школы</span><span></span></div>${rows}`;
+    <div class="users-head"><span>Имя</span><span>Логин</span><span>Пароль</span><span>Должности</span><span>Школы</span><span></span></div>${rows}`;
 }
 
-let userRole = "teacher";
-const ROLE_HINTS = {
-  teacher: "Ведёт журнал, классы, расписание и выдаёт призы в отмеченных школах.",
-  school_admin: "Директор или завуч: статистика, рейтинги, расписание и уроки отмеченных школ; меняет оформление школы, добавляет призы от школы и печатает карточки учеников. Журнала и звёзд нет.",
-};
+/* Окно сотрудника: должности по школам — в каждой строке школы переключатели. */
+let userPosts = {};          // { "<id школы>": Set(должности) } — черновик окна
 
-function pickUserRole(role) {
-  userRole = role;
-  document.querySelectorAll("#userRole button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.role === role)));
-  $("userRoleHint").textContent = ROLE_HINTS[role];
-  // Администрация школы только смотрит: ни отметок, ни раздела «Отметки»
+function renderUserPosts() {
+  $("userPosts").innerHTML = state.schools.map((s) => {
+    const mine = userPosts[String(s.id)] || new Set();
+    return `
+      <div class="post-row">
+        <span class="post-school" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</span>
+        <div class="post-chips" role="group" aria-label="Должности: ${escapeHtml(s.name)}">
+          ${Object.keys(POSTS).map((post) => `<button type="button" aria-pressed="${mine.has(post)}"
+              title="${POSTS[post]}" onclick="toggleUserPost(${s.id}, '${post}')">${POSTS_SHORT[post]}</button>`).join("")}
+        </div>
+      </div>`;
+  }).join("") || `<span class="muted">Сначала добавьте школу</span>`;
+  // Отметки в боте — у тех, кто ведёт уроки
   const target = (state.users || []).find((u) => u.id === userTarget);
-  const admin = target?.role === "superadmin";
-  $("userCheckinField").hidden = role === "school_admin" && !admin;
-  $("userManagerRow").hidden = admin || role !== "teacher";
+  const teaches = Object.values(userPosts).some((set) => set.has("teacher"));
+  $("userCheckinField").hidden = target?.role !== "superadmin" && !teaches;
 }
 
-function openUser(id = null) {
+function toggleUserPost(school, post) {
+  const key = String(school);
+  const set = userPosts[key] || new Set();
+  if (set.has(post)) set.delete(post); else set.add(post);
+  userPosts[key] = set;
+  renderUserPosts();
+}
+
+function postsPayload() {
+  const out = {};
+  for (const [key, set] of Object.entries(userPosts)) if (set.size) out[key] = Object.keys(POSTS).filter((p) => set.has(p));
+  return out;
+}
+
+/** preset — для «Новый сотрудник» из раздела «Школы»: { school, post }. */
+function openUser(id = null, preset = null) {
   userTarget = id;
   const user = id ? (state.users || []).find((u) => u.id === id) : null;
   const admin = user?.role === "superadmin";
@@ -2248,25 +2307,25 @@ function openUser(id = null) {
     $("userPassBox").innerHTML = staffPasswordBox(user) + (user.avatar?.type === "photo"
       ? `<button class="btn btn-quiet btn-sm user-photo-drop" onclick="dropUserPhoto(${user.id})">${staffAvatar(user)}Убрать фото сотрудника</button>` : "");
   }
-  $("userRoleField").hidden = admin;
   $("userTracked").checked = Boolean(user?.checkin_tracked);
-  $("userManager").checked = Boolean(user?.checkin_manager);
   $("userRate").value = user?.hourly_rate ?? "";
   renderUserTelegram(user);
-  pickUserRole(user?.role === "school_admin" ? "school_admin" : "teacher");
-  // Администратор видит все школы — галочки ему не нужны
-  $("userSchoolsField").hidden = admin;
-  const chosen = new Set(user?.school_ids || (activeSchool ? [activeSchool] : []));
-  $("userSchools").innerHTML = state.schools.map((s) => `
-    <label class="check"><input type="checkbox" value="${s.id}" ${chosen.has(s.id) ? "checked" : ""}>
-      ${escapeHtml(s.name)}</label>`).join("") || `<span class="muted">Сначала добавьте школу</span>`;
+  // Администратор работает во всех школах — должности ему не нужны
+  $("userPostsField").hidden = admin;
+  userPosts = {};
+  if (user) {
+    for (const [key, posts] of Object.entries(user.posts || {})) userPosts[key] = new Set(posts);
+  } else if (preset?.school || activeSchool) {
+    userPosts[String(preset?.school || activeSchool)] = new Set([preset?.post || "teacher"]);
+  }
+  renderUserPosts();
   openModal("modalUser");
 }
 
 async function saveUser() {
   const name = $("userName").value.trim();
   const login = $("userLogin").value.trim().toLowerCase();
-  const school_ids = [...$("userSchools").querySelectorAll("input:checked")].map((i) => parseInt(i.value));
+  const posts = postsPayload();
   if (!name) return toast("Введите имя", "error");
   let checkin;
   try {
@@ -2274,13 +2333,13 @@ async function saveUser() {
   } catch (error) {
     return toast(error.message, "error");
   }
-  if (userRole === "school_admin") checkin = { checkin_tracked: false };
+  const target = userTarget ? (state.users || []).find((u) => u.id === userTarget) : null;
+  const admin = target?.role === "superadmin";
+  // Не ведёт уроков — и отмечаться не в чем
+  if (!admin && !Object.values(posts).some((list) => list.includes("teacher"))) checkin = { checkin_tracked: false };
   try {
     if (userTarget) {
-      const target = (state.users || []).find((u) => u.id === userTarget);
-      const json = target?.role === "superadmin" ? { name, ...checkin }
-        : { name, school_ids, role: userRole, ...checkin,
-            checkin_manager: userRole === "teacher" && $("userManager").checked };
+      const json = admin ? { name, ...checkin } : { name, posts, ...checkin };
       await api(`/api/users/${userTarget}`, { method: "PATCH", json });
       closeModal("modalUser");
       await loadState();
@@ -2288,11 +2347,10 @@ async function saveUser() {
     } else {
       if (!login) return toast("Введите логин", "error");
       const result = await api("/api/users", {
-        method: "POST", json: { name, login, school_ids, role: userRole, password: $("userPassword").value || null },
+        method: "POST", json: { name, login, posts, password: $("userPassword").value || null },
       });
-      const manager = userRole === "teacher" && $("userManager").checked;
-      if (checkin.checkin_tracked || checkin.hourly_rate !== null && checkin.hourly_rate !== undefined || manager) {
-        await api(`/api/users/${result.user.id}`, { method: "PATCH", json: { ...checkin, checkin_manager: manager } });
+      if (checkin.checkin_tracked || checkin.hourly_rate !== null && checkin.hourly_rate !== undefined) {
+        await api(`/api/users/${result.user.id}`, { method: "PATCH", json: checkin });
       }
       closeModal("modalUser");
       await loadState();

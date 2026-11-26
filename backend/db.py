@@ -43,7 +43,10 @@ _lock = threading.RLock()
 #         у сотрудника привязка Telegram, приглашение, язык, согласие, ставка и флажок
 #         «ведёт отметки» (checkin_manager), у занятия расписания срок действия
 #         (valid_from, valid_to). Сами отметки живут в data/checkin.sqlite.
-DB_VERSION = 10
+# 10 -> 11: должности в школах. У сотрудника posts: {"<id школы>": ["director", "head_primary",
+#         "head_secondary", "teacher"]}; school_ids и role теперь выводятся из них. Флажок
+#         checkin_manager убран: раздел «Отметки» — только у суперадмина.
+DB_VERSION = 11
 
 # Категории призов как в макетах: небольшой, средний, большой
 PRIZE_CATEGORIES = ("small", "medium", "large")
@@ -63,7 +66,7 @@ SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
 SECRET_USER_FIELDS = ("password_hash", "session_key")
 # Видно только администратору в списке сотрудников: по коду приглашения можно
 # привязать свой Telegram к чужой карточке преподавателя
-ADMIN_ONLY_USER_FIELDS = ("password_shown", "invite_code")
+ADMIN_ONLY_USER_FIELDS = ("password_shown", "invite_code", "hourly_rate")
 
 # Поля сотрудника для отметок (схема 9). Значения по умолчанию — для миграции и новых записей.
 STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
@@ -72,8 +75,6 @@ STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
     # Отмечается ли сотрудник в боте. Уроки и проверки — только у таких: учитель
     # занятия по умолчанию тот, кто его внёс, в том числе администратор.
     "checkin_tracked": False,
-    # Видит раздел «Отметки» и решает спорные уроки (кроме администратора)
-    "checkin_manager": False,
 }
 SCHOOL_CHECKIN_DEFAULTS: Dict[str, Any] = {"address": "", "lat": None, "lon": None, "radius_m": 150}
 
@@ -82,6 +83,22 @@ ROLE_TEACHER = "teacher"
 ROLE_SCHOOL_ADMIN = "school_admin"      # директор, завуч: статистика своих школ, оформление, свои призы,
                                          # печать карточек учеников; журнала и звёзд нет
 STAFF_ROLES = (ROLE_TEACHER, ROLE_SCHOOL_ADMIN)
+
+# Должности в школе (схема 11). У сотрудника в каждой школе — одна или несколько.
+# Руководство (директор, завучи) — права «администрации школы»: оформление, призы школы,
+# карточки учеников, расписание. Учитель — журнал, звёзды, опросы этой школы.
+# role сотрудника выводится из должностей: «teacher», если хоть где-то учитель.
+POST_DIRECTOR = "director"
+POST_HEAD_PRIMARY = "head_primary"
+POST_HEAD_SECONDARY = "head_secondary"
+POST_TEACHER = "teacher"
+POSTS = {
+    POST_DIRECTOR: "Директор",
+    POST_HEAD_PRIMARY: "Завуч начальной школы",
+    POST_HEAD_SECONDARY: "Завуч средней школы",
+    POST_TEACHER: "Учитель",
+}
+ADMIN_POSTS = (POST_DIRECTOR, POST_HEAD_PRIMARY, POST_HEAD_SECONDARY)
 
 # Чего администрация школы не видит у учеников: всё, чем можно войти в кабинет ребёнка
 LOGIN_FIELDS = ("token", "login", "password_shown", "tg_id", "tg_username", "bound_at", "last_login")
@@ -208,12 +225,84 @@ def is_superadmin(user: Optional[Dict[str, Any]]) -> bool:
     return bool(user) and user.get("role") == ROLE_SUPERADMIN
 
 
+# ── Должности ────────────────────────────────────────────────────────────────
+
+def clean_posts(posts: Optional[Dict[Any, Any]]) -> Dict[str, List[str]]:
+    """{школа: должности} — ключи строкой (так их хранит JSON), должности без повторов,
+    в порядке POSTS, неизвестные отброшены; школа без должностей — не школа сотрудника."""
+    result: Dict[str, List[str]] = {}
+    for key, values in (posts or {}).items():
+        try:
+            school_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        chosen = [p for p in POSTS if p in set(values or [])]
+        if chosen:
+            result[str(school_id)] = chosen
+    return dict(sorted(result.items(), key=lambda kv: int(kv[0])))
+
+
+def posts_from_role(role: Optional[str], school_ids) -> Dict[str, List[str]]:
+    """Должности для старой записи (до схемы 11): учитель — «учитель» во всех своих школах,
+    администрация школы — «директор» (поправить можно в разделе «Школы»)."""
+    post = POST_DIRECTOR if role == ROLE_SCHOOL_ADMIN else POST_TEACHER
+    return {str(sid): [post] for sid in sorted(set(school_ids or []))}
+
+
+def set_posts(user: Dict[str, Any], posts: Optional[Dict[Any, Any]]) -> None:
+    """Записать должности. school_ids и role — вычисляются из них: их читает остальной код."""
+    if is_superadmin(user):
+        user["posts"] = {}
+        return
+    clean = clean_posts(posts)
+    user["posts"] = clean
+    user["school_ids"] = sorted(int(k) for k in clean)
+    if clean:
+        teaches = any(POST_TEACHER in values for values in clean.values())
+        user["role"] = ROLE_TEACHER if teaches else ROLE_SCHOOL_ADMIN
+
+
+def posts_in(user: Optional[Dict[str, Any]], school_id: Optional[int]) -> List[str]:
+    if not user or school_id is None:
+        return []
+    return list((user.get("posts") or {}).get(str(school_id)) or [])
+
+
+def teaches_in(user: Optional[Dict[str, Any]], school_id: Optional[int]) -> bool:
+    """Учитель в этой школе: журнал, звёзды, опросы. Суперадмину можно всё."""
+    return is_superadmin(user) or POST_TEACHER in posts_in(user, school_id)
+
+
+def manages(user: Optional[Dict[str, Any]], school_id: Optional[int]) -> bool:
+    """Руководство этой школы (директор, завуч): оформление, призы школы, карточки."""
+    return is_superadmin(user) or any(p in ADMIN_POSTS for p in posts_in(user, school_id))
+
+
+def teach_school_ids(user: Optional[Dict[str, Any]]) -> set:
+    return {int(k) for k, v in ((user or {}).get("posts") or {}).items() if POST_TEACHER in v}
+
+
+def manage_school_ids(user: Optional[Dict[str, Any]]) -> set:
+    return {int(k) for k, v in ((user or {}).get("posts") or {}).items() if any(p in ADMIN_POSTS for p in v)}
+
+
+def drop_school_posts(database: Dict[str, Any], school_id: int) -> None:
+    """Школа удалена — её должности у сотрудников тоже."""
+    for user in database.get("users", []):
+        if str(school_id) in (user.get("posts") or {}):
+            set_posts(user, {k: v for k, v in user["posts"].items() if k != str(school_id)})
+        elif school_id in (user.get("school_ids") or []):
+            user["school_ids"] = [i for i in user["school_ids"] if i != school_id]
+
+
 def is_school_admin(user: Optional[Dict[str, Any]]) -> bool:
+    """Только руководство — ни в одной школе не ведёт уроки."""
     return bool(user) and user.get("role") == ROLE_SCHOOL_ADMIN
 
 
 def can_edit(user: Optional[Dict[str, Any]]) -> bool:
-    """Менять данные может администратор и учитель; администрация школы — только смотрит."""
+    """Журнал: администратор и тот, кто хоть в одной школе учитель (какой школы — проверяют
+    помощники в routers/common.py по должности в ней)."""
     return bool(user) and user.get("role") in (ROLE_SUPERADMIN, ROLE_TEACHER)
 
 
@@ -225,13 +314,8 @@ def prize_for_school(prize: Dict[str, Any], school_ids) -> bool:
 
 
 def can_manage_checkins(user: Optional[Dict[str, Any]]) -> bool:
-    """Раздел «Отметки»: администратор и учитель, которому его поручили.
-    Администрации школы — никогда: она только смотрит."""
-    if not user:
-        return False
-    if user.get("role") == ROLE_SUPERADMIN:
-        return True
-    return user.get("role") == ROLE_TEACHER and bool(user.get("checkin_manager"))
+    """Раздел «Отметки» (приход, опоздания, часы и деньги всех школ) — только суперадмин."""
+    return is_superadmin(user)
 
 
 def allowed_school_ids(db: Dict[str, Any], user: Optional[Dict[str, Any]]) -> set:
@@ -255,8 +339,11 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
     class_ids = {c["id"] for c in copy["classes"]}
     copy["students"] = [public_student(s) for s in copy.get("students", [])
                         if s.get("class_id") in class_ids]
-    if is_school_admin(user):
-        copy["students"] = [{k: v for k, v in s.items() if k not in LOGIN_FIELDS} for s in copy["students"]]
+    if user is not None and not is_superadmin(user):
+        # Данные для входа учеников — только там, где человек учитель; руководству — нет
+        teach = {c["id"] for c in copy["classes"] if c["school_id"] in teach_school_ids(user)}
+        copy["students"] = [s if s.get("class_id") in teach else {k: v for k, v in s.items() if k not in LOGIN_FIELDS}
+                            for s in copy["students"]]
     copy["lessons"] = [lesson for lesson in copy.get("lessons", [])
                        if lesson.get("class_id") in class_ids]
     copy["schedule"] = [e for e in copy.get("schedule", []) if e.get("class_id") in class_ids]
@@ -274,7 +361,8 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
             # Коллеги по школам — только имена: для расписания и статистики по учителям
             mine = allowed_school_ids(db, user)
             copy["staff"] = [{"id": u["id"], "name": u.get("name", ""), "role": u.get("role"),
-                              "avatar": u.get("avatar")}
+                              "avatar": u.get("avatar"),
+                              "posts": {k: v for k, v in (u.get("posts") or {}).items() if int(k) in mine}}
                              for u in users if is_superadmin(u) or mine & set(u.get("school_ids") or [])]
     return copy
 
@@ -293,9 +381,11 @@ def find_user_by_login(db: Dict[str, Any], login: str) -> Optional[Dict[str, Any
 
 
 def make_user(db: Dict[str, Any], login: str, name: str, role: str,
-              password: str, school_ids: Optional[list] = None, show_password: bool = True) -> Dict[str, Any]:
+              password: str, school_ids: Optional[list] = None, show_password: bool = True,
+              posts: Optional[Dict[Any, Any]] = None) -> Dict[str, Any]:
     """Новый пользователь панели. Пароль сотрудника, созданного в панели, виден
-    администратору до первой смены; пароли из .env в базу открытым текстом не пишем."""
+    администратору до первой смены; пароли из .env в базу открытым текстом не пишем.
+    Должности: posts, а если их нет — из role и school_ids (как раньше)."""
     user = {
         "id": next_counted_id(db, "users"),
         "login": passwords.normalize_login(login),
@@ -309,6 +399,7 @@ def make_user(db: Dict[str, Any], login: str, name: str, role: str,
         "created_at": now_iso(),
         **json.loads(json.dumps(STAFF_CHECKIN_DEFAULTS)),
     }
+    set_posts(user, posts if posts is not None else posts_from_role(role, school_ids))
     db["users"].append(user)
     return user
 
@@ -540,6 +631,13 @@ def migrate(db: Dict[str, Any]) -> bool:
             if field not in user:
                 user[field] = default
                 changed = True
+        # Схема 11: должности в школах вместо одной роли на все школы
+        if "posts" not in user:
+            set_posts(user, posts_from_role(user.get("role"), user.get("school_ids")))
+            changed = True
+        if "checkin_manager" in user:
+            user.pop("checkin_manager")
+            changed = True
 
     # Срок действия занятия. valid_from = None — «с того дня, как внесли» (created_at)
     for entry in db["schedule"]:

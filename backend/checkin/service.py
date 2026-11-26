@@ -671,7 +671,7 @@ def teachers(database: Optional[Dict[str, Any]] = None, now: Optional[datetime] 
             "id": user["id"], "name": user.get("name", ""), "role": user.get("role"),
             "school_ids": list(user.get("school_ids") or []),
             "checkin_tracked": bool(user.get("checkin_tracked")),
-            "checkin_manager": bool(user.get("checkin_manager")),
+            "posts": dict(user.get("posts") or {}),
             "hourly_rate": user.get("hourly_rate"), "lang": user.get("lang") or "ru",
             "tg_bound": bool(user.get("tg_id")), "tg_username": user.get("tg_username"),
             "tg_blocked": bool(user.get("tg_blocked_at")), "consent": bool(user.get("consent_at")),
@@ -787,7 +787,7 @@ def set_school_location(user: Dict[str, Any], school_id: int, address: str, lat:
     return result["school"]
 
 
-STAFF_AUDIT_FIELDS = ("hourly_rate", "checkin_tracked", "checkin_manager", "tg_id", "tg_username")
+STAFF_AUDIT_FIELDS = ("hourly_rate", "checkin_tracked", "tg_id", "tg_username")
 
 
 def audit_staff(user: Dict[str, Any], target_id: int, action: str, before: Dict[str, Any],

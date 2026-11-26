@@ -131,7 +131,8 @@ def test_role_can_be_changed_but_not_for_admin(teacher, school_admin):
 def test_teacher_sees_colleague_names_only(school_teacher):
     state = school_teacher.get("/api/state").json()
     assert "users" not in state
-    assert all(set(u) == {"id", "name", "role", "avatar"} for u in state["staff"])
+    assert all(set(u) == {"id", "name", "role", "avatar", "posts"} for u in state["staff"])
+    assert all(set(map(int, u["posts"])) <= {1} for u in state["staff"]), "должности — только в общих школах"
 
 
 # ── Фото в профиле сотрудника ────────────────────────────────────────────────

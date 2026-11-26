@@ -20,7 +20,7 @@ def _find(database: Dict[str, Any], prize_id: int, user: Dict[str, Any] = None):
     """Приз, который этот пользователь может менять. Приз чужой школы — как несуществующий."""
     prize = next((p for p in database["prizes"] if p["id"] == prize_id), None)
     if user is not None and prize is not None and not db.is_superadmin(user):
-        mine = db.allowed_school_ids(database, user)
+        mine = db.manage_school_ids(user) & db.allowed_school_ids(database, user)
         if not db.prize_for_school(prize, mine):
             prize = None
         elif prize.get("school_id") is None:
@@ -38,7 +38,7 @@ def _owner_school(database: Dict[str, Any], item: schemas.PrizeCreate, user: Dic
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
     if db.is_superadmin(user):
         return item.school_id
-    mine = db.allowed_school_ids(database, user)
+    mine = db.manage_school_ids(user) & db.allowed_school_ids(database, user)
     if item.school_id is None:
         if len(mine) != 1:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Выберите школу, для которой этот приз")

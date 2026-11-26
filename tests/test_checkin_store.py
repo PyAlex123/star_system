@@ -158,13 +158,13 @@ V8 = {
 def test_v8_gets_checkin_fields_everywhere():
     config.DB_FILE.write_text(json.dumps(V8, ensure_ascii=False), encoding="utf-8")
     data = db.load_db()
-    assert data["version"] == db.DB_VERSION == 10
+    assert data["version"] == db.DB_VERSION == 11
     school = data["schools"][0]
     assert school["theme"] == "quest", "тема не сбрасывается"
     assert school["lat"] is None and school["lon"] is None and school["radius_m"] == 150
     for user in data["users"]:
         assert set(db.STAFF_CHECKIN_DEFAULTS) <= set(user), user["login"]
-        assert user["tg_id"] is None and user["lang"] == "ru" and user["checkin_manager"] is False
+        assert user["tg_id"] is None and user["lang"] == "ru" and "checkin_manager" not in user
         assert user["checkin_tracked"] is False, "в отметках только те, кого включили явно"
     assert data["users"][1]["password_shown"] == "provod4696", "выданный пароль не теряется"
     for entry in data["schedule"]:
@@ -214,7 +214,7 @@ def test_new_school_and_staff_and_schedule_get_fields(teacher):
     r = teacher.post("/api/users", json={"login": "karimova", "name": "Каримова Д.",
                                          "school_ids": [1], "role": "teacher"})
     user = r.json()["user"]
-    assert user["tg_id"] is None and user["hourly_rate"] is None and user["checkin_manager"] is False
+    assert user["tg_id"] is None and user["hourly_rate"] is None and user["posts"] == {"1": ["teacher"]}
     r = teacher.post("/api/schedule", json={"class_id": 1, "weekdays": [2], "start": "10:00", "end": "10:45"})
     entry = r.json()["created"][0]
     assert entry["valid_from"] is None and entry["valid_to"] is None
@@ -256,7 +256,8 @@ def test_invite_code_never_reaches_non_admins(teacher, school_teacher):
     text = json.dumps(state, ensure_ascii=False)
     assert "SECRET" not in text
     assert "users" not in state
-    assert all(set(s) <= {"id", "name", "role", "avatar"} for s in state["staff"]), \
-        "о коллегах — только имя, роль и фото: без ставки, Telegram и кода приглашения"
+    assert all(set(s) <= {"id", "name", "role", "avatar", "posts"} for s in state["staff"]), \
+        "о коллегах — только имя, роль, должности и фото: без ставки, Telegram и кода приглашения"
+    assert "hourly_rate" not in state["me"], "свою ставку сотрудник не видит — деньги только у администратора"
     admin_state = teacher.get("/api/state").json()
     assert any(u.get("invite_code") for u in admin_state["users"]), "администратору — видно"

@@ -7,7 +7,7 @@ from fastapi.responses import Response
 
 from .. import db, excel
 from ..security import require_teacher
-from .common import bad_request, school_or_404
+from .common import TEACH, bad_request, school_or_404
 from .students import import_rows
 
 router = APIRouter(prefix="/api/excel", tags=["excel"])
@@ -38,7 +38,7 @@ def upload_students(school_id: int, class_name: str = "",
     Сначала разбираем файл целиком и только потом пишем в базу: при ошибке
     в файле не добавится половина класса.
     """
-    school_or_404(db.load_db(), school_id, user)
+    school_or_404(db.load_db(), school_id, user, need=TEACH)
     data = file.file.read(excel.EXCEL_MAX_BYTES + 1)
     try:
         rows, skipped = excel.parse_upload(data)
@@ -59,8 +59,10 @@ def download_journal(school_id: Optional[int] = None,
     """Журнал выбранной школы (или всех своих) — для отчёта."""
     database = db.load_db()
     schools = db.allowed_school_ids(database, user)
+    if not db.is_superadmin(user):
+        schools &= db.teach_school_ids(user)        # журнал — только школ, где человек учитель
     if school_id is not None:
-        school_or_404(database, school_id, user)
+        school_or_404(database, school_id, user, need=TEACH)
         schools = {school_id}
 
     school_names = {s["id"]: s["name"] for s in database["schools"]}

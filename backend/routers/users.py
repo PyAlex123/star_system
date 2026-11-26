@@ -1,6 +1,6 @@
-"""Учётные записи панели: суперадмин заводит сотрудников — учителей и администрацию
-школы — и раздаёт им школы. Пароль сотрудника виден суперадмину, пока сотрудник
-не сменит его сам (как у учеников)."""
+"""Учётные записи панели: суперадмин заводит сотрудников и раздаёт им должности в школах
+(директор, завуч начальной / средней школы, учитель — в каждой школе свои, можно несколько).
+Пароль сотрудника виден суперадмину, пока сотрудник не сменит его сам (как у учеников)."""
 import secrets
 from typing import Any, Dict, List
 
@@ -10,6 +10,7 @@ from .. import config, db, images, passwords, schemas
 from ..checkin import clock as checkin_clock, service as checkin
 from ..security import require_superadmin
 from .common import bad_request, clean_name, not_found
+from .schedule import release_teacher
 
 router = APIRouter(prefix="/api/users", tags=["users"], dependencies=[Depends(require_superadmin)])
 
@@ -27,6 +28,30 @@ def _clean_schools(database: Dict[str, Any], school_ids: List[int]) -> List[int]
     if unknown:
         raise bad_request("Такой школы нет")
     return sorted(set(school_ids))
+
+
+def _clean_posts(database: Dict[str, Any], posts: Dict[int, List[str]]) -> Dict[int, List[str]]:
+    _clean_schools(database, list(posts))
+    return posts
+
+
+def _legacy_posts(user: Dict[str, Any], item: schemas.UserUpdate) -> Dict[str, List[str]]:
+    """Старый способ (role + school_ids): новые школы — с должностью по роли, оставшиеся —
+    со своими должностями; смена роли переводит все должности в неё."""
+    role = item.role or user.get("role")
+    school_ids = item.school_ids if item.school_ids is not None else list(user.get("school_ids") or [])
+    if item.role is not None and item.role != user.get("role"):
+        return db.posts_from_role(role, school_ids)
+    current = user.get("posts") or {}
+    return {str(s): current.get(str(s)) or db.posts_from_role(role, [s])[str(s)] for s in school_ids}
+
+
+def apply_posts(database: Dict[str, Any], actor: Dict[str, Any], user: Dict[str, Any], posts) -> None:
+    """Записать должности; там, где человек перестал быть учителем, — снять его с занятий."""
+    taught = db.teach_school_ids(user)
+    db.set_posts(user, posts)
+    for school_id in taught - db.teach_school_ids(user):
+        release_teacher(database, actor, user["id"], school_id)
 
 
 def _password(raw) -> str:
@@ -51,6 +76,9 @@ def create_user(item: schemas.UserCreate):
     def _apply(database: Dict[str, Any]):
         if db.find_user_by_login(database, login):
             raise bad_request("Такой логин уже занят")
+        if item.posts is not None:
+            return db.make_user(database, login, name, item.role, password,
+                                posts=_clean_posts(database, item.posts))
         schools = _clean_schools(database, item.school_ids)
         return db.make_user(database, login, name, item.role, password, schools)
 
@@ -60,8 +88,8 @@ def create_user(item: schemas.UserCreate):
 
 @router.patch("/{user_id}")
 def update_user(user_id: int, item: schemas.UserUpdate, me: Dict[str, Any] = Depends(require_superadmin)):
-    """Имя и школы учителя. Снятая школа пропадает у него сразу, без повторного входа.
-    Здесь же поля отметок: ставка, «отмечается в боте», «ведёт отметки»."""
+    """Имя и должности в школах. Снятая школа пропадает у него сразу, без повторного входа.
+    Здесь же поля отметок: ставка и «отмечается в боте»."""
     before: Dict[str, Any] = {}
 
     def _apply(database: Dict[str, Any]):
@@ -69,24 +97,24 @@ def update_user(user_id: int, item: schemas.UserUpdate, me: Dict[str, Any] = Dep
         before.update(user)
         if item.name is not None:
             user["name"] = clean_name(item.name, "Введите имя учителя")
-        if item.school_ids is not None:
-            user["school_ids"] = _clean_schools(database, item.school_ids)
-        if item.role is not None and item.role != user.get("role"):
-            if db.is_superadmin(user):
-                raise bad_request("Роль администратора не меняется")
-            user["role"] = item.role
-            user["session_key"] = db.new_session_key()   # новые права — с нового входа
+        if item.role is not None and item.role != user.get("role") and db.is_superadmin(user):
+            raise bad_request("Роль администратора не меняется")
+        if not db.is_superadmin(user) and (item.posts is not None or item.school_ids is not None
+                                           or item.role is not None):
+            role = user.get("role")
+            if item.posts is not None:
+                posts = _clean_posts(database, item.posts)
+            else:
+                if item.school_ids is not None:
+                    _clean_schools(database, item.school_ids)
+                posts = _legacy_posts(user, item)
+            apply_posts(database, me, user, posts)
+            if item.role is not None and user.get("role") != role:
+                user["session_key"] = db.new_session_key()   # новые права — с нового входа
         if "hourly_rate" in item.model_fields_set:
             user["hourly_rate"] = item.hourly_rate
         if item.checkin_tracked is not None:
             user["checkin_tracked"] = item.checkin_tracked
-        if item.checkin_manager is not None:
-            if item.checkin_manager and user.get("role") != db.ROLE_TEACHER:
-                raise bad_request("Вести отметки можно поручить только учителю: "
-                                  "администрация школы только смотрит, администратору раздел открыт и так")
-            user["checkin_manager"] = item.checkin_manager
-        if user.get("role") != db.ROLE_TEACHER and user.get("checkin_manager"):
-            user["checkin_manager"] = False                # стал администрацией школы — поручение снято
         return user
 
     user = db.transaction(_apply)

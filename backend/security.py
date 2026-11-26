@@ -219,10 +219,10 @@ def require_superadmin(request: Request) -> Dict[str, Any]:
 
 
 def require_prize_editor(request: Request) -> Dict[str, Any]:
-    """Витрина призов: администратор системы — вся, администрация школы — призы своей школы.
-    Учитель призы только выдаёт."""
+    """Витрина призов: администратор системы — вся, руководство школы (директор, завуч) —
+    призы своей школы. Учитель призы только выдаёт."""
     user = require_panel(request)
-    if not (db.is_superadmin(user) or db.is_school_admin(user)):
+    if not (db.is_superadmin(user) or db.manage_school_ids(user)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Призы добавляет администрация")
     return user
 

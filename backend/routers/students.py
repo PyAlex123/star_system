@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends
 
 from .. import db, images, passwords, schemas
 from ..security import require_teacher
-from .common import (bad_request, class_or_404, clean_name, drop_photos, school_or_404,
+from .common import (TEACH, bad_request, class_or_404, clean_name, drop_photos, school_or_404,
                      student_or_404)
 
 router = APIRouter(prefix="/api", tags=["students"], dependencies=[Depends(require_teacher)])
@@ -44,7 +44,7 @@ def add_student(item: schemas.StudentCreate, user: Dict[str, Any] = Depends(requ
     name = clean_name(item.name, "Укажите фамилию и имя ученика")
 
     def _apply(database: Dict[str, Any]):
-        class_or_404(database, item.class_id, user)
+        class_or_404(database, item.class_id, user, need=TEACH)
         student = _make_student(database, item.class_id, name, item.total_stars)
         database["students"].append(student)
         return student
@@ -70,7 +70,7 @@ def import_rows(rows: List[Tuple[int, str, str, int]], user: Dict[str, Any]) -> 
             name = (raw_name or "").strip()
             if not name:
                 continue
-            school_or_404(database, school_id, user)
+            school_or_404(database, school_id, user, need=TEACH)
             cls = db.ensure_class(database, school_id, (class_name or "").strip() or "Общий")
             student = _make_student(database, cls["id"], name, stars)
             if student["history"]:
@@ -86,7 +86,7 @@ def import_rows(rows: List[Tuple[int, str, str, int]], user: Dict[str, Any]) -> 
 def update_student(student_id: int, item: schemas.StudentUpdate, user: Dict[str, Any] = Depends(require_teacher)):
     """Правка имени, логина и «скрыт из рейтинга». Звёзды и история не затрагиваются."""
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
         changed = False
 
         if item.name is not None:
@@ -120,7 +120,7 @@ def delete_student(student_id: int, user: Dict[str, Any] = Depends(require_teach
         student = db.find_student(database, student_id)
         if not student:
             return db.NO_SAVE
-        student_or_404(database, student_id, user)
+        student_or_404(database, student_id, user, need=TEACH)
         removed["photos"] = [images.avatar_upload_url(student)]
         database["students"] = [s for s in database["students"] if s["id"] != student_id]
         return None
@@ -134,8 +134,8 @@ def delete_student(student_id: int, user: Dict[str, Any] = Depends(require_teach
 def move_student(student_id: int, class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     """Перевести ученика в другой класс — звёзды и история остаются при нём."""
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
-        class_or_404(database, class_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
+        class_or_404(database, class_id, user, need=TEACH)
         student["class_id"] = class_id
         return student
 
@@ -160,7 +160,7 @@ def reset_password(student_id: int, item: schemas.PasswordReset, user: Dict[str,
             raise bad_request(str(exc))
 
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
         db.rotate_session(student)
         return passwords.set_credentials(student, custom)
 
@@ -171,7 +171,7 @@ def reset_password(student_id: int, item: schemas.PasswordReset, user: Dict[str,
 def reset_token(student_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     """Новый QR-код: старая карточка перестаёт работать, Telegram отвязывается."""
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
         tokens = {s.get("token") for s in database["students"] if s["id"] != student_id}
         student["token"] = db.new_token(tokens)
         db.clear_telegram(student)
@@ -185,7 +185,7 @@ def reset_token(student_id: int, user: Dict[str, Any] = Depends(require_teacher)
 def unbind_telegram(student_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     """Отвязать Telegram-аккаунт, код карточки остаётся прежним."""
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
         if student.get("tg_id") is None:
             return db.NO_SAVE
         db.clear_telegram(student)
@@ -202,7 +202,7 @@ def reset_avatar(student_id: int, user: Dict[str, Any] = Depends(require_teacher
     removed: Dict[str, list] = {}
 
     def _apply(database: Dict[str, Any]):
-        student = student_or_404(database, student_id, user)
+        student = student_or_404(database, student_id, user, need=TEACH)
         removed["photos"] = [images.avatar_upload_url(student)]
         student["avatar"] = db.default_avatar(student_id)
         return student["avatar"]

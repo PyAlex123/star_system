@@ -222,8 +222,8 @@ def class_cards(class_id: int, request: Request):
 
     base = config.URL_PREFIX
     title = html.escape(f"{cls['name']} — {school}")
-    # Администрации школы журнала нет — возвращаем в её раздел «Карточки»
-    back_hash, back_label = ("#cards", "К классам") if db.is_school_admin(user) else ("", "В журнал")
+    # Не учителю этой школы (директору, завучу) журнала нет — возвращаем в раздел «Карточки»
+    back_hash, back_label = ("", "В журнал") if db.teaches_in(user, cls["school_id"]) else ("#cards", "К классам")
     # Галочку меняет только администратор: бот один на все школы
     admin = db.is_superadmin(user)
     # Не администратору галочка недоступна — причину пишем рядом, а не только в подсказке

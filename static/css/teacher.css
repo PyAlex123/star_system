@@ -12,8 +12,8 @@ body.teacher { --side-w: 224px; min-height: 100vh; display: grid; grid-template-
 /* Роли: кнопки администратора учитель не видит (сервер проверяет сам) */
 body:not(.is-admin) .admin-only { display: none !important; }
 body:not(.is-teacher) .teacher-only { display: none !important; }
-/* Администрация школы только смотрит: всё, что меняет данные, ей не показываем */
-body.is-sadmin .editor-only { display: none !important; }
+/* Журнал и звёзды — учителю выбранной школы; директору и завучу без уроков их не показываем */
+body:not(.can-teach) .editor-only { display: none !important; }
 body:not(.is-sadmin) .sadmin-only { display: none !important; }
 /* Призы добавляют администратор системы и администрация школы (свои) */
 body:not(.is-admin):not(.is-sadmin) .prize-editor { display: none !important; }
@@ -909,6 +909,28 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .tag-row .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-row .n-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .user-sub { display: flex; flex-wrap: wrap; gap: 4px; font-weight: 400; }
+
+/* Должности в школах (окно сотрудника) */
+.post-list { display: flex; flex-direction: column; gap: 8px; max-height: min(44vh, 360px); overflow-y: auto; }
+.post-row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--r12); background: var(--surface-2); }
+.post-school { font-weight: 600; font-size: 14px; line-height: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.post-chips button {
+  min-height: 40px;
+  padding: 0 6px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--r8);
+  background: var(--field-bg);
+  color: var(--text);
+  font: 500 13px/16px var(--font-ui);
+  cursor: pointer;
+}
+.post-chips button:hover { border-color: var(--accent-text); }
+.post-chips button[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+@media (max-width: 700px) {
+  .post-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .post-chips button { min-height: 44px; }
+}
 
 /* ── Отметки преподавателей: подготовка ────────────────────── */
 

@@ -11,7 +11,7 @@ from .. import db, images, schemas
 from .. import themes
 from ..monitoring import store as monitoring_store
 from ..security import require_panel, require_superadmin, require_teacher
-from .common import bad_request, class_or_404, clean_name, drop_photos, school_or_404
+from .common import TEACH, bad_request, class_or_404, clean_name, drop_photos, not_found, school_or_404
 
 router = APIRouter(prefix="/api", tags=["schools"], dependencies=[Depends(require_teacher)])
 # Оформление школы меняет и администрация школы — у неё нет прав «учителя» на остальное
@@ -63,6 +63,29 @@ def set_school_theme(school_id: int, item: schemas.SchoolTheme,
     return {"ok": True, "theme": item.theme}
 
 
+@router.put("/schools/{school_id}/staff/{user_id}")
+def set_school_staff(school_id: int, user_id: int, item: schemas.StaffPosts,
+                     me: Dict[str, Any] = Depends(require_superadmin)):
+    """Раздел «Школы»: должности сотрудника в этой школе. Пустой список — убрать из школы;
+    перестал быть учителем — его занятия в школе остаются без учителя."""
+    from .users import apply_posts
+
+    def _apply(database: Dict[str, Any]):
+        school_or_404(database, school_id)
+        user = db.find_user(database, user_id)
+        if not user:
+            raise not_found("Сотрудник не найден")
+        if db.is_superadmin(user):
+            raise bad_request("Администратор работает во всех школах — должности ему не нужны")
+        posts = dict(user.get("posts") or {})
+        posts[str(school_id)] = list(item.posts)
+        apply_posts(database, me, user, posts)
+        return user
+
+    user = db.transaction(_apply)
+    return {"ok": True, "user": db.public_user(user, with_password=True)}
+
+
 @router.delete("/schools/{school_id}", dependencies=[Depends(require_superadmin)])
 def delete_school(school_id: int):
     """Удаляет школу вместе со всеми её классами, учениками и их фото."""
@@ -85,9 +108,7 @@ def delete_school(school_id: int):
         database["schedule"] = [e for e in database.get("schedule", []) if e.get("class_id") not in class_ids]
         database["schedule_log"] = [r for r in database.get("schedule_log", []) if r.get("school_id") != school_id]
         database["schools"] = [s for s in database["schools"] if s["id"] != school_id]
-        for user in database.get("users", []):
-            if school_id in (user.get("school_ids") or []):
-                user["school_ids"] = [i for i in user["school_ids"] if i != school_id]
+        db.drop_school_posts(database, school_id)
         return None
 
     db.transaction(_apply)
@@ -103,7 +124,7 @@ def add_class(item: schemas.ClassCreate, user: Dict[str, Any] = Depends(require_
     name = clean_name(item.name, "Введите название класса")
 
     def _apply(database: Dict[str, Any]):
-        school_or_404(database, item.school_id, user)
+        school_or_404(database, item.school_id, user, need=TEACH)
         if db.find_class_by_name(database, item.school_id, name):
             raise bad_request("В этой школе такой класс уже есть")
         cls = {"id": db.next_id(database["classes"]), "school_id": item.school_id, "name": name}
@@ -125,7 +146,7 @@ def add_classes(item: schemas.ClassBulkCreate, user: Dict[str, Any] = Depends(re
         raise bad_request("Выберите хотя бы один класс")
 
     def _apply(database: Dict[str, Any]):
-        school_or_404(database, item.school_id, user)
+        school_or_404(database, item.school_id, user, need=TEACH)
         created = []
         for name in names:
             if db.find_class_by_name(database, item.school_id, name):
@@ -145,10 +166,10 @@ def update_class(class_id: int, item: schemas.ClassUpdate,
                  user: Dict[str, Any] = Depends(require_teacher)):
     """Переименовать класс или перенести его в другую школу (из своих)."""
     def _apply(database: Dict[str, Any]):
-        cls = class_or_404(database, class_id, user)
+        cls = class_or_404(database, class_id, user, need=TEACH)
 
         if item.school_id is not None:
-            school_or_404(database, item.school_id, user)
+            school_or_404(database, item.school_id, user, need=TEACH)
             cls["school_id"] = item.school_id
 
         if item.name is not None:
@@ -169,7 +190,7 @@ def clear_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
     removed: Dict[str, list] = {"photos": []}
 
     def _apply(database: Dict[str, Any]):
-        class_or_404(database, class_id, user)
+        class_or_404(database, class_id, user, need=TEACH)
         gone = [s for s in database["students"] if s.get("class_id") == class_id]
         if not gone:
             return db.NO_SAVE
@@ -192,7 +213,7 @@ def delete_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher))
     def _apply(database: Dict[str, Any]):
         if not db.find_class(database, class_id):
             return db.NO_SAVE
-        class_or_404(database, class_id, user)
+        class_or_404(database, class_id, user, need=TEACH)
         removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
                              if s.get("class_id") == class_id]
         database["students"] = [s for s in database["students"]

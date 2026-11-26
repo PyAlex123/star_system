@@ -638,8 +638,7 @@ async function saveBells() {
 
 function scheduleTeachers() {
   const school = activeSchool;
-  return staffList().filter((u) => u.role !== "school_admin" &&
-    (u.role === "superadmin" || !u.school_ids || u.school_ids.includes(school)));
+  return staffList().filter((u) => u.role === "superadmin" || postsOf(u, school).includes("teacher"));
 }
 
 function renderDayPick() {

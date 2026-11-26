@@ -68,9 +68,10 @@ def _names(database: Dict[str, Any], class_ids: Iterable[int]) -> str:
     return " + ".join(_class_name(database, c) for c in class_ids)
 
 
-def _default_teacher(user: Dict[str, Any]) -> Optional[int]:
-    """Учитель нового занятия по умолчанию — тот, кто добавил; администрация школы уроков не ведёт."""
-    return None if db.is_school_admin(user) else user["id"]
+def _default_teacher(user: Dict[str, Any], school_id: int) -> Optional[int]:
+    """Учитель нового занятия по умолчанию — тот, кто добавил, если он учитель в этой школе
+    (директор и завуч без часов уроков не ведут)."""
+    return user["id"] if db.teaches_in(user, school_id) else None
 
 Bounds = Tuple[Optional[date], Optional[date]]
 
@@ -84,13 +85,28 @@ def _entry_or_404(database: Dict[str, Any], entry_id: int, user: Dict[str, Any])
 
 
 def _check_teacher(database: Dict[str, Any], user_id: Optional[int], school_id: int) -> Optional[int]:
-    """Учитель занятия должен работать в этой школе (или быть администратором)."""
+    """Учитель занятия — учитель этой школы (или администратор)."""
     if user_id is None:
         return None
     teacher = db.find_user(database, user_id)
-    if not teacher or not (db.is_superadmin(teacher) or school_id in (teacher.get("school_ids") or [])):
-        raise bad_request("Этот учитель не работает в этой школе")
+    if not teacher or not db.teaches_in(teacher, school_id):
+        raise bad_request("Этот сотрудник не учитель в этой школе")
     return user_id
+
+
+def release_teacher(database: Dict[str, Any], actor: Dict[str, Any], user_id: int, school_id: int) -> int:
+    """Сотрудник больше не учитель в школе — его занятия там остаются без учителя
+    (их видно в «Что мешает отметкам»), в журнале изменений — одна запись."""
+    class_ids = {c["id"] for c in database.get("classes", []) if c["school_id"] == school_id}
+    entries = [e for e in database.get("schedule", [])
+               if e.get("user_id") == user_id and e.get("class_id") in class_ids]
+    for entry in entries:
+        entry["user_id"] = None
+    if entries:
+        _stamp(entries, actor)
+        name = _teacher_name(database, user_id)
+        _log(database, school_id, actor, f"{name} больше не учитель в школе — снят(а) с занятий: {len(entries)}")
+    return len(entries)
 
 
 def _check_time(start: str, end: str) -> None:
@@ -174,8 +190,8 @@ def add_lessons(item: schemas.ScheduleCreate, user: Dict[str, Any] = Depends(req
 
     def _apply(database: Dict[str, Any]):
         cls = class_or_404(database, item.class_id, user)
-        teacher = _check_teacher(database, item.user_id if item.user_id is not None else _default_teacher(user),
-                                 cls["school_id"])
+        teacher = _check_teacher(database, item.user_id if item.user_id is not None
+                                 else _default_teacher(user, cls["school_id"]), cls["school_id"])
         schedule = database.setdefault("schedule", [])
         created = []
         draft = {"created_at": db.today(), "valid_from": item.valid_from, "valid_to": item.valid_to}
@@ -306,7 +322,7 @@ def set_cell(item: schemas.ScheduleCell, user: Dict[str, Any] = Depends(require_
             if class_or_404(database, class_id, user)["school_id"] != item.school_id:
                 raise not_found("Класс не найден")
         wanted = (item.user_id if "user_id" in item.model_fields_set
-                  else current[0]["user_id"] if current else _default_teacher(user))
+                  else current[0]["user_id"] if current else _default_teacher(user, item.school_id))
         teacher = _check_teacher(database, wanted, item.school_id)
 
         keep = [e for e in current if e["class_id"] in wanted_ids]
