@@ -23,8 +23,9 @@ from typing import Any, Dict, Optional
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (BotCommand, BotCommandScopeChat, CallbackQuery, ChatMemberUpdated, ForceReply,
-                           InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonCommands, Message,
-                           ReplyKeyboardMarkup, ReplyParameters)
+                           InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonCommands,
+                           MenuButtonWebApp, Message,
+                           ReplyKeyboardMarkup, ReplyParameters, WebAppInfo)
 
 from .. import config, db
 from . import notify, service, store
@@ -34,7 +35,7 @@ log = logging.getLogger("stars.checkin.bot")
 
 # Код с карточки сотрудника, набранный руками: 8 букв и цифр, можно с пробелом или дефисом
 CODE_TEXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 \-]{6,10}[A-Za-z0-9]$")
-MENU_ACTIONS = ("menu_here", "menu_today", "menu_month", "menu_lang")
+MENU_ACTIONS = ("menu_here", "menu_today", "menu_month", "menu_lang", "menu_panel")
 
 
 def _menu_lookup() -> Dict[str, str]:
@@ -53,8 +54,29 @@ def menu_keyboard(lang: str) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text=t(lang, "menu_here"), request_location=True)],
         [KeyboardButton(text=t(lang, "menu_today")), KeyboardButton(text=t(lang, "menu_month"))],
-        [KeyboardButton(text=t(lang, "menu_lang"))],
+        [KeyboardButton(text=t(lang, "menu_panel")), KeyboardButton(text=t(lang, "menu_lang"))],
     ], resize_keyboard=True, is_persistent=True)
+
+
+def panel_markup(lang: str) -> Optional[InlineKeyboardMarkup]:
+    """Кнопка «Открыть панель» — панель учителя как Telegram Web App. Кнопкой под сообщением,
+    а не кнопкой клавиатуры: Web App с клавиатуры не получает подписи Telegram и не войдёт сам."""
+    url = config.staff_panel_url()
+    if not url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=t(lang, "panel_button"), web_app=WebAppInfo(url=url)),
+    ]])
+
+
+async def send_panel(message: Message, lang: str, text: Optional[str] = None) -> None:
+    """Сообщение с кнопкой панели; без https (локальный запуск) — адрес сайта текстом."""
+    markup = panel_markup(lang)
+    if markup:
+        await message.answer(text or t(lang, "panel_text"), reply_markup=markup)
+    else:
+        prefix = f"{text}\n\n" if text else ""
+        await message.answer(prefix + t(lang, "panel_no_https", url=config.site_url("/login")))
 
 
 def lang_keyboard() -> InlineKeyboardMarkup:
@@ -205,10 +227,15 @@ async def is_staff_message(message: Message) -> bool:
     return await _call(service.user_by_tg, message.from_user.id) is not None
 
 
-async def staff_chat(bot, chat_id: int) -> None:
-    """У сотрудника кнопка меню — команды, а не «Кабинет» ученика; и свои команды."""
+async def staff_chat(bot, chat_id: int, lang: str = "ru") -> None:
+    """У сотрудника кнопка меню слева от поля ввода — «Панель» (панель учителя как Telegram
+    Web App, вход по подписи Telegram), а не «Кабинет» ученика; и свои команды.
+    Без https (локальный запуск) — кнопка команд."""
+    url = config.staff_panel_url()
+    button = (MenuButtonWebApp(text=t(lang, "panel_menu_button"), web_app=WebAppInfo(url=url))
+              if url else MenuButtonCommands())
     try:
-        await bot.set_chat_menu_button(chat_id=chat_id, menu_button=MenuButtonCommands())
+        await bot.set_chat_menu_button(chat_id=chat_id, menu_button=button)
         await bot.set_my_commands([
             BotCommand(command="start", description="Меню / Menyu"),
             BotCommand(command="help", description="Как отмечаться / Qanday belgilash"),
@@ -228,10 +255,10 @@ def build_router() -> Router:
         if not user:
             await message.answer(t("ru", "start_unbound") + "\n\n" + t("uz", "start_unbound"))
             return
-        await staff_chat(message.bot, message.chat.id)
         lang = lang_of(user.get("lang"))
+        await staff_chat(message.bot, message.chat.id, lang)
         if not user.get("checkin_tracked"):
-            await message.answer(_not_tracked_text(user))
+            await send_panel(message, lang, _not_tracked_text(user))     # панель нужна и без отметок
         elif not user.get("consent_at"):
             await message.answer(t(lang, "consent"), reply_markup=consent_keyboard(lang))
         else:
@@ -245,10 +272,10 @@ def build_router() -> Router:
             await message.answer(t("ru", f"code_{status}") + "\n\n" + t("uz", f"code_{status}"))
             return
         if status == "ok":
-            await staff_chat(message.bot, message.chat.id)
             lang = lang_of(user.get("lang"))
+            await staff_chat(message.bot, message.chat.id, lang)
             if not user.get("checkin_tracked"):
-                await message.answer(_not_tracked_text(user))
+                await send_panel(message, lang, _not_tracked_text(user))
                 return
             await message.answer(t(lang, "code_ok", name=esc(user.get("name"))))
             await message.answer(t(lang, "choose_lang"), reply_markup=lang_keyboard())
@@ -280,6 +307,7 @@ def build_router() -> Router:
         await callback.answer()
         if callback.message:
             await callback.message.edit_text(t(lang, "lang_set"))
+            await staff_chat(callback.bot, callback.message.chat.id, lang)     # «Панель» / «Panel»
             if user.get("consent_at"):
                 await callback.message.answer(t(lang, "menu_hint"), reply_markup=menu_keyboard(lang))
             else:
@@ -341,6 +369,14 @@ def build_router() -> Router:
             if user:
                 lang = lang_of(user.get("lang"))
                 await message.answer(t(lang, "help"), reply_markup=menu_keyboard(lang))
+            return
+        if action == "menu_panel":
+            # Панель — любому привязанному сотруднику: и без отметок, и до согласия
+            user = await _call(service.user_by_tg, message.from_user.id)
+            if not user:
+                await message.answer(t("ru", "start_unbound") + "\n\n" + t("uz", "start_unbound"))
+                return
+            await send_panel(message, lang_of(user.get("lang")))
             return
         if action == "menu_lang":
             await message.answer(t("ru", "choose_lang"), reply_markup=lang_keyboard())

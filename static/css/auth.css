@@ -70,6 +70,9 @@ body.auth {
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .auth-help { display: flex; gap: 12px; align-items: flex-start; padding: 0 8px; font-size: 14px; line-height: 20px; color: var(--muted); text-wrap: pretty; }
 .auth-help .ic { width: 20px; height: 20px; flex: none; }
+/* Вход из Telegram-бота (кнопка «Панель»): пока проверяем подпись — строка вместо формы */
+.tg-wait { margin: 0; padding: 0; color: var(--text); }
+.tg-wait .ic { color: var(--accent-text); }
 
 /* ── Выбор входа (/) ───────────────────────────────────────── */
 

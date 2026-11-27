@@ -11,6 +11,7 @@ SA_LOGIN, SA_PASSWORD = "director", "direktor-2026"
 
 # Не панель: вход, кабинет ученика, вебхук бота. Смена своего пароля и выход — всем ролям.
 ALLOWED_FOR_ALL = {"/api/auth/teacher", "/api/auth/teacher/password", "/api/auth/teacher/logout",
+                   "/api/auth/teacher/twa",     # вход в панель из Telegram — по подписи бота
                    "/api/auth/teacher/photo",   # своё фото в профиле — всем ролям
                    "/api/checkin/my/qr.png"}    # свой QR в бот для отметок — всем ролям
 # /api/m/… — страница опроса ученика: без входа, по ссылке школы.

@@ -184,6 +184,13 @@ def webhook_url() -> str:
 STAFF_START_PREFIX = "inv_"       # /start inv_<код> — сотрудник, /start <код> — ученик
 
 
+def staff_panel_url() -> str:
+    """Панель как Telegram Web App: кнопка «Панель» у сотрудника в боте. Страница входа сама
+    войдёт по подписи Telegram (?tg=1). Telegram открывает только https — иначе пусто."""
+    url = site_url("/login?tg=1")
+    return url if url.startswith("https://") else ""
+
+
 def staff_link(code: str) -> str:
     """Ссылка сотрудника в бот (тот же, что у учеников) — по его постоянному коду, она же в QR
     карточки сотрудника. Пусто — имя бота неизвестно."""

@@ -147,6 +147,26 @@ def _set_panel_cookie(response: Response, user: Dict[str, Any]) -> None:
     )
 
 
+@router.post("/teacher/twa")
+def login_teacher_via_telegram(payload: schemas.TwaAuth, response: Response):
+    """Панель как Telegram Web App: кнопка «Панель» в боте открывает /login?tg=1, страница
+    присылает initData — проверяем подпись бота и пускаем сотрудника, чей Telegram привязан
+    кодом с карточки. Пароль не нужен: подпись подделать нельзя, привязку делал сам сотрудник."""
+    try:
+        data = security.validate_init_data(payload.init_data)
+    except security.InitDataError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                            "Не удалось войти через Telegram — закройте панель и откройте её снова из бота")
+    tg_id = (data.get("user") or {}).get("id")
+    user = db.find_user_by_tg(db.load_db(), tg_id) if tg_id else None
+    if not user:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Этот Telegram не привязан к сотруднику. Отсканируйте QR со своей карточки "
+                            "сотрудника или войдите по логину и паролю.")
+    _set_panel_cookie(response, user)
+    return {"ok": True, "role": user["role"]}
+
+
 @router.post("/teacher")
 def login_teacher(payload: schemas.TeacherLogin, response: Response, request: Request):
     """Вход в панель по логину и паролю. Сессия кладётся в httpOnly-cookie.

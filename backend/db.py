@@ -409,6 +409,13 @@ def find_user_by_login(db: Dict[str, Any], login: str) -> Optional[Dict[str, Any
     return next((u for u in db.get("users", []) if u.get("login") == wanted), None)
 
 
+def find_user_by_tg(db: Dict[str, Any], tg_id: Optional[int]) -> Optional[Dict[str, Any]]:
+    """Сотрудник, чей Telegram привязан кодом с карточки сотрудника."""
+    if not tg_id:
+        return None
+    return next((u for u in db.get("users", []) if u.get("tg_id") == tg_id), None)
+
+
 def make_user(db: Dict[str, Any], login: str, name: str, role: str,
               password: str, school_ids: Optional[list] = None, show_password: bool = True,
               posts: Optional[Dict[Any, Any]] = None) -> Dict[str, Any]:

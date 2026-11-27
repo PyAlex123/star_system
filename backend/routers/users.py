@@ -124,6 +124,14 @@ def update_user(user_id: int, item: schemas.UserUpdate, me: Dict[str, Any] = Dep
 TELEGRAM_FIELDS = ("tg_id", "tg_username", "tg_bound_at", "tg_blocked_at", "consent_at")
 
 
+def _end_sessions(user: Dict[str, Any], me: Dict[str, Any]) -> None:
+    """Telegram отвязали (потеряли телефон, чужой аккаунт) — панель, открытая из бота, тоже
+    закрывается: все входы сотрудника завершаются, по паролю он войдёт снова. Себе
+    администратор сессию не обрывает — иначе его выкинет посреди работы."""
+    if user["id"] != me["id"]:
+        user["session_key"] = db.new_session_key()
+
+
 @router.post("/{user_id}/code")
 def new_bot_code(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
     """Новый код для бота — как «новый QR» у ученика: старая карточка сотрудника перестаёт
@@ -136,6 +144,7 @@ def new_bot_code(user_id: int, me: Dict[str, Any] = Depends(require_superadmin))
         user["bot_code"] = db.new_staff_code(database)
         for field in TELEGRAM_FIELDS:
             user[field] = None
+        _end_sessions(user, me)
         return user
 
     user = db.transaction(_apply)
@@ -155,6 +164,7 @@ def unbind_telegram(user_id: int, me: Dict[str, Any] = Depends(require_superadmi
         before.update(user)
         for field in TELEGRAM_FIELDS:
             user[field] = None
+        _end_sessions(user, me)
         return user
 
     user = db.transaction(_apply)

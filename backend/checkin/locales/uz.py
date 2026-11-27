@@ -39,7 +39,15 @@ TEXTS = {
     "menu_today": "📅 Bugungi darslarim",
     "menu_month": "⏱ Oylik soatlarim",
     "menu_lang": "🌐 Til",
+    "menu_panel": "🖥 Panel",
     "menu_hint": "Quyidagi menyudan amalni tanlang.",
+
+    # Oʻqituvchi paneli Telegramning oʻzida (Web App)
+    "panel_text": "🖥 Oʻqituvchi paneli — jurnal, dars jadvali va soatlar bilan «Mening kabinetim» — "
+                  "login va parolsiz, toʻgʻridan-toʻgʻri Telegramda ochiladi.",
+    "panel_button": "Panelni ochish",
+    "panel_menu_button": "Panel",
+    "panel_no_https": "🖥 Panel saytda ochiladi: {url}",
 
     # Joylashuv
     "loc_await": "🏫 {school}: {lessons}.\n{distance}\n\n"

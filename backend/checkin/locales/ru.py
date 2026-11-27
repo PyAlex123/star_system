@@ -41,7 +41,15 @@ TEXTS = {
     "menu_today": "📅 Мои уроки сегодня",
     "menu_month": "⏱ Мои часы за месяц",
     "menu_lang": "🌐 Язык",
+    "menu_panel": "🖥 Панель",
     "menu_hint": "Выберите действие в меню ниже.",
+
+    # Панель учителя прямо в Telegram (Web App)
+    "panel_text": "🖥 Панель учителя — журнал, расписание и «Мой кабинет» с часами — открывается прямо "
+                  "в Telegram, без логина и пароля.",
+    "panel_button": "Открыть панель",
+    "panel_menu_button": "Панель",
+    "panel_no_https": "🖥 Панель открывается на сайте: {url}",
 
     # Геолокация
     "loc_await": "🏫 {school}: {lessons}.\n{distance}\n\n"

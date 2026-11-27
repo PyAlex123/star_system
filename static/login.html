@@ -24,6 +24,10 @@
     </div>
   </div>
 
+  <!-- Открыто кнопкой «Панель» в Telegram-боте: вход по подписи Telegram, без пароля -->
+  <p class="auth-help tg-wait" id="tgWait" role="status" hidden>
+    <svg class="ic"><use href="#i-send"></use></svg><span>Входим через Telegram…</span></p>
+
   <div class="field">
     <label for="login">Логин</label>
     <input type="text" id="login" class="input-mono" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required>
@@ -59,6 +63,62 @@ function togglePasswordView() {
   button.querySelector("use").setAttribute("href", show ? "#i-eye-off" : "#i-eye");
 }
 
+/* Панель как Telegram Web App: кнопка «Панель» в боте открывает /login?tg=1. Страница входит
+   сама — по подписи Telegram (сотрудник привязал Telegram кодом с карточки). Не вышло
+   или открыли не в Telegram — остаётся обычная форма с логином и паролем. */
+const viaTelegram = new URLSearchParams(location.search).has("tg");
+
+function showTelegramWait(on) {
+  document.getElementById("tgWait").hidden = !on;
+  document.getElementById("submitBtn").disabled = on;
+  for (const id of ["login", "password"]) document.getElementById(id).disabled = on;
+}
+
+function nextPage() {
+  // next приходит из нашего же редиректа и уже содержит подпуть.
+  // Внешние адреса не пускаем — только пути своего сайта.
+  const next = new URLSearchParams(location.search).get("next") || "";
+  return next.startsWith("/") && !next.startsWith("//") ? next : BASE + "/teacher";
+}
+
+async function loginWithTelegram() {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (!tg || !tg.initData) { showTelegramWait(false); return; }      // открыли не в Telegram
+  try { tg.ready(); tg.expand(); } catch (_) {}
+  document.querySelector(".back-link").hidden = true;                  // «Выбор входа» в Telegram не нужен
+  try {
+    const response = await fetch(BASE + "/api/auth/teacher/twa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ init_data: tg.initData }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || "Не удалось войти через Telegram");
+    }
+    // Сессия истечёт — панель вернёт сюда же, и вход снова будет без пароля
+    try { sessionStorage.setItem("zv_tg", "1"); } catch (_) {}
+    location.replace(nextPage());
+  } catch (error) {
+    showTelegramWait(false);
+    document.getElementById("errorText").textContent = error.message;
+    document.getElementById("error").hidden = false;
+  }
+}
+
+if (viaTelegram) {
+  showTelegramWait(true);
+  if (window.Telegram && window.Telegram.WebApp) {
+    loginWithTelegram();
+  } else {
+    const script = document.createElement("script");
+    script.src = "https://telegram.org/js/telegram-web-app.js";
+    script.onload = loginWithTelegram;
+    script.onerror = () => showTelegramWait(false);
+    document.head.appendChild(script);
+  }
+}
+
 async function submitLogin(event) {
   event.preventDefault();
   const button = document.getElementById("submitBtn");
@@ -82,11 +142,7 @@ async function submitLogin(event) {
       const payload = await response.json().catch(() => ({}));
       throw new Error(payload.detail || "Не удалось войти");
     }
-    // next приходит из нашего же редиректа и уже содержит подпуть.
-    // Внешние адреса не пускаем — только пути своего сайта.
-    const next = new URLSearchParams(location.search).get("next") || "";
-    const safe = next.startsWith("/") && !next.startsWith("//") ? next : BASE + "/teacher";
-    location.href = safe;
+    location.href = nextPage();
   } catch (error) {
     document.getElementById("errorText").textContent = error.message;
     errorBox.hidden = false;

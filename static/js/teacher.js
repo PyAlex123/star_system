@@ -47,12 +47,20 @@ const toast = makeToast({ duration: 3400 });
 /* ── Помощники ────────────────────────────────────────────── */
 
 /** Запрос от имени учителя: сессия в cookie. Истекла — на страницу входа. */
+/** Куда вести, когда сессия истекла: панель открыта из Telegram-бота — снова вход по подписи
+ *  Telegram (/login?tg=1), без пароля; иначе — обычная форма. */
+function loginUrl() {
+  let telegram = false;
+  try { telegram = sessionStorage.getItem("zv_tg") === "1"; } catch (_) {}
+  return `${BASE}/login${telegram ? "?tg=1" : ""}`;
+}
+
 async function api(path, options = {}) {
   try {
     return await requestJson(path, options, "Не удалось выполнить действие");
   } catch (error) {
     if (error.status === 401) {
-      location.href = BASE + "/login";
+      location.href = loginUrl();
       throw new Error("Сессия истекла");
     }
     // Отказ в правах бывает, когда в другой вкладке вошли под другим логином:
@@ -74,7 +82,7 @@ async function sessionSwitched() {
       return true;
     }
   } catch (error) {
-    if (error.status === 401) { location.href = BASE + "/login"; return true; }
+    if (error.status === 401) { location.href = loginUrl(); return true; }
   }
   return false;
 }
@@ -2512,6 +2520,8 @@ function toggleNavMore(event) {
 
 async function logout() {
   await fetch(BASE + "/api/auth/teacher/logout", { method: "POST" });
+  // Вышли сами — без входа через Telegram заново; из бота панель снова откроется кнопкой «Панель»
+  try { sessionStorage.removeItem("zv_tg"); } catch (_) {}
   location.href = BASE + "/login";
 }
 
