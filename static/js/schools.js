@@ -141,7 +141,7 @@ function renderSchoolCard(school) {
               onchange="setSchoolRewards(${school.id}, { rewards: this.checked }, this)">
             <span><b>Школа участвует в системе наград</b>
               <small>Звёзды за уроки, призы, рейтинг, карточки с QR и кабинет ученика. Без неё — расписание, ученики списком, опросы без звёзд и отметки.</small></span></label>
-          <label class="check ck-setting"><input type="checkbox" ${school.self_buy === true ? "checked" : ""}
+          <label class="check ck-setting"><input type="checkbox" ${school.self_buy === true && school.rewards !== false ? "checked" : ""}
               ${school.rewards === false ? "disabled" : ""} onchange="setSchoolRewards(${school.id}, { self_buy: this.checked }, this)">
             <span><b>Ученики покупают призы сами</b>
               <small>Звёзды списываются сразу, приз ждёт выдачи у учителя: он отмечает «Выдан» или отменяет покупку — звёзды вернутся.</small></span></label>

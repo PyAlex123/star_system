@@ -1027,3 +1027,86 @@ body.has-poll #content { padding-bottom: calc(64px + env(safe-area-inset-bottom)
 /* «Да, списать N ★» — второе нажатие подтверждает покупку */
 .cel-btn.sure { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok-fg); }
 .cel-btn .ic { margin-right: 6px; }
+
+/* ── Компьютер (от 900 px): меню слева, содержимое шире ──────────
+   Макета для широкого экрана нет — решение владельца от 27.11.2026: меню слева, как в
+   панели учителя; телефон и окно Telegram не меняются. Только токены. */
+@media (min-width: 900px) {
+  body.app { --rail: 248px; background-color: var(--bg); }
+  .shell, #content { background: transparent; }
+
+  /* Меню разделов — колонка слева; над ним — кто я и сколько звёзд */
+  .tabbar { top: 0; right: auto; width: var(--rail); padding: 116px 12px 24px; border-top: 0; border-right: 1px solid var(--line); }
+  body.has-ribbon .tabbar { padding-top: 152px; }
+  .tabbar-in { max-width: none; height: auto; flex-direction: column; gap: 4px; }
+  .tab { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; height: 48px; padding: 0 8px; border-radius: var(--r12); font-size: 15px; }
+  .tab:hover { background: var(--surface-2); }
+  .tab-pill { width: 44px; height: 32px; flex: none; }
+  .mini, .mini.shown { left: 0; z-index: 31; width: var(--rail); max-width: none; height: 100px; padding: 0 16px;
+    display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto auto; align-content: center; column-gap: 10px; row-gap: 6px;
+    transform: none; opacity: 1; pointer-events: auto; box-shadow: none; border-right: 1px solid var(--line); }
+  .mini-av { grid-row: 1 / span 2; align-self: center; }
+  .mini-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 20px; }
+  .mini-pill { justify-self: start; }
+
+  /* Содержимое — справа от меню, до 1080 px */
+  #content, #content.shell { max-width: none; margin: 0 0 0 var(--rail); padding: 24px 32px 48px; }
+  body[data-view]:not([data-view="prizes"]) #content { padding-top: 24px; }
+  body.has-poll #content { padding-bottom: 128px; }
+  .view { max-width: 1080px; min-height: 0; margin: 0 auto; }
+  .view .pad { padding: 24px 0 0; }
+
+  /* Шапка — карточка в две колонки: кто я и баланс | до приза */
+  .hero { margin: 0; border-radius: var(--r22); padding: 24px 28px; display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; row-gap: 18px; align-items: center; }
+  .hero > .hero-who { grid-column: 1; grid-row: 1; }
+  .hero > .hero-bal { grid-column: 1; grid-row: 2; }
+  .hero > .goal, .hero > .all-ok { grid-column: 2; grid-row: 1 / span 2; max-width: 520px; width: 100%; justify-self: end;
+    border-top: 0; padding-top: 0; }
+  .hero-av, .hero-av img { width: 72px; height: 72px; }
+  .hero-name { font-size: 28px; line-height: 32px; }
+
+  /* Витрина */
+  .seg.filter { max-width: 400px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+  .ord-row { padding: 12px 18px; }
+
+  /* Рейтинг: пьедестал и список рядом */
+  #view-rating > .pad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; row-gap: 16px; align-items: start; }
+  #view-rating #ratingScope, #view-rating #ratingTitle { grid-column: 1 / -1; }
+  #view-rating #ratingScope { max-width: 520px; }
+  #view-rating .podium { grid-column: 1; grid-row: 3 / span 3; }
+  #view-rating .rank-list, #view-rating .motivation, #view-rating .rating-note { grid-column: 2; margin-top: 0; }
+
+  /* История: активность слева, лента справа */
+  #view-history > .pad { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); column-gap: 32px; row-gap: 10px; align-items: start; }
+  #view-history .act-block { grid-column: 1; grid-row: 1 / span 4; position: sticky; top: 24px; margin: 0; }
+  #view-history > .pad > :not(.act-block) { grid-column: 2; }
+  #view-history > .pad:has(#activityBlock[hidden]) { grid-template-columns: minmax(0, 720px); }
+  #view-history > .pad:has(#activityBlock[hidden]) > * { grid-column: 1; }
+
+  /* Профиль: аватар слева, занятия, тема, призы и аккаунт справа */
+  #view-profile > .pad { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; row-gap: 14px; align-items: start; }
+  #view-profile .avatar-block { grid-column: 1; grid-row: 1 / span 6; }
+  #view-profile .sub-block { grid-column: 2; margin-top: 0; }
+  #view-profile .avatar-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+
+  /* Окна — по центру экрана, а не шторкой снизу */
+  .sheet-wrap { justify-content: center; padding: 32px; }
+  .sheet { max-width: 480px; max-height: calc(100dvh - 64px); border-radius: var(--r22); }
+  .sheet.issued { padding-bottom: 20px; }
+  .sheet-actions { padding-bottom: 16px; }
+  .cel-c { position: relative; max-width: 460px; border-radius: var(--r22); padding-bottom: 24px; }
+
+
+  /* Опрос, уведомления — по центру правой части */
+  .poll-bar { left: var(--rail); bottom: 24px; padding: 0 32px; }
+  .poll-in { max-width: 560px; }
+  .toast-host { left: calc(50% + var(--rail) / 2); bottom: 32px; }
+  .top-toast { left: calc(50% + var(--rail) / 2); max-width: 520px; }
+
+  /* Загрузка — в той же сетке */
+  #screenLoading { max-width: 1080px; padding: 24px 32px; }
+  #screenLoading .skel-hero { border-radius: var(--r22); margin: 0; }
+  #screenLoading .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
