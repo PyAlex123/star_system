@@ -53,6 +53,14 @@
   <a class="btn btn-outline btn-lg" id="errorEnterLink" href="#"><svg class="ic"><use href="#i-key"></use></svg>Войти по логину и паролю</a>
 </div>
 
+<!-- Школа не участвует в системе наград -->
+<div class="state-screen" id="screenClosed" hidden>
+  <span class="state-ring"><svg class="ic ic-xl"><use href="#i-school"></use></svg></span>
+  <h2 class="state-title">В твоей школе звёзд пока нет</h2>
+  <p class="state-text" id="closedText">Система звёзд и призов в твоей школе пока не работает. Если учитель говорит, что звёзды уже есть, — пусть обратится к администратору.</p>
+  <button class="btn btn-lg" onclick="closeCabinet()">Закрыть</button>
+</div>
+
 <!-- Вышел из аккаунта -->
 <div class="state-screen" id="screenBye" hidden>
   <span class="state-ring"><svg class="ic ic-xl"><use href="#i-logout"></use></svg></span>

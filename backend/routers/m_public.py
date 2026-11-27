@@ -218,10 +218,14 @@ def award_stars(participant_id: int) -> int:
         conn.execute("UPDATE participants SET stars_given = ? WHERE id = ?", (stars, participant_id))
         title = run["title"]
 
+    given = {"stars": 0}
+
     def _apply(database: Dict[str, Any]):
         student = db.find_student(database, p["student_id"])
-        if not student:
+        # Школу вывели из системы наград уже после запуска опроса — звёзд не будет
+        if not student or not db.rewards_on(db.school_of_student(database, student)):
             return db.NO_SAVE
+        given["stars"] = stars
         student["total_stars"] = int(student.get("total_stars", 0)) + stars
         student.setdefault("history", []).insert(0, {
             "date": db.today(), "delta": stars, "reason": STARS_REASON.format(title=title),
@@ -234,7 +238,10 @@ def award_stars(participant_id: int) -> int:
         with store.write() as conn:      # звёзды не дошли — снимаем отметку, начисление повторится
             conn.execute("UPDATE participants SET stars_given = NULL WHERE id = ?", (participant_id,))
         raise
-    return stars
+    if not given["stars"]:
+        with store.write() as conn:
+            conn.execute("UPDATE participants SET stars_given = 0 WHERE id = ?", (participant_id,))
+    return given["stars"]
 
 
 @router.post("/finish")

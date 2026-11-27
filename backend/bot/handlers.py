@@ -37,8 +37,19 @@ def cabinet_keyboard(student: Optional[Dict[str, Any]] = None) -> Optional[Inlin
     ]])
 
 
+NO_REWARDS_TEXT = (
+    "🏫 В твоей школе система звёзд пока не работает — кабинета со звёздами и призами нет.\n\n"
+    "Если учитель говорит, что звёзды уже есть, — пусть обратится к администратору."
+)
+
+
 async def send_cabinet(message: Message, text: str,
                        student: Optional[Dict[str, Any]] = None) -> None:
+    if student:
+        database = db.load_db()
+        if not db.rewards_on(db.school_of_student(database, student)):
+            await message.answer(NO_REWARDS_TEXT)
+            return
     keyboard = cabinet_keyboard(student)
     if keyboard is None:
         await message.answer(

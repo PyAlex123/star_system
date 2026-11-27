@@ -83,7 +83,17 @@ def create_prize(item: schemas.PrizeCreate, user: Dict[str, Any] = Depends(requi
 def update_prize(prize_id: int, item: schemas.PrizeUpdate, user: Dict[str, Any] = Depends(require_prize_editor)):
     def _apply(database: Dict[str, Any]):
         prize = _find(database, prize_id, user)
-        for field, value in item.model_dump(exclude_none=True).items():
+        changes = item.model_dump(exclude_none=True)
+        changes.pop("school_id", None)
+        # Чей приз (общий или одной школы) решает только администратор системы
+        if "school_id" in item.model_fields_set and item.school_id != prize.get("school_id"):
+            if not db.is_superadmin(user):
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "Для какой школы приз — решает администратор системы")
+            if item.school_id is not None and not db.find_school(database, item.school_id):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Школа не найдена")
+            prize["school_id"] = item.school_id
+        for field, value in changes.items():
             prize[field] = value.strip() if isinstance(value, str) else value
         return prize
 

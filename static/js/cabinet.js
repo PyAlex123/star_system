@@ -146,6 +146,8 @@ function renderCabinetMonth() {
   const [y, m] = month.split("-").map(Number);
   $("meMonthLabel").textContent = monthLabel(month);
   const work = monthWork(state.me.id, new Date(y, m - 1, 1));
+  // Журнал звёзд — только если хоть одна из школ участвует в системе наград
+  $("meJournal").hidden = !state.schools.some((s) => s.rewards !== false);
   $("meJournal").innerHTML = `${icon("book", "ic ic-sm")}<span>Журнал: <b>${fmt(work.lessons)}</b> ${plural(work.lessons, "урок", "урока", "уроков")},
     выдано <b class="nw">${fmt(work.stars)}&nbsp;${icon("star", "ic ic-xs me-star")}</b>, <b>${fmt(work.classes)}</b> ${plural(work.classes, "класс", "класса", "классов")}</span>`;
   const data = cabinetData && !cabinetData.error ? cabinetData : null;

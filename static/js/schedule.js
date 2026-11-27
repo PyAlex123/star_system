@@ -153,7 +153,9 @@ function lessonHeld(classId, day) {
  *  уже было в расписании (добавленное в среду не «пропущено» в понедельник). */
 function entryState(entry, date, today) {
   const done = date <= today && lessonHeld(entry.class_id, date);
-  const missed = !done && date < today && date >= String(entry.created_at || "").slice(0, 10);
+  // «Не отмечен» — по журналу звёзд; в школе без системы наград его не ведут
+  const missed = !done && date < today && date >= String(entry.created_at || "").slice(0, 10) &&
+    (typeof rewardsHere !== "function" || rewardsHere());
   return { done, missed };
 }
 

@@ -123,6 +123,7 @@ def delete_student(student_id: int, user: Dict[str, Any] = Depends(require_teach
         student_or_404(database, student_id, user, need=TEACH)
         removed["photos"] = [images.avatar_upload_url(student)]
         database["students"] = [s for s in database["students"] if s["id"] != student_id]
+        db.drop_orders_of(database, [student_id])
         return None
 
     db.transaction(_apply)

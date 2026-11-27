@@ -97,6 +97,14 @@ def get_me(request: Request, student: Dict[str, Any] = Depends(require_student))
     _mark_seen(request, student["id"])
     database = db.load_db()
     fresh = db.find_student(database, student["id"]) or student
+    if not db.rewards_on(db.school_of_student(database, fresh)):
+        # Школа не участвует в системе наград: кабинета нет — только кто ты и где
+        return {"closed": True, "student": {
+            "id": fresh["id"], "name": fresh["name"], "login": fresh.get("login") or "",
+            "class_name": db.class_name(database, fresh.get("class_id")),
+            "school_name": db.school_name_of_class(database, fresh.get("class_id")),
+            "theme": themes.theme_of_class(database, fresh.get("class_id")),
+        }}
     leaderboards = build_leaderboards(database, fresh)
     prizes = build_prizes(database, fresh["total_stars"], stats.school_of_class(database, fresh.get("class_id")))
     next_prize = next((p for p in prizes if not p["affordable"]), None)

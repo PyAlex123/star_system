@@ -98,7 +98,14 @@ function renderModeSeg() {
 /* ── Вход ─────────────────────────────────────────────────── */
 
 function showScreen(id) {
-  ["screenLoading", "screenNet", "screenError", "screenBye", "app"].forEach((s) => { $(s).hidden = s !== id; });
+  ["screenLoading", "screenNet", "screenError", "screenBye", "screenClosed", "app"].forEach((s) => { $(s).hidden = s !== id; });
+}
+
+/** Школа не участвует в системе наград: кабинета нет — только объяснение. */
+function showClosed() {
+  if (data.student.theme && data.student.theme !== currentTheme()) applyTheme(data.student.theme);
+  clearInterval(refreshTimer);
+  showScreen("screenClosed");
 }
 
 function showError(title, text) {
@@ -1039,6 +1046,7 @@ async function joinPoll() {
 async function refresh() {
   if (!token) return;
   data = await api("/api/me");
+  if (data.closed) return showClosed();
   if (data.student.theme && data.student.theme !== currentTheme()) applyTheme(data.student.theme);
   renderAll();
   afterRefresh();
@@ -1148,6 +1156,7 @@ function closeCabinet() {
     if (!error.status && error instanceof TypeError) return showScreen("screenNet");
     return showError("Не получилось войти", error.message);
   }
+  if (data.closed) return showClosed();
 
   if (data.student.theme && data.student.theme !== currentTheme()) applyTheme(data.student.theme);
   showScreen("app");

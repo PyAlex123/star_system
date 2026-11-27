@@ -382,7 +382,7 @@ async function launchRun() {
         school_id: activeSchool, ...(launchSet.formId ? { form_id: launchSet.formId } : { set_key: launchSet.key }),
         class_ids: [...launchClasses],
         topic: launchSet.uses_topic ? $("launchTopic").value.trim() : "", goals: goals.slice(0, 5),
-        minutes: launchMinutes, use_code: $("launchCode").checked, stars: launchStars,
+        minutes: launchMinutes, use_code: $("launchCode").checked, stars: rewardsHere() ? launchStars : 0,
       },
     });
     closeModal("modalLaunch");

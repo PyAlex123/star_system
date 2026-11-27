@@ -41,13 +41,13 @@
     <button data-page="schedule" title="Расписание" onclick="switchPage('schedule')">
       <svg class="ic"><use href="#i-clock"></use></svg><span>Расписание</span>
     </button>
-    <button data-page="prizes" title="Призы" onclick="switchPage('prizes')">
+    <button data-page="prizes" class="rewards-only" title="Призы" onclick="switchPage('prizes')">
       <svg class="ic"><use href="#i-gift"></use></svg><span>Призы</span>
     </button>
-    <button data-page="cards" class="sadmin-only" title="Карточки учеников" onclick="switchPage('cards')">
+    <button data-page="cards" class="sadmin-only rewards-only" title="Карточки учеников" onclick="switchPage('cards')">
       <svg class="ic"><use href="#i-printer"></use></svg><span>Карточки</span>
     </button>
-    <button data-page="lessons" title="Уроки" onclick="switchPage('lessons')">
+    <button data-page="lessons" class="rewards-only" title="Уроки" onclick="switchPage('lessons')">
       <svg class="ic"><use href="#i-calendar"></use></svg><span>Уроки</span>
     </button>
     <!-- На телефоне эта группа — лист «Ещё» над нижней панелью -->
@@ -55,7 +55,7 @@
       <button data-page="monitor" class="editor-only" title="Мониторинг" onclick="switchPage('monitor')">
         <svg class="ic"><use href="#i-activity"></use></svg><span>Мониторинг</span>
       </button>
-      <button data-page="stats" title="Статистика" onclick="switchPage('stats')">
+      <button data-page="stats" class="rewards-only" title="Статистика" onclick="switchPage('stats')">
         <svg class="ic"><use href="#i-chart"></use></svg><span>Статистика</span>
       </button>
       <button data-page="checkin" class="checkin-only" title="Отметки" onclick="switchPage('checkin')">
@@ -127,8 +127,8 @@
           <svg class="ic ic-sm"><use href="#i-clipboard"></use></svg>
           <span><b>Вставить строки</b><small>скопировать из открытой таблицы</small></span>
         </button>
-        <div class="menu-sep"></div>
-        <button role="menuitem" class="rich" onclick="exportExcel()">
+        <div class="menu-sep rewards-only"></div>
+        <button role="menuitem" class="rich rewards-only" onclick="exportExcel()">
           <svg class="ic ic-sm"><use href="#i-export"></use></svg>
           <span><b>Выгрузить журнал</b><small>звёзды, логины и коды карточек</small></span>
         </button>
@@ -157,15 +157,15 @@
     <div class="sheet-head">
       <h2 class="caps sheet-title" id="studentsTitle">Ученики</h2>
       <span class="sheet-rule"></span>
-      <span class="kbd-hints">
+      <span class="kbd-hints rewards-only">
         <kbd>0–5</kbd>звёзды <kbd>↑↓</kbd>соседний ученик
         <span class="only-clear-flex kbd-more"><kbd>Enter</kbd>дальше <kbd>Space</kbd>карточка <kbd>Ctrl+Enter</kbd>завершить</span>
       </span>
-      <button class="btn btn-ghost btn-sm not-clear-flex" id="passwordsToggle" onclick="togglePasswords()"
+      <button class="btn btn-ghost btn-sm not-clear-flex rewards-only" id="passwordsToggle" onclick="togglePasswords()"
               title="Пароли скрыты, чтобы их не увидел класс, если экран выведен на доску">
         <svg class="ic ic-sm"><use href="#i-eye"></use></svg><span>Показать пароли</span>
       </button>
-      <button class="btn btn-ghost btn-sm" id="cardsBtn" onclick="openCards()">
+      <button class="btn btn-ghost btn-sm rewards-only" id="cardsBtn" onclick="openCards()">
         <svg class="ic ic-sm"><use href="#i-printer"></use></svg>Карточки класса
       </button>
     </div>
@@ -175,14 +175,14 @@
     <div class="add-row" id="addRow">
       <span class="add-ring"><svg class="ic ic-sm"><use href="#i-plus"></use></svg></span>
       <input type="text" id="newStudentName" class="input-sm" placeholder="Фамилия и имя нового ученика" aria-label="Фамилия и имя">
-      <label class="add-stars">Стартовый баланс
+      <label class="add-stars rewards-only">Стартовый баланс
         <input type="number" id="newStudentStars" class="input-sm" value="0" min="0" inputmode="numeric" aria-label="Стартовый баланс">
       </label>
       <button class="btn btn-outline btn-md" onclick="addStudent()">Добавить ученика</button>
     </div>
   </section>
 
-  <div class="lesson-bar" id="lessonBar">
+  <div class="lesson-bar rewards-only" id="lessonBar">
     <div class="lesson-bar-in">
       <span class="caps">Итог урока</span>
       <span class="lesson-sum"><span id="sumStars">0</span><svg class="ic ic-lg ic-star"><use href="#i-star"></use></svg></span>
@@ -212,6 +212,7 @@
       <svg class="ic"><use href="#i-plus"></use></svg>Добавить приз
     </button>
   </div>
+  <div class="seg prize-scope" id="prizeScope" role="radiogroup" aria-label="Какие призы показать"></div>
   <div class="prize-grid" id="prizeGrid"></div>
 </main>
 
@@ -492,6 +493,10 @@
     <div>
       <div class="modal-title" id="prizeModalTitle">Новый приз</div>
       <p class="modal-sub" id="prizeModalSub">Эти призы видят дети в своём кабинете.</p>
+    </div>
+    <div class="field admin-only">
+      <label for="prizeSchool">Для кого приз</label>
+      <select id="prizeSchool" onchange="updatePrizeOwner()"></select>
     </div>
     <div class="prize-form-row">
       <div class="field">
@@ -958,7 +963,7 @@
       <span class="field-label">Сколько идёт опрос</span>
       <div class="seg launch-time" id="launchTime" role="radiogroup" aria-label="Время"></div>
     </div>
-    <div class="field">
+    <div class="field rewards-only">
       <span class="field-label">Звёзды за опрос</span>
       <div class="seg launch-time" id="launchStars" role="radiogroup" aria-label="Звёзды за опрос"></div>
       <p class="field-hint" id="launchStarsHint"></p>

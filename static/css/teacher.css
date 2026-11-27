@@ -19,6 +19,8 @@ body:not(.is-sadmin) .sadmin-only { display: none !important; }
 body:not(.is-admin):not(.is-sadmin) .prize-editor { display: none !important; }
 /* Раздел «Отметки» — администратор и учитель с поручением «ведёт отметки» */
 body:not(.can-checkin) .checkin-only { display: none !important; }
+/* Школа без системы наград: ни звёзд, ни призов, ни карточек с QR — журнал становится списком учеников */
+body.no-rewards .rewards-only { display: none !important; }
 
 .grow { flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -277,6 +279,8 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .lesson-tile.now .lt-state { background: var(--primary); color: var(--on-primary); }
 .lesson-tile.next .lt-state { background: var(--accent-soft); color: var(--accent-text); }
 .lesson-tile.past .lt-state { background: var(--star-bg); color: var(--star-text); }
+/* Урок прошёл, а журнала звёзд в школе нет — без пометок */
+.lesson-tile.gone { color: var(--muted); }
 
 .j-empty {
   display: flex;
@@ -420,6 +424,9 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .jt-group > span { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-height: 36px; color: var(--muted); font-size: 13px; }
 .jt-group b { font: var(--nw) 16px/1 var(--font-num); color: var(--accent-text); }
 .jt-group .ic { color: var(--accent-text); }
+/* Школа без системы наград: № · ученик · удалить */
+.jt.roster, [data-theme="clear"] .jt.roster { --cols: 40px minmax(0, 1fr) auto; }
+.jt.roster .cell-act { justify-content: flex-end; }
 
 .cell-num { font: var(--nw) 16px/1 var(--font-num); color: var(--muted); }
 .cell-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -730,6 +737,11 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 /* ── Призы (T2) ────────────────────────────────────────────── */
 
 .prize-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+/* Все · Общие · Только этой школы */
+.prize-scope { margin: 0 0 16px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.prize-scope > button { display: inline-flex; align-items: center; gap: 8px; }
+.prize-scope .ps-label { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.prize-scope .ps-count { font: var(--nw) 13px/1 var(--font-num); opacity: .7; }
 .prize-card {
   position: relative;
   display: flex;
@@ -1492,6 +1504,10 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
   .jt-row .cell-login { display: none !important; }
   .jt-row .cell-act { grid-area: act; gap: 4px; }
   .jt-row .act-btn:first-child { display: none; }
+  /* Список учеников школы без наград: одна строка, кнопка «Удалить» видна */
+  .jt.roster .jt-row { grid-template-areas: "num name act"; }
+  .jt.roster .jt-row .cell-num { align-self: center; padding-top: 0; }
+  .jt.roster .jt-row .act-btn:first-child { display: inline-flex; }
   .jt-row .act-btn { width: 40px; height: 40px; padding: 0; justify-content: center; }
   .jt-row .act-label { display: none; }
   .jt-row .star-num { display: none; }
@@ -1625,6 +1641,9 @@ a.class-tile { text-decoration: none; }
 .st-flag { margin-top: auto; display: inline-flex; align-items: center; gap: 5px; min-height: 24px; padding: 0 10px;
   border-radius: var(--r12); background: var(--star-bg); color: var(--star-text); font: 600 12px/1 var(--font-ui); }
 .st-flag.ok { background: var(--success-bg, var(--accent-soft)); color: var(--success); }
+.st-flag.off { background: var(--surface-2); color: var(--muted); }
+.st-flags { margin-top: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+.st-flags .st-flag { margin-top: 0; }
 
 .sc-top .j-title-text { min-width: 0; }
 .sc-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }

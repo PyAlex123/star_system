@@ -43,6 +43,13 @@ class SchoolTheme(BaseModel):
     theme: Theme
 
 
+class SchoolRewards(BaseModel):
+    """Система наград в школе: участвует ли школа и покупают ли ученики призы сами.
+    Пустое поле — не менять."""
+    rewards: Optional[bool] = None
+    self_buy: Optional[bool] = None
+
+
 class ClassCreate(BaseModel):
     school_id: int
     name: Name
@@ -123,7 +130,10 @@ class PrizeCreate(BaseModel):
 
 
 class PrizeUpdate(BaseModel):
+    """school_id меняет только администратор системы: число — приз этой школы, null — общий.
+    Не передан — не менять."""
     name: Optional[Name] = None
+    school_id: Optional[int] = None
     cost: Optional[int] = Field(default=None, ge=1, le=100_000)
     desc: Optional[Text] = None
     category: Optional[Annotated[str, Field(pattern="^(small|medium|large)$")]] = None

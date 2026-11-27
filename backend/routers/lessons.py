@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 
 from .. import config, db, schemas
 from ..security import require_teacher
-from .common import TEACH, bad_request, class_or_404, not_found, student_or_404
+from .common import TEACH, bad_request, class_or_404, not_found, rewards_or_400, student_or_404
 
 router = APIRouter(prefix="/api", tags=["lessons"], dependencies=[Depends(require_teacher)])
 
@@ -60,6 +60,7 @@ def complete_lesson(payload: schemas.LessonComplete, user: Dict[str, Any] = Depe
         classes = [class_or_404(database, class_id, user, need=TEACH) for class_id in class_ids]
         if len({c["school_id"] for c in classes}) > 1:
             raise bad_request("Общий урок — только для классов одной школы")
+        rewards_or_400(database, classes[0]["school_id"])
         joint = len(classes) > 1
         title = " + ".join(c["name"] for c in classes)
         in_lesson = {c["id"] for c in classes}
@@ -134,6 +135,7 @@ def deduct_stars(payload: schemas.DeductRequest, user: Dict[str, Any] = Depends(
 
     def _apply(database: Dict[str, Any]):
         student = student_or_404(database, payload.student_id, user, need=TEACH)
+        rewards_or_400(database, (db.school_of_student(database, student) or {}).get("id"))
         if student["total_stars"] < payload.amount:
             raise bad_request("Недостаточно звёзд на балансе ученика")
         entry = {
@@ -162,7 +164,8 @@ def _lesson_or_404(database: Dict[str, Any], lesson_id: int, user: Dict[str, Any
     lesson = next((x for x in database.get("lessons", []) if x.get("id") == lesson_id), None)
     if not lesson:
         raise not_found("Урок не найден")
-    class_or_404(database, lesson.get("class_id"), user, need=TEACH)   # чужой урок — как несуществующий
+    cls = class_or_404(database, lesson.get("class_id"), user, need=TEACH)   # чужой урок — как несуществующий
+    rewards_or_400(database, cls["school_id"])
     if "awards" not in lesson:
         raise bad_request("Этот урок проведён до обновления: в нём не записано, кому сколько "
                           "звёзд начислено. Отменить его нельзя.")

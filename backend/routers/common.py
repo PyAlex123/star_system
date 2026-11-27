@@ -71,6 +71,16 @@ def student_or_404(database: Dict[str, Any], student_id: int, user: User = None,
     return student
 
 
+NO_REWARDS_TEXT = ("В этой школе система наград выключена — звёзд и призов здесь нет. "
+                   "Включить её может администратор: «Школы» → школа → «Система наград».")
+
+
+def rewards_or_400(database: Dict[str, Any], school_id: Optional[int]) -> None:
+    """Звёзды, призы, карточки с QR и кабинет ученика — только в школе с системой наград."""
+    if not db.rewards_on(db.find_school(database, school_id)):
+        raise bad_request(NO_REWARDS_TEXT)
+
+
 def clean_name(value: Optional[str], message: str) -> str:
     """Название без пробелов по краям; пустое — ошибка с понятным текстом."""
     name = (value or "").strip()

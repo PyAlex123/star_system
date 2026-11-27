@@ -159,7 +159,7 @@ V8 = {
 def test_v8_gets_checkin_fields_everywhere():
     config.DB_FILE.write_text(json.dumps(V8, ensure_ascii=False), encoding="utf-8")
     data = db.load_db()
-    assert data["version"] == db.DB_VERSION == 12
+    assert data["version"] == db.DB_VERSION == 13
     school = data["schools"][0]
     assert school["theme"] == "quest", "тема не сбрасывается"
     assert school["lat"] is None and school["lon"] is None and school["radius_m"] == 150
@@ -221,7 +221,7 @@ def test_v12_staff_codes_replace_invites():
     tokens = {s["token"] for s in database["students"]}
     assert len(set(codes)) == len(codes) and not tokens & set(codes)
     assert all("invite_code" not in u and "invite_created_at" not in u for u in database["users"])
-    assert database["users"][1]["tg_id"] == 900 and database["version"] == db.DB_VERSION == 12
+    assert database["users"][1]["tg_id"] == 900 and database["version"] == db.DB_VERSION == 13
 
 
 def test_new_school_and_staff_and_schedule_get_fields(teacher):

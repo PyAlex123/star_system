@@ -228,6 +228,12 @@ function managesHere(school = activeSchool) {
 }
 /** «Администрация школы» в выбранной школе — карточки, призы школы (журнал — только если ещё и учитель). */
 function isSchoolAdmin() { return managesHere(); }
+/** Школа участвует в системе наград. Без неё — расписание, ученики списком, опросы без звёзд
+ *  и отметки; звёзд, призов, карточек с QR, уроков и статистики нет. */
+function rewardsHere(school = activeSchool) { return schoolById(school)?.rewards !== false; }
+const REWARD_PAGES = ["prizes", "cards", "lessons", "stats"];
+/** Куда уводить с раздела, которого в этой школе у человека нет. */
+function homePage() { return canEdit() ? "journal" : rewardsHere() ? "stats" : "schedule"; }
 /** Менять журнал (звёзды, учеников, классы) — учитель этой школы. */
 function canEdit() { return teachesHere(); }
 /** «учитель · завуч нач.» — должности в школе; у администратора — «администратор». */
@@ -263,13 +269,15 @@ function applyRole() {
   document.body.classList.toggle("is-teacher", !isAdmin() && teachesHere() && !managesHere());
   document.body.classList.toggle("is-sadmin", managesHere());
   document.body.classList.toggle("can-checkin", canManageCheckins());
+  document.body.classList.toggle("no-rewards", !rewardsHere());
   renderMe();
-  if (!isAdmin() && ["users", "schools"].includes(currentPage())) showPage(canEdit() ? "journal" : "stats");
+  if (!isAdmin() && ["users", "schools"].includes(currentPage())) showPage(homePage());
   // showPage, а не switchPage: адрес не трогаем — иначе ссылка #prizes или #cards
   // при загрузке перезаписалась бы на #stats раньше, чем её прочитает applyRoute()
-  if (!canManageCheckins() && currentPage() === "checkin") showPage(canEdit() ? "journal" : "stats");
-  if (!canEdit() && currentPage() === "journal") showPage("stats");
-  if (!isSchoolAdmin() && currentPage() === "cards") showPage(canEdit() ? "journal" : "stats");
+  if (!canManageCheckins() && currentPage() === "checkin") showPage(homePage());
+  if (!canEdit() && currentPage() === "journal") showPage(homePage());
+  if (!isSchoolAdmin() && currentPage() === "cards") showPage(homePage());
+  if (!rewardsHere() && REWARD_PAGES.includes(currentPage())) showPage(homePage());
 }
 
 function renderAll() {
@@ -343,7 +351,7 @@ function renderJournal() {
   const inClass = journalView === "class";
   $("journalHome").hidden = inClass;
   $("journalClass").hidden = !inClass;
-  $("bank").hidden = !inClass;
+  $("bank").hidden = !inClass || !rewardsHere();
   document.querySelector(".j-head").classList.toggle("in-class", inClass);
   renderJournalHead();
   renderJournalHome();
@@ -395,7 +403,7 @@ function parallelTitle(parallel) {
   return `${parallel}-${parallel === 3 ? "и" : "е"} классы`;
 }
 
-const TILE_STATE = { done: "проведён", now: "идёт сейчас", next: "следующий", past: "не отмечен", later: "" };
+const TILE_STATE = { done: "проведён", now: "идёт сейчас", next: "следующий", past: "не отмечен", later: "", gone: "" };
 
 /** Экран «Сегодня»: крупные плитки уроков на выбранную дату и все классы по параллелям. */
 function renderJournalHome() {
@@ -426,6 +434,8 @@ function renderJournalHome() {
     let kind = lessonTileState(first.start, first.end, day, today, nowMinutes, ids.every((id) => lessonHeld(id, day)));
     if (kind === "later" && day === today && !nextFound) { kind = "next"; nextFound = true; }
     if (kind === "past" && day < String(first.created_at || "").slice(0, 10)) kind = "later";   // занятия тогда ещё не было
+    // «Проведён / не отмечен» — по журналу звёзд; в школе без наград его не ведут
+    if (kind === "past" && !rewardsHere()) kind = "gone";
     const room = group.find((e) => e.room)?.room || "";
     const count = ids.reduce((sum, id) => sum + classStudents(id).length, 0);
     const names = group.map((e) => classById(e.class_id)?.name || "").join(", ");
@@ -996,6 +1006,9 @@ function renderTable() {
   const focused = document.activeElement?.classList?.contains("jt-row") ? document.activeElement.dataset.row : null;
 
   const day = lessonDay();
+  // Школа без системы наград: журнал — просто список учеников класса
+  const roster = !rewardsHere();
+  const makeRow = roster ? rosterRowHtml : rowHtml;
   // Общий урок: перед учениками каждого класса — строка-заголовок; номера сквозные,
   // чтобы ↑/↓ и Enter переходили через границу классов.
   let index = 0;
@@ -1004,10 +1017,20 @@ function renderTable() {
       const kidsOf = classStudents(id);
       return `<div class="jt-group" role="row"><span role="rowheader">${icon("users", "ic ic-sm")}<b>${escapeHtml(classById(id)?.name || "")}</b>
           <span class="jt-group-n">${kidsOf.length} ${kids(kidsOf.length)}</span></span></div>` +
-        kidsOf.map((student) => rowHtml(student, index++, day)).join("");
+        kidsOf.map((student) => makeRow(student, index++, day)).join("");
     }).join("")
-    : list.map((student, i) => rowHtml(student, i, day)).join("");
+    : list.map((student, i) => makeRow(student, i, day)).join("");
   const title = jointClasses ? jointTitle() : cls.name;
+  if (roster) {
+    $("tableHost").innerHTML = `
+      <div class="jt roster" role="table" aria-label="Ученики ${escapeHtml(title)}">
+        <div class="jt-head" role="row">
+          <span role="columnheader">№</span><span role="columnheader">Ученик</span><span role="columnheader" class="right">Действия</span>
+        </div>
+        ${rows}
+      </div>`;
+    return floatRowPop();
+  }
   $("tableHost").innerHTML = `
     <div class="jt ${hasPanel() ? "has-panel" : ""}" role="table" aria-label="Журнал ${escapeHtml(title)}">
       <div class="jt-head" role="row">
@@ -1150,6 +1173,23 @@ function rowHtml(student, index, day) {
     </div>`;
 }
 
+/** Строка ученика в школе без системы наград: без звёзд, баланса, входа и призов. */
+function rosterRowHtml(student, index) {
+  const name = escapeHtml(student.name);
+  return `
+    <div class="jt-row" role="row" data-row="${index}" data-id="${student.id}">
+      <span class="cell-num" role="cell">${index + 1}</span>
+      <span class="cell-name" role="cell">
+        <img class="av-sm" src="${escapeHtml(avatarUrl(student))}" alt="" loading="lazy">
+        <span class="st-name" title="${name}">${name}</span>
+      </span>
+      <span class="cell-act" role="cell">
+        <button class="act-btn" onclick="removeStudent(${student.id})" aria-label="Удалить ученика: ${name}" title="Удалить ученика">
+          ${icon("trash", "ic ic-sm")}<span class="act-label">Удалить</span></button>
+      </span>
+    </div>`;
+}
+
 /** Наведение на звезду: бледная подсказка, сколько станет. */
 function previewStars(button, on) {
   const row = button.parentElement;
@@ -1266,7 +1306,7 @@ function historyTitle(entry, student) {
 function renderPanel() {
   const aside = $("sidePanel");
   const student = studentById(panelId);
-  if (!student || !hasPanel() || currentPage() !== "journal") {
+  if (!student || !hasPanel() || currentPage() !== "journal" || !rewardsHere()) {
     aside.hidden = true;
     aside.innerHTML = "";
     return;
@@ -1786,11 +1826,29 @@ function schoolPrizes(schoolId = activeSchool) {
 /** Менять приз: администратор системы — любой, администрация школы — только призы своей школы. */
 function canEditPrize(prize) { return isAdmin() || (isSchoolAdmin() && Boolean(prize?.school_id)); }
 
+let prizeScope = "all";          // витрина в панели: все, общие или только призы выбранной школы
+
+function pickPrizeScope(scope) { prizeScope = scope; renderPrizes(); }
+
+function renderPrizeScope(prizes) {
+  const school = schoolById(activeSchool);
+  const own = prizes.filter((p) => p.school_id).length;
+  const scopes = [["all", "Все", prizes.length], ["common", "Общие", prizes.length - own],
+    ["school", school ? `Только «${school.name}»` : "Только этой школы", own]];
+  $("prizeScope").innerHTML = scopes.map(([key, label, count]) => `
+    <button type="button" role="radio" aria-checked="${prizeScope === key}" onclick="pickPrizeScope('${key}')">
+      <span class="ps-label">${escapeHtml(label)}</span><span class="ps-count">${count}</span></button>`).join("");
+}
+
 function renderPrizes() {
   const grid = $("prizeGrid");
-  const prizes = schoolPrizes();
+  const all = schoolPrizes();
+  renderPrizeScope(all);
+  const prizes = all.filter((p) => prizeScope === "all" || (prizeScope === "common" ? !p.school_id : Boolean(p.school_id)));
   if (!prizes.length) {
-    grid.innerHTML = `<div class="card empty" style="grid-column:1/-1">${icon("gift", "ic ic-xl")}<b>Призов пока нет</b></div>`;
+    grid.innerHTML = `<div class="card empty" style="grid-column:1/-1">${icon("gift", "ic ic-xl")}<b>${all.length
+      ? (prizeScope === "school" ? "У этой школы своих призов пока нет" : "Общих призов пока нет") : "Призов пока нет"}</b>${
+      prizeScope === "school" && (isAdmin() || isSchoolAdmin()) ? "Добавьте приз — его увидят только дети этой школы." : ""}</div>`;
     return;
   }
   const blank = `<span class="no-photo">${icon("gift", "ic ic-xl")}</span>`;
@@ -1876,14 +1934,28 @@ function pickCategory(cat) {
 
 function updateDescLen() { $("prizeDescLen").textContent = `${$("prizeDesc").value.length} / 60`; }
 
+/** Подпись окна приза: чей он и кто его увидит. */
+function updatePrizeOwner() {
+  const owner = isAdmin() ? Number($("prizeSchool").value) || null
+    : prizeTarget ? state.prizes.find((p) => p.id === prizeTarget)?.school_id : activeSchool;
+  const name = schoolById(owner)?.name || "";
+  $("prizeModalSub").textContent = owner
+    ? `Приз школы «${name}»: его увидят только дети этой школы, с пометкой «от администрации школы».`
+    : "Общий приз: его видят дети всех школ.";
+}
+
 function openPrize(id = null) {
   prizeTarget = id;
   const prize = id ? state.prizes.find((p) => p.id === id) : null;
   $("prizeModalTitle").textContent = prize ? "Изменить приз" : "Новый приз";
-  const owner = prize ? prize.school_id : isAdmin() ? null : activeSchool;
-  $("prizeModalSub").textContent = owner
-    ? `Приз от администрации школы «${schoolById(owner)?.name || ""}»: его увидят только дети этой школы.`
-    : "Общий приз: его видят дети всех школ.";
+  if (isAdmin()) {
+    // По умолчанию — общий; из фильтра «Только этой школы» — приз выбранной школы
+    const owner = prize ? prize.school_id : prizeScope === "school" ? activeSchool : null;
+    $("prizeSchool").innerHTML = `<option value="">Все школы — общий приз</option>` + state.schools
+      .map((s) => `<option value="${s.id}">${escapeHtml(s.name)}${s.rewards === false ? " (без системы наград)" : ""}</option>`).join("");
+    $("prizeSchool").value = owner ? String(owner) : "";
+  }
+  updatePrizeOwner();
   $("prizeName").value = prize?.name || "";
   $("prizeCost").value = prize?.cost || 30;
   $("prizeDesc").value = (prize?.desc || "").slice(0, 60);
@@ -1906,11 +1978,11 @@ async function savePrize() {
   if (!payload.name) return toast("Введите название приза", "error");
   try {
     let prizeId = prizeTarget;
+    // Чей приз: администратор выбирает в окне; администрация школы — для школы, выбранной в меню
+    const owner = isAdmin() ? { school_id: Number($("prizeSchool").value) || null } : prizeTarget ? {} : { school_id: activeSchool };
     if (prizeTarget) {
-      await api(`/api/prizes/${prizeTarget}`, { method: "PATCH", json: payload });
+      await api(`/api/prizes/${prizeTarget}`, { method: "PATCH", json: { ...payload, ...owner } });
     } else {
-      // Администрация школы добавляет приз для школы, выбранной в меню
-      const owner = isAdmin() ? {} : { school_id: activeSchool };
       const created = await api("/api/prizes", { method: "POST", json: { ...payload, active: true, ...owner } });
       prizeId = created.prize.id;
     }
@@ -2420,9 +2492,10 @@ function switchPage(name) {
 }
 
 function showPage(name) {
-  if (!canEdit() && name === "journal") name = "stats";
-  if (!isSchoolAdmin() && name === "cards") name = canEdit() ? "journal" : "stats";
-  if (!isAdmin() && (name === "users" || name === "schools")) name = canEdit() ? "journal" : "stats";
+  if (!rewardsHere() && REWARD_PAGES.includes(name)) name = homePage();
+  if (!canEdit() && name === "journal") name = rewardsHere() ? "stats" : "schedule";
+  if (!isSchoolAdmin() && name === "cards") name = homePage();
+  if (!isAdmin() && (name === "users" || name === "schools")) name = homePage();
   closeMenus();
   document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === `page-${name}`));
   document.querySelectorAll(".nav button[data-page]").forEach((button) => {

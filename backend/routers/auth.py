@@ -4,7 +4,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 
 from .. import config, db, images, passwords, ratelimit, schemas, security, themes
-from .common import TEACH, student_or_404
+from .common import TEACH, rewards_or_400, student_or_404
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -78,6 +78,7 @@ def login_preview(student_id: int, user: Dict[str, Any] = Depends(security.requi
     """Учитель открывает кабинет глазами конкретного ученика — только из своих школ."""
     database = db.load_db()
     student = student_or_404(database, student_id, user, need=TEACH)
+    rewards_or_400(database, (db.school_of_student(database, student) or {}).get("id"))
     return {"token": security.issue_student_token(student, preview=True), "preview": True,
             "theme": themes.theme_of_class(database, student.get("class_id"))}
 

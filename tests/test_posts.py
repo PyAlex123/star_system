@@ -136,7 +136,7 @@ def test_v10_users_get_posts():
     ]
     config.DB_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     migrated = db.load_db()
-    assert migrated["version"] == db.DB_VERSION == 12
+    assert migrated["version"] == db.DB_VERSION == 13
     users = {u["id"]: u for u in migrated["users"]}
     assert users[1]["posts"] == {}
     assert users[2]["posts"] == {"1": ["teacher"], "2": ["teacher"]} and "checkin_manager" not in users[2]

@@ -214,7 +214,8 @@ def create_run(item: schemas.MonitorRunCreate, user: User = Depends(require_teac
         "school_id": school["id"], "school_name": school["name"],
         "owner_id": user["id"], "owner_name": user.get("name") or user.get("login", ""),
         "form_id": source["form_id"], "set_key": source["key"], "title": source["title"], "kind": source["kind"],
-        "settings": {**source["settings"], "stars": item.stars},
+        # В школе без системы наград звёзд за опрос нет
+        "settings": {**source["settings"], "stars": item.stars if db.rewards_on(school) else 0},
         "questions": questions, "topic": " ".join(item.topic.split()), "goals": goals,
         "all_classes": int(not item.class_ids), "lesson_date": db.today(),
         "code": f"{secrets.randbelow(10000):04d}" if item.use_code else None,

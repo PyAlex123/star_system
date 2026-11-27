@@ -20,7 +20,7 @@ from qrcode.image.pil import PilImage
 
 from .. import assets, config, db, themes
 from ..security import panel_user, require_panel, require_superadmin, require_superadmin_page, require_teacher_page
-from .common import class_or_404, student_or_404
+from .common import class_or_404, rewards_or_400, student_or_404
 
 router = APIRouter(tags=["cards"])
 
@@ -59,6 +59,7 @@ def qr_target(database: Dict[str, Any], student: Dict[str, Any]) -> str:
 def student_qr(student_id: int, size: int = 10, user: Dict[str, Any] = Depends(require_panel)):
     database = db.load_db()
     student = student_or_404(database, student_id, user)
+    rewards_or_400(database, (db.school_of_student(database, student) or {}).get("id"))
     png = _qr_png(qr_target(database, student), box_size=max(4, min(20, size)))
     return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
@@ -197,6 +198,7 @@ def class_cards(class_id: int, request: Request):
     database = db.load_db()
     user = panel_user(request)
     cls = class_or_404(database, class_id, user)
+    rewards_or_400(database, cls["school_id"])
     bot = db.telegram_login(database)
 
     school = db.school_name_of_class(database, class_id) or config.SCHOOL_NAME

@@ -28,7 +28,8 @@ def add_school(item: schemas.SchoolCreate):
         if any(s["name"].strip().lower() == name.lower() for s in database["schools"]):
             raise bad_request("Такая школа уже есть")
         school = {"id": db.next_counted_id(database, "schools"), "name": name, "theme": themes.DEFAULT_THEME,
-                  "bells": db.default_bells(), "days": db.SCHOOL_DAYS[0], **db.SCHOOL_CHECKIN_DEFAULTS}
+                  "bells": db.default_bells(), "days": db.SCHOOL_DAYS[0], **db.SCHOOL_CHECKIN_DEFAULTS,
+                  **db.SCHOOL_REWARDS_DEFAULTS}
         database["schools"].append(school)
         return school
 
@@ -61,6 +62,26 @@ def set_school_theme(school_id: int, item: schemas.SchoolTheme,
 
     db.transaction(_apply)
     return {"ok": True, "theme": item.theme}
+
+
+@router.put("/schools/{school_id}/rewards", dependencies=[Depends(require_superadmin)])
+def set_school_rewards(school_id: int, item: schemas.SchoolRewards):
+    """Участвует ли школа в системе наград и покупают ли её ученики призы сами.
+    Только администратор системы: это меняет, что видят все ученики и учителя школы."""
+    def _apply(database: Dict[str, Any]):
+        school = school_or_404(database, school_id)
+        before = (school.get("rewards"), school.get("self_buy"))
+        if item.rewards is not None:
+            school["rewards"] = item.rewards
+        if item.self_buy is not None:
+            school["self_buy"] = item.self_buy
+        if (school.get("rewards"), school.get("self_buy")) == before:
+            return db.NO_SAVE
+        return None
+
+    db.transaction(_apply)
+    school = db.find_school(db.load_db(), school_id)
+    return {"ok": True, "rewards": db.rewards_on(school), "self_buy": db.self_buy_on(school)}
 
 
 @router.put("/schools/{school_id}/staff/{user_id}")
@@ -100,6 +121,7 @@ def delete_school(school_id: int):
         class_ids = {c["id"] for c in db.school_classes(database, school_id)}
         removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
                              if s.get("class_id") in class_ids]
+        db.drop_orders_of(database, [s["id"] for s in database["students"] if s.get("class_id") in class_ids])
         database["students"] = [s for s in database["students"]
                                 if s.get("class_id") not in class_ids]
         database["classes"] = [c for c in database["classes"] if c["school_id"] != school_id]
@@ -195,6 +217,7 @@ def clear_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher)):
         if not gone:
             return db.NO_SAVE
         removed["photos"] = [images.avatar_upload_url(s) for s in gone]
+        db.drop_orders_of(database, [s["id"] for s in gone])
         database["students"] = [s for s in database["students"] if s.get("class_id") != class_id]
         return len(gone)
 
@@ -216,6 +239,7 @@ def delete_class(class_id: int, user: Dict[str, Any] = Depends(require_teacher))
         class_or_404(database, class_id, user, need=TEACH)
         removed["photos"] = [images.avatar_upload_url(s) for s in database["students"]
                              if s.get("class_id") == class_id]
+        db.drop_orders_of(database, [s["id"] for s in database["students"] if s.get("class_id") == class_id])
         database["students"] = [s for s in database["students"]
                                 if s.get("class_id") != class_id]
         database["classes"] = [c for c in database["classes"] if c["id"] != class_id]

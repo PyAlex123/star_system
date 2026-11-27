@@ -52,8 +52,11 @@ function renderSchoolsPage() {
           <b>${escapeHtml(s.name)}</b></span>
         <span class="st-meta">${countsLine(s.id)}</span>
         <span class="st-meta">${directors.length ? `Директор: ${escapeHtml(directors.join(", "))}` : "Директор не назначен"}</span>
-        <span class="st-flag ${hasPoint(s) ? "ok" : ""}">${icon(hasPoint(s) ? "pin" : "warning", "ic ic-xs")}${hasPoint(s)
-          ? "Место на карте задано" : "Место на карте не задано"}</span>
+        <span class="st-flags">
+          <span class="st-flag ${hasPoint(s) ? "ok" : ""}">${icon(hasPoint(s) ? "pin" : "warning", "ic ic-xs")}${hasPoint(s)
+            ? "Место на карте задано" : "Место на карте не задано"}</span>
+          ${s.rewards === false ? `<span class="st-flag off">${icon("star-line", "ic ic-xs")}Без системы наград</span>` : ""}
+        </span>
       </button>`;
   }).join("") + `
     <button type="button" class="school-tile add" onclick="openSchool()">${icon("plus")}<span>Добавить школу</span></button>`;
@@ -132,6 +135,17 @@ function renderSchoolCard(school) {
           <p>${escapeHtml(bellsSummary(school))}</p>
           <button class="btn btn-ghost btn-sm" onclick="openBells()">Изменить</button>
         </section>
+        <section class="card sc-block" aria-labelledby="scRewardsTitle">
+          <h2 class="sc-title" id="scRewardsTitle">${icon("star", "ic ic-sm")}Система наград</h2>
+          <label class="check ck-setting"><input type="checkbox" ${school.rewards !== false ? "checked" : ""}
+              onchange="setSchoolRewards(${school.id}, { rewards: this.checked }, this)">
+            <span><b>Школа участвует в системе наград</b>
+              <small>Звёзды за уроки, призы, рейтинг, карточки с QR и кабинет ученика. Без неё — расписание, ученики списком, опросы без звёзд и отметки.</small></span></label>
+          <label class="check ck-setting"><input type="checkbox" ${school.self_buy === true ? "checked" : ""}
+              ${school.rewards === false ? "disabled" : ""} onchange="setSchoolRewards(${school.id}, { self_buy: this.checked }, this)">
+            <span><b>Ученики покупают призы сами</b>
+              <small>Звёзды списываются сразу, приз ждёт выдачи у учителя: он отмечает «Выдан» или отменяет покупку — звёзды вернутся.</small></span></label>
+        </section>
         <section class="card sc-block">
           <h2 class="sc-title">${icon("palette", "ic ic-sm")}Оформление</h2>
           <p class="sc-theme"><span class="st-swatch" data-theme="${escapeHtml(school.theme || "notebook")}" aria-hidden="true"></span>${escapeHtml(THEME_NAMES[school.theme] || "")}</p>
@@ -159,6 +173,23 @@ function openSchoolCard(id) {
   };
   if (id === activeSchool) return go();
   leaveDraftGuard(() => { useSchool(id); go(); });
+}
+
+/** Галочки «Система наград» в карточке школы. Ошибка — галочка возвращается как была. */
+async function setSchoolRewards(id, change, input) {
+  input.disabled = true;
+  try {
+    const result = await api(`/api/schools/${id}/rewards`, { method: "PUT", json: change });
+    await loadState();
+    toast("rewards" in change
+      ? (result.rewards ? "Школа участвует в системе наград" : "Система наград в школе выключена: звёзд, призов и кабинета ученика нет")
+      : (result.self_buy ? "Ученики покупают призы сами — купленное ждёт выдачи в разделе «Призы»" : "Призы снова выдаёт учитель"),
+      "success");
+  } catch (error) {
+    input.checked = !input.checked;
+    input.disabled = false;
+    toast(error.message, "error");
+  }
 }
 
 function closeSchoolCard() {

@@ -49,7 +49,10 @@ _lock = threading.RLock()
 # 11 -> 12: у сотрудника постоянный код для бота (bot_code) — как у ученика на карточке:
 #         QR, ссылка t.me/<бот>?start=inv_<код> или код текстом. Одноразовые приглашения
 #         (invite_code, invite_created_at) убраны; привязанный Telegram остаётся.
-DB_VERSION = 12
+# 12 -> 13: у школы rewards (участвует ли в системе наград) и self_buy (ученики покупают
+#         призы сами); список orders — покупки учеников: звёзды списаны сразу, приз ждёт
+#         выдачи (waiting) → выдан (issued) или покупка отменена (cancelled, звёзды вернулись).
+DB_VERSION = 13
 
 # Категории призов как в макетах: небольшой, средний, большой
 PRIZE_CATEGORIES = ("small", "medium", "large")
@@ -80,6 +83,11 @@ STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
     "checkin_tracked": False,
 }
 SCHOOL_CHECKIN_DEFAULTS: Dict[str, Any] = {"address": "", "lat": None, "lon": None, "radius_m": 150}
+# Система наград в школе (схема 13). rewards=False — школа работает только с расписанием,
+# опросами и отметками: звёзд, призов, рейтинга и кабинета ученика у неё нет.
+# self_buy — ученик покупает приз в кабинете сам; выдают учителя (orders).
+SCHOOL_REWARDS_DEFAULTS: Dict[str, Any] = {"rewards": True, "self_buy": False}
+ORDER_WAITING, ORDER_ISSUED, ORDER_CANCELLED = "waiting", "issued", "cancelled"
 
 ROLE_SUPERADMIN = "superadmin"
 ROLE_TEACHER = "teacher"
@@ -166,6 +174,7 @@ DEFAULT_DB: Dict[str, Any] = {
     ],
     "lessons": [],
     "schedule": [],
+    "orders": [],
     "settings": {},
 }
 
@@ -246,6 +255,28 @@ def telegram_login(database: Dict[str, Any]) -> bool:
     """Вход учеников через Telegram-бота включён (по умолчанию да). Пока бот недоступен,
     администратор выключает его: карточки печатаются с QR на страницу входа сайта."""
     return database.get("settings", {}).get("telegram_login", True) is not False
+
+
+def rewards_on(school: Optional[Dict[str, Any]]) -> bool:
+    """Школа участвует в системе наград (по умолчанию да)."""
+    return bool(school) and school.get("rewards", True) is not False
+
+
+def self_buy_on(school: Optional[Dict[str, Any]]) -> bool:
+    """Ученики этой школы покупают призы сами. Без системы наград — нет."""
+    return rewards_on(school) and school.get("self_buy") is True
+
+
+def school_of_student(database: Dict[str, Any], student: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    cls = find_class(database, (student or {}).get("class_id"))
+    return find_school(database, cls["school_id"]) if cls else None
+
+
+def drop_orders_of(database: Dict[str, Any], student_ids) -> None:
+    """Ученики удалены — их покупки тоже: выдавать некому."""
+    gone = set(student_ids)
+    if gone and database.get("orders"):
+        database["orders"] = [o for o in database["orders"] if o.get("student_id") not in gone]
 
 
 def is_superadmin(user: Optional[Dict[str, Any]]) -> bool:
@@ -377,6 +408,14 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
     copy["prizes"] = [p for p in copy.get("prizes", []) if prize_for_school(p, schools)]
     # Журнал изменений расписания — своих школ, последние 200
     copy["schedule_log"] = [r for r in copy.get("schedule_log", []) if r.get("school_id") in schools][:200]
+    # Покупки учеников — тем, кто выдаёт призы: учителям этих школ и администратору.
+    # Все ожидающие выдачи и 100 последних закрытых.
+    give = {s["id"] for s in copy["schools"]} if user is None or is_superadmin(user) else teach_school_ids(user)
+    give_classes = {c["id"] for c in copy["classes"] if c["school_id"] in give}
+    give_students = {s["id"] for s in copy["students"] if s.get("class_id") in give_classes}
+    orders = [o for o in copy.get("orders", []) if o.get("student_id") in give_students]
+    copy["orders"] = ([o for o in orders if o.get("status") == ORDER_WAITING] +
+                      [o for o in orders if o.get("status") != ORDER_WAITING][:100])
     users = copy.pop("users", [])
     copy["telegram_login"] = telegram_login(db)
     # Имя бота — для ссылки сотрудника в бот (t.me/<бот>?start=inv_<код>) в окне сотрудника
@@ -524,7 +563,8 @@ def next_id(items: Any) -> int:
 
 # Номера, которые нельзя выдавать повторно: к ним привязаны отметки и уроки
 # в data/checkin.sqlite. Иначе новый сотрудник унаследовал бы чужие опоздания.
-COUNTED_IDS = {"users": "last_user_id", "schools": "last_school_id", "schedule": "last_schedule_id"}
+COUNTED_IDS = {"users": "last_user_id", "schools": "last_school_id", "schedule": "last_schedule_id",
+               "orders": "last_order_id"}
 
 
 def next_counted_id(db: Dict[str, Any], collection: str) -> int:
@@ -618,7 +658,7 @@ def migrate(db: Dict[str, Any]) -> bool:
         changed = True
 
     for key, default in (("classes", []), ("students", []), ("lessons", []), ("schedule", []),
-                         ("settings", {})):
+                         ("orders", []), ("settings", {})):
         if key not in db:
             db[key] = default
             changed = True
@@ -650,7 +690,7 @@ def migrate(db: Dict[str, Any]) -> bool:
         if school.get("days") not in SCHOOL_DAYS:
             school["days"] = SCHOOL_DAYS[0]
             changed = True
-        for field, default in SCHOOL_CHECKIN_DEFAULTS.items():
+        for field, default in {**SCHOOL_CHECKIN_DEFAULTS, **SCHOOL_REWARDS_DEFAULTS}.items():
             if field not in school:
                 school[field] = default
                 changed = True
