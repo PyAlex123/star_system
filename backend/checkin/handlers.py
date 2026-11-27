@@ -51,10 +51,16 @@ def esc(value: Any) -> str:
 
 
 def menu_keyboard(lang: str) -> ReplyKeyboardMarkup:
+    """Меню преподавателя. По https панель открывает кнопка «Панель» слева от поля ввода —
+    второй такой же клавиши нет. Без https та кнопка не ставится, и клавиша присылает адрес сайта.
+    Текст «🖥 Панель» со старой клавиатуры по-прежнему понимается (MENU_ACTIONS)."""
+    last = [KeyboardButton(text=t(lang, "menu_lang"))]
+    if not config.staff_panel_url():
+        last.insert(0, KeyboardButton(text=t(lang, "menu_panel")))
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text=t(lang, "menu_here"), request_location=True)],
         [KeyboardButton(text=t(lang, "menu_today")), KeyboardButton(text=t(lang, "menu_month"))],
-        [KeyboardButton(text=t(lang, "menu_panel")), KeyboardButton(text=t(lang, "menu_lang"))],
+        last,
     ], resize_keyboard=True, is_persistent=True)
 
 

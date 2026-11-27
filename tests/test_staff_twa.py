@@ -105,13 +105,33 @@ def test_menu_button_is_commands_without_https():
     assert isinstance(menu_buttons(chat)[-1], MenuButtonCommands), "Telegram открывает только https"
 
 
-def test_panel_key_sends_web_app_button(monkeypatch):
+def keys(keyboard):
+    return [b.text for row in keyboard.keyboard for b in row]
+
+
+def test_https_menu_has_no_second_panel_key(monkeypatch):
+    """По https панель открывает кнопка «Панель» у поля ввода — клавиши «🖥 Панель» в меню нет."""
     monkeypatch.setenv("BASE_URL", HTTPS)
     prepare()
     chat = TeacherChat()
     chat.text("/start")
-    keyboard = chat.keyboard_of_last()
-    assert any(b.text == "🖥 Панель" for row in keyboard.keyboard for b in row), "кнопка в меню преподавателя"
+    texts = keys(chat.keyboard_of_last())
+    assert "🖥 Панель" not in texts and "🌐 Язык" in texts
+
+
+def test_without_https_menu_keeps_panel_key():
+    prepare()
+    chat = TeacherChat()
+    chat.text("/start")
+    assert "🖥 Панель" in keys(chat.keyboard_of_last()), "без https кнопки у поля ввода нет — клавиша остаётся"
+
+
+def test_old_panel_key_still_sends_web_app_button(monkeypatch):
+    """У кого осталась старая клавиатура — нажатие «🖥 Панель» по-прежнему открывает панель."""
+    monkeypatch.setenv("BASE_URL", HTTPS)
+    prepare()
+    chat = TeacherChat()
+    chat.text("/start")
     replies = chat.text("🖥 Панель")
     assert "Панель учителя" in replies[0]
     markup = [c for c in chat.session.calls if isinstance(c, SendMessage)][-1].reply_markup
