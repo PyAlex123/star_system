@@ -46,7 +46,10 @@ _lock = threading.RLock()
 # 10 -> 11: должности в школах. У сотрудника posts: {"<id школы>": ["director", "head_primary",
 #         "head_secondary", "teacher"]}; school_ids и role теперь выводятся из них. Флажок
 #         checkin_manager убран: раздел «Отметки» — только у суперадмина.
-DB_VERSION = 11
+# 11 -> 12: у сотрудника постоянный код для бота (bot_code) — как у ученика на карточке:
+#         QR, ссылка t.me/<бот>?start=inv_<код> или код текстом. Одноразовые приглашения
+#         (invite_code, invite_created_at) убраны; привязанный Telegram остаётся.
+DB_VERSION = 12
 
 # Категории призов как в макетах: небольшой, средний, большой
 PRIZE_CATEGORIES = ("small", "medium", "large")
@@ -64,14 +67,14 @@ def category_by_cost(cost: int) -> str:
 SECRET_STUDENT_FIELDS = ("password_hash", "session_key")
 # То же для пользователей панели
 SECRET_USER_FIELDS = ("password_hash", "session_key")
-# Видно только администратору в списке сотрудников: по коду приглашения можно
-# привязать свой Telegram к чужой карточке преподавателя
-ADMIN_ONLY_USER_FIELDS = ("password_shown", "invite_code", "hourly_rate")
+# Видно только администратору в списке сотрудников: по коду для бота можно
+# привязать свой Telegram к чужой карточке сотрудника
+ADMIN_ONLY_USER_FIELDS = ("password_shown", "bot_code", "hourly_rate")
 
 # Поля сотрудника для отметок (схема 9). Значения по умолчанию — для миграции и новых записей.
 STAFF_CHECKIN_DEFAULTS: Dict[str, Any] = {
     "tg_id": None, "tg_username": None, "tg_bound_at": None, "tg_blocked_at": None,
-    "invite_code": None, "invite_created_at": None, "lang": "ru", "consent_at": None, "hourly_rate": None,
+    "bot_code": None, "lang": "ru", "consent_at": None, "hourly_rate": None,
     # Отмечается ли сотрудник в боте. Уроки и проверки — только у таких: учитель
     # занятия по умолчанию тот, кто его внёс, в том числе администратор.
     "checkin_tracked": False,
@@ -182,6 +185,30 @@ def new_token(existing: Optional[set] = None) -> str:
         token = "".join(secrets.choice(_TOKEN_ALPHABET) for _ in range(8))
         if token not in existing:
             return token
+
+
+def all_codes(db: Dict[str, Any]) -> set:
+    """Коды для бота, уже занятые учениками и сотрудниками: код, присланный боту текстом,
+    должен указывать на одного человека."""
+    return ({s.get("token") for s in db.get("students", [])}
+            | {u.get("bot_code") for u in db.get("users", [])}) - {None, ""}
+
+
+def new_staff_code(db: Dict[str, Any]) -> str:
+    """Код сотрудника для бота — как у ученика: 8 символов без O/0 и I/1."""
+    return new_token(all_codes(db))
+
+
+def normalize_code(code: Optional[str]) -> str:
+    """Код с карточки так, как его могли набрать: «abcd 2345», «ABCD-2345»."""
+    return "".join(ch for ch in (code or "") if ch.isalnum()).upper()
+
+
+def find_by_staff_code(db: Dict[str, Any], code: Optional[str]) -> Optional[Dict[str, Any]]:
+    wanted = normalize_code(code)
+    if not wanted:
+        return None
+    return next((u for u in db.get("users", []) if (u.get("bot_code") or "").upper() == wanted), None)
 
 
 def new_session_key() -> str:
@@ -352,6 +379,8 @@ def public_state(db: Dict[str, Any], user: Optional[Dict[str, Any]] = None) -> D
     copy["schedule_log"] = [r for r in copy.get("schedule_log", []) if r.get("school_id") in schools][:200]
     users = copy.pop("users", [])
     copy["telegram_login"] = telegram_login(db)
+    # Имя бота — для ссылки сотрудника в бот (t.me/<бот>?start=inv_<код>) в окне сотрудника
+    copy["bot_username"] = config.BOT_USERNAME or None
     copy.pop("settings", None)
     if user is not None:
         copy["me"] = public_user(user)
@@ -399,6 +428,7 @@ def make_user(db: Dict[str, Any], login: str, name: str, role: str,
         "created_at": now_iso(),
         **json.loads(json.dumps(STAFF_CHECKIN_DEFAULTS)),
     }
+    user["bot_code"] = new_staff_code(db)
     set_posts(user, posts if posts is not None else posts_from_role(role, school_ids))
     db["users"].append(user)
     return user
@@ -637,6 +667,14 @@ def migrate(db: Dict[str, Any]) -> bool:
             changed = True
         if "checkin_manager" in user:
             user.pop("checkin_manager")
+            changed = True
+        # Схема 12: постоянный код для бота вместо одноразового приглашения
+        for field in ("invite_code", "invite_created_at"):
+            if field in user:
+                user.pop(field)
+                changed = True
+        if not user.get("bot_code"):
+            user["bot_code"] = new_staff_code(db)
             changed = True
 
     # Срок действия занятия. valid_from = None — «с того дня, как внесли» (created_at)

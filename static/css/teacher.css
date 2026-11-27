@@ -938,9 +938,16 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .user-checkin .check { align-items: flex-start; padding: 7px 10px; line-height: 20px; }
 .user-checkin .check input { flex: none; margin-top: 1px; }
 .user-checkin .field { margin-top: 8px; }
-.user-tg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; padding: 12px 14px;
-  border-radius: var(--r12); background: var(--surface-2); }
-.user-tg p { flex: 1 1 220px; margin: 0; font-size: 14px; line-height: 20px; }
+/* Код сотрудника для бота: QR и код — как на карточке (окно сотрудника и «Мой кабинет») */
+.user-tg { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.tg-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: var(--r12); background: var(--surface-2); }
+.tg-qr { flex: none; width: 120px; height: 120px; border-radius: var(--r8); }   /* сам QR — белый: так его читает камера в любой теме */
+.tg-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.staff-code { font: 600 22px/28px var(--font-mono); letter-spacing: .08em; color: var(--text); white-space: nowrap; }
+.tg-hint { font-size: 13px; line-height: 18px; color: var(--muted); }
+.tg-status { margin: 0; font-size: 14px; line-height: 20px; }
+.tg-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.me-bot .tg-card { width: 100%; }
 .invite-box { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 12px 14px;
   border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); }
 .invite-box b { flex: 1 1 220px; font: 500 14px/20px var(--font-mono); overflow-wrap: anywhere; }
@@ -975,7 +982,7 @@ body:not(.can-checkin) .checkin-only { display: none !important; }
 .info-body { font-size: 15px; line-height: 22px; color: var(--text); }
 .info-body p { margin-bottom: 10px; color: var(--muted); }
 .info-body ul { margin: 0; padding-left: 20px; font-size: 14px; }
-.cred-box { display: grid; grid-template-columns: 72px 1fr; row-gap: 8px; padding: 14px 16px; border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); }
+.cred-box { display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; margin-bottom: 12px; padding: 14px 16px; border-radius: var(--r12); background: var(--surface-2); border: var(--bw) solid var(--line); }
 .cred-box span { color: var(--muted); font-size: 14px; }
 .cred-box b { font: 500 14px/20px var(--font-mono); overflow-wrap: anywhere; }
 .confirm-text { font-size: 15px; line-height: 22px; color: var(--muted); text-wrap: pretty; }
@@ -1424,6 +1431,9 @@ input[type="time"]:focus { outline: none; border-color: var(--accent-text); box-
   .user-row .acts .icon-btn, .user-row .pw-cell .icon-btn { width: 44px; height: 44px; }
   /* Новые кнопки на телефоне — не меньше 44 px под палец */
   .user-tg .btn, .week-nav .btn { height: 44px; }
+  .tg-acts .btn { flex: 1 1 auto; }
+  .tg-qr { width: 104px; height: 104px; }
+  .staff-code { font-size: 20px; }
   .sch-split { height: auto; min-height: 44px; white-space: normal; text-align: left; }
   .user-checkin .check { min-height: 44px; align-items: center; }
   .loc-map { min-height: 44px; }

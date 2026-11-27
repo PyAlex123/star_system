@@ -1,11 +1,9 @@
 /* Отметки преподавателей в панели. Подключается после teacher.js, schedule.js
    и stats.js и пользуется их state, api(), openModal(), toast() и т. п.
 
-   Сейчас здесь подготовка: точка школы на карте, Telegram и ставка сотрудника,
-   срок действия занятий. Сам раздел «Отметки» появится здесь же.
+   Здесь: точка школы на карте, код сотрудника для бота (QR, карточка), Telegram и ставка
+   сотрудника, срок действия занятий.
    Права проверяет сервер; панель лишь прячет то, что всё равно недоступно. */
-
-const INVITE_DAYS = 7;
 
 /** Раздел «Отметки» (приход, опоздания, часы, деньги) — только администратор. */
 function canManageCheckins() {
@@ -143,100 +141,109 @@ async function saveSchoolLocation() {
   }
 }
 
-/* ── Telegram и ставка сотрудника (только администратор) ──── */
+/* ── Telegram сотрудника: код для бота, QR и карточка (только администратор) ── */
 
-/** bound — привязан, blocked — заблокировал бота, pending — ждём по ссылке, expired, none. */
-function inviteState(user, now = Date.now()) {
+/** bound — привязан, blocked — остановил бота, none — не привязан (код — на карточке сотрудника). */
+function tgState(user) {
   if (user.tg_id) return user.tg_blocked_at ? "blocked" : "bound";
-  if (!user.invite_code || !user.invite_created_at) return "none";
-  const age = now - Date.parse(user.invite_created_at);
-  return age > INVITE_DAYS * 86400000 ? "expired" : "pending";
+  return "none";
 }
 
-function inviteUntil(user) {
-  const created = Date.parse(user.invite_created_at || "");
-  return Number.isNaN(created) ? "" : formatDay(isoDate(new Date(created + INVITE_DAYS * 86400000)));
+/** «ABCD 2345» — код так же, как на карточке. */
+function codeText(code) {
+  return code ? `${code.slice(0, 4)} ${code.slice(4)}` : "";
+}
+
+/** Ссылка сотрудника в бот — туда же ведёт QR карточки. Пусто, пока бот не подключён. */
+function staffLink(code, bot = state.bot_username) {
+  return bot && code ? `https://t.me/${bot}?start=inv_${code}` : "";
 }
 
 /** Метки под именем в списке сотрудников. */
 function checkinBadges(user) {
   const tags = [];
   if (user.checkin_tracked) {
-    const tg = inviteState(user);
+    const tg = tgState(user);
     if (tg === "bound") tags.push(`<span class="tag tag-ok">Telegram${user.tg_username ? " @" + escapeHtml(user.tg_username) : ""}</span>`);
-    else if (tg === "blocked") tags.push(`<span class="tag">заблокировал бота</span>`);
-    else if (tg === "pending") tags.push(`<span class="tag tag-accent">ждём по ссылке</span>`);
-    else if (tg === "expired") tags.push(`<span class="tag">ссылка истекла</span>`);
+    else if (tg === "blocked") tags.push(`<span class="tag">остановил бота</span>`);
     else tags.push(`<span class="tag">Telegram не привязан</span>`);
   }
   if (user.hourly_rate !== null && user.hourly_rate !== undefined) tags.push(`<span class="tag">${fmt(user.hourly_rate)} сум/ч</span>`);
   return tags.join("");
 }
 
-/** Строка о Telegram в окне сотрудника и кнопки к ней. */
+/** QR и код для бота — как на карточке сотрудника. src — адрес картинки QR. */
+function staffCodeBlock(code, src, name) {
+  return `<div class="tg-card">
+      <img class="tg-qr" src="${src}" alt="QR-код для бота: ${escapeHtml(name)}" width="120" height="120">
+      <div class="tg-info">
+        <span class="caps">Код для бота</span>
+        <b class="staff-code">${escapeHtml(codeText(code))}</b>
+        <span class="tg-hint">Наведите камеру телефона на QR — откроется бот. Или отправьте боту этот код.</span>
+      </div>
+    </div>`;
+}
+
+/** Блок «Вход в Telegram-бот» в окне сотрудника: код, QR, ссылка, карточка, новый код, отвязка. */
 function renderUserTelegram(user) {
   const host = $("userTelegram");
   if (!user) {
     host.hidden = true;
+    host.innerHTML = "";
     return;
   }
-  const tg = inviteState(user);
-  const text = {
+  const tg = tgState(user);
+  const status = {
     bound: `Telegram привязан${user.tg_username ? ": @" + escapeHtml(user.tg_username) : ""}.`,
-    blocked: "Сотрудник заблокировал бота — сообщения не доходят. Отвяжите и выдайте новую ссылку.",
-    pending: `Ссылка выдана, ждём, пока сотрудник её откроет. Действует до ${escapeHtml(inviteUntil(user))}.`,
-    expired: "Ссылка истекла — выдайте новую.",
-    none: "Telegram не привязан.",
+    blocked: "Сотрудник остановил бота — сообщения не доходят. Попросите открыть бот и нажать «Старт».",
+    none: "Telegram не привязан: сотрудник сканирует QR с карточки или присылает боту код.",
   }[tg];
-  const button = tg === "bound" || tg === "blocked"
-    ? `<button type="button" class="btn btn-ghost btn-sm" onclick="unbindTelegram(${user.id})">${icon("logout", "ic ic-sm")}Отвязать</button>`
-    : `<button type="button" class="btn btn-ghost btn-sm" onclick="inviteUser(${user.id})">${icon("send", "ic ic-sm")}${tg === "none" ? "Ссылка-приглашение" : "Новая ссылка"}</button>`;
-  host.innerHTML = `<p>${text}</p>${button}`;
+  const link = staffLink(user.bot_code);
+  const qr = `${BASE}/api/users/${user.id}/qr.png?size=6&v=${encodeURIComponent(user.bot_code || "")}`;
+  host.innerHTML = `
+    <span class="field-label">Вход в Telegram-бот</span>
+    ${staffCodeBlock(user.bot_code, qr, user.name)}
+    <p class="tg-status">${status}${link ? "" : " Ссылка в бот появится, когда к сайту подключат бота."}</p>
+    <div class="tg-acts">
+      <a class="btn btn-ghost btn-sm" href="${BASE}/cards/staff/${user.id}" target="_blank" rel="noopener">${icon("printer", "ic ic-sm")}Карточка</a>
+      ${link ? `<button type="button" class="btn btn-ghost btn-sm" data-link="${escapeHtml(link)}" onclick="copyText(this.dataset.link)">${icon("copy", "ic ic-sm")}Ссылка</button>` : ""}
+      <button type="button" class="btn btn-ghost btn-sm" onclick="newStaffCode(${user.id})">${icon("refresh", "ic ic-sm")}Новый код</button>
+      ${tg === "none" ? "" : `<button type="button" class="btn btn-ghost btn-sm" onclick="unbindTelegram(${user.id})">${icon("logout", "ic ic-sm")}Отвязать</button>`}
+    </div>`;
   host.hidden = false;
 }
 
-let lastInviteLink = "";
-
-async function inviteUser(id) {
-  try {
-    const result = await api(`/api/users/${id}/invite`, { method: "POST" });
-    await loadState();
-    const user = (state.users || []).find((u) => u.id === id) || result.user;
-    if ($("modalUser").classList.contains("open") && userTarget === id) {
-      // Приглашение включает отметки (кроме администратора) — не выключить их при сохранении окна
-      if (user.role !== "superadmin") $("userTracked").checked = true;
-      renderUserTelegram(user);
-    }
-    lastInviteLink = result.link || "";
-    const name = escapeHtml(user.name);
-    if (!result.link) {
-      showInfo("Telegram-бот ещё не подключён",
-        `<p>${user.role === "superadmin" ? "" : `${name} теперь отмечается: уроки появятся в отметках. `}
-         Ссылка-приглашение будет доступна, когда к сайту подключат Telegram-бота —
-         попросите того, кто обслуживает сервер.</p>`);
-      return;
-    }
-    showInfo("Ссылка-приглашение",
-      `<p>Отправьте её сотруднику (${name}) в Telegram. Ссылка действует ${result.days}
-       ${plural(result.days, "день", "дня", "дней")} и срабатывает один раз.</p>
-       <div class="invite-box"><b>${escapeHtml(result.link)}</b>
-       <button type="button" class="btn btn-sm" onclick="copyText(lastInviteLink)">${icon("clipboard", "ic ic-sm")}Скопировать</button></div>`);
-  } catch (error) {
-    toast(error.message, "error");
+function refreshUserWindow(id) {
+  if ($("modalUser").classList.contains("open") && userTarget === id) {
+    renderUserTelegram((state.users || []).find((u) => u.id === id));
   }
+}
+
+/** Новый код — как «новый QR» у ученика: старая карточка перестаёт работать. */
+function newStaffCode(id) {
+  const user = (state.users || []).find((u) => u.id === id);
+  if (!user) return;
+  confirmAction("Выдать новый код?",
+    `${escapeHtml(user.name)}: старая карточка сотрудника перестанет работать, Telegram отвяжется.
+     Распечатайте новую карточку — сотрудник отсканирует её заново.`,
+    async () => {
+      await api(`/api/users/${id}/code`, { method: "POST" });
+      await loadState();
+      refreshUserWindow(id);
+      toast("Новый код выдан — распечатайте карточку", "success");
+    }, "Выдать новый код");
 }
 
 function unbindTelegram(id) {
   const user = (state.users || []).find((u) => u.id === id);
   if (!user) return;
   confirmAction("Отвязать Telegram?",
-    `${escapeHtml(user.name)} перестанет отмечаться с этого аккаунта. Для нового телефона выдайте новую ссылку-приглашение.`,
+    `${escapeHtml(user.name)} перестанет отмечаться с этого аккаунта. Код на карточке остаётся прежним:
+     с нового телефона сотрудник отсканирует ту же карточку. Карточку потеряли — «Новый код».`,
     async () => {
       await api(`/api/users/${id}/telegram`, { method: "DELETE" });
       await loadState();
-      if ($("modalUser").classList.contains("open") && userTarget === id) {
-        renderUserTelegram((state.users || []).find((u) => u.id === id));
-      }
+      refreshUserWindow(id);
       toast("Telegram отвязан", "success");
     }, "Отвязать");
 }

@@ -1,13 +1,12 @@
 """Учётные записи панели: суперадмин заводит сотрудников и раздаёт им должности в школах
 (директор, завуч начальной / средней школы, учитель — в каждой школе свои, можно несколько).
 Пароль сотрудника виден суперадмину, пока сотрудник не сменит его сам (как у учеников)."""
-import secrets
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends
 
 from .. import config, db, images, passwords, schemas
-from ..checkin import clock as checkin_clock, service as checkin
+from ..checkin import service as checkin
 from ..security import require_superadmin
 from .common import bad_request, clean_name, not_found
 from .schedule import release_teacher
@@ -122,42 +121,39 @@ def update_user(user_id: int, item: schemas.UserUpdate, me: Dict[str, Any] = Dep
     return {"ok": True, "user": db.public_user(user, with_password=True)}
 
 
-@router.post("/{user_id}/invite")
-def invite_to_checkins(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
-    """Ссылка-приглашение в бот отметок: одноразовая, живёт неделю.
-    Сотрудник сразу начинает отмечаться — его уроки появятся в «Сегодня»."""
-    code = secrets.token_urlsafe(9)
+TELEGRAM_FIELDS = ("tg_id", "tg_username", "tg_bound_at", "tg_blocked_at", "consent_at")
+
+
+@router.post("/{user_id}/code")
+def new_bot_code(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
+    """Новый код для бота — как «новый QR» у ученика: старая карточка сотрудника перестаёт
+    работать, Telegram отвязывается, согласие на отметки спросим заново."""
     before: Dict[str, Any] = {}
 
     def _apply(database: Dict[str, Any]):
         user = _user_or_404(database, user_id)
         before.update(user)
-        user["invite_code"] = code
-        user["invite_created_at"] = checkin_clock.iso(checkin_clock.now_utc())
-        # Администратору Telegram нужен для кнопок в группе «Отметки», а не для отметок:
-        # его занятия (он внёс их сам) в проверку не попадают
-        if not db.is_superadmin(user):
-            user["checkin_tracked"] = True
+        user["bot_code"] = db.new_staff_code(database)
+        for field in TELEGRAM_FIELDS:
+            user[field] = None
         return user
 
     user = db.transaction(_apply)
-    checkin.audit_staff(me, user_id, "invite", before, user)
-    link = config.checkin_invite_link(code)
-    return {"ok": True, "link": link or None, "bot_connected": bool(link), "days": config.CHECKIN_INVITE_DAYS,
+    checkin.audit_staff(me, user_id, "new_code", before, user)
+    return {"ok": True, "code": user["bot_code"], "link": config.staff_link(user["bot_code"]) or None,
             "user": db.public_user(user, with_password=True)}
 
 
 @router.delete("/{user_id}/telegram")
 def unbind_telegram(user_id: int, me: Dict[str, Any] = Depends(require_superadmin)):
-    """Отвязать Telegram преподавателя (новый телефон, чужой аккаунт). Согласие
-    на отметки спросим заново; для новой привязки — новое приглашение."""
+    """Отвязать Telegram сотрудника (новый телефон). Код с карточки остаётся прежним — как
+    у ученика; согласие на отметки спросим заново. Карточку потеряли — «Новый код»."""
     before: Dict[str, Any] = {}
 
     def _apply(database: Dict[str, Any]):
         user = _user_or_404(database, user_id)
         before.update(user)
-        for field in ("tg_id", "tg_username", "tg_bound_at", "tg_blocked_at", "consent_at",
-                      "invite_code", "invite_created_at"):
+        for field in TELEGRAM_FIELDS:
             user[field] = None
         return user
 

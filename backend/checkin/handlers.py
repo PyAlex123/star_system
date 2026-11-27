@@ -1,8 +1,8 @@
 """Преподаватель в общем боте: привязка по ссылке, язык, согласие, меню и отметка.
 
 Бот у системы один (backend/bot/bot.py). Роутер преподавателя берёт сообщение, только если
-Telegram-аккаунт привязан к сотруднику или пришла ссылка-приглашение (/start inv_…);
-остальное уходит роутеру ученика.
+Telegram-аккаунт привязан к сотруднику или пришёл код сотрудника — как у ученика: QR карточки
+(/start inv_<код>), /start <код> или код текстом. Остальное уходит роутеру ученика.
 
 Бот только переводит сообщения Telegram в вызовы service.py и отвечает человеку.
 Время отметки — время сообщения в Telegram (message.date), а не сервера:
@@ -16,6 +16,7 @@ import asyncio
 import html
 import logging
 import math
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -25,13 +26,14 @@ from aiogram.types import (BotCommand, BotCommandScopeChat, CallbackQuery, ChatM
                            InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, MenuButtonCommands, Message,
                            ReplyKeyboardMarkup, ReplyParameters)
 
-from .. import db
+from .. import config, db
 from . import notify, service, store
 from .locales import LANGS, day_title, lang_of, minutes, month_title, t
 
 log = logging.getLogger("stars.checkin.bot")
 
-INVITE_PREFIX = "inv_"
+# Код с карточки сотрудника, набранный руками: 8 букв и цифр, можно с пробелом или дефисом
+CODE_TEXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 \-]{6,10}[A-Za-z0-9]$")
 MENU_ACTIONS = ("menu_here", "menu_today", "menu_month", "menu_lang")
 
 
@@ -170,18 +172,36 @@ def month_reply(lang: str, data: Dict[str, Any]) -> str:
 
 # ── Роутер ────────────────────────────────────────────────────────────────────
 
+def code_from_text(text: Optional[str]) -> str:
+    """Код сотрудника, набранный руками: «ABCD 2345», «abcd-2345». Иначе пусто."""
+    text = (text or "").strip()
+    if not CODE_TEXT_RE.match(text):
+        return ""
+    code = db.normalize_code(text)
+    return code if len(code) == 8 else ""
+
+
+def start_code(args: str) -> str:
+    """Код из /start: inv_<код> — из QR и ссылки карточки сотрудника, или сам код."""
+    args = (args or "").strip()
+    return args[len(config.STAFF_START_PREFIX):] if args.startswith(config.STAFF_START_PREFIX) else args
+
+
 async def is_staff_message(message: Message) -> bool:
-    """Сообщение — для роутера преподавателя: ссылка-приглашение или привязанный сотрудник.
-    /start с кодом ученика всегда уходит ученику (карточку сканируют и в чужом телефоне)."""
+    """Сообщение — для роутера преподавателя: код сотрудника (QR карточки, ссылка, код текстом)
+    или привязанный сотрудник. /start с кодом ученика уходит ученику (карточку сканируют и в
+    чужом телефоне)."""
     if not message.from_user:
         return False
     text = (message.text or "").strip()
     if text.startswith("/start"):
         args = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
-        if args.startswith(INVITE_PREFIX):
+        if args.startswith(config.STAFF_START_PREFIX):
             return True
         if args:
-            return False
+            return await _call(service.user_by_code, args) is not None
+    elif code_from_text(text) and await _call(service.user_by_code, code_from_text(text)) is not None:
+        return True
     return await _call(service.user_by_tg, message.from_user.id) is not None
 
 
@@ -202,25 +222,9 @@ def build_router() -> Router:
     router = Router(name="checkin-teacher")
     router.message.filter(F.chat.type == "private", is_staff_message)
 
-    @router.message(CommandStart())
-    async def on_start(message: Message, command: CommandObject) -> None:
-        args = (command.args or "").strip()
-        tg = message.from_user
-        if args.startswith(INVITE_PREFIX):
-            status, user = await _call(service.bind_invite, args[len(INVITE_PREFIX):], tg.id, tg.username)
-            if status in ("not_found", "expired", "other_user"):
-                await message.answer(t("ru", f"invite_{status}") + "\n\n" + t("uz", f"invite_{status}"))
-                return
-            if status == "ok":
-                await staff_chat(message.bot, message.chat.id)
-                lang = lang_of(user.get("lang"))
-                if not user.get("checkin_tracked"):
-                    await message.answer(_not_tracked_text(user))
-                    return
-                await message.answer(t(lang, "invite_ok", name=esc(user.get("name"))))
-                await message.answer(t(lang, "choose_lang"), reply_markup=lang_keyboard())
-                return
-        user = await _call(service.user_by_tg, tg.id)
+    async def welcome(message: Message) -> None:
+        """Привязанному сотруднику — то, что ему сейчас нужно: согласие или меню."""
+        user = await _call(service.user_by_tg, message.from_user.id)
         if not user:
             await message.answer(t("ru", "start_unbound") + "\n\n" + t("uz", "start_unbound"))
             return
@@ -232,6 +236,32 @@ def build_router() -> Router:
             await message.answer(t(lang, "consent"), reply_markup=consent_keyboard(lang))
         else:
             await message.answer(t(lang, "menu_hint"), reply_markup=menu_keyboard(lang))
+
+    async def bind(message: Message, code: str) -> None:
+        """Код сотрудника — из QR, ссылки или набранный руками — как карточка ученика."""
+        tg = message.from_user
+        status, user = await _call(service.bind_code, code, tg.id, tg.username)
+        if status in ("not_found", "taken", "other_user"):
+            await message.answer(t("ru", f"code_{status}") + "\n\n" + t("uz", f"code_{status}"))
+            return
+        if status == "ok":
+            await staff_chat(message.bot, message.chat.id)
+            lang = lang_of(user.get("lang"))
+            if not user.get("checkin_tracked"):
+                await message.answer(_not_tracked_text(user))
+                return
+            await message.answer(t(lang, "code_ok", name=esc(user.get("name"))))
+            await message.answer(t(lang, "choose_lang"), reply_markup=lang_keyboard())
+            return
+        await welcome(message)                         # already_me — свой код ещё раз
+
+    @router.message(CommandStart())
+    async def on_start(message: Message, command: CommandObject) -> None:
+        code = start_code(command.args or "")
+        if code:
+            await bind(message, code)
+            return
+        await welcome(message)
 
     @router.message(Command("help"))
     async def on_help(message: Message) -> None:
@@ -301,6 +331,10 @@ def build_router() -> Router:
     @router.message(F.text)
     async def on_text(message: Message) -> None:
         action = MENU_BY_TEXT.get((message.text or "").strip())
+        code = "" if action else code_from_text(message.text)
+        if code and await _call(service.user_by_code, code):
+            await bind(message, code)                  # код с карточки сотрудника — текстом
+            return
         if action == "menu_here":
             # С компьютера кнопка геолокации не работает — Telegram присылает её текст
             user = await _ready_user(message)
@@ -337,7 +371,7 @@ def build_router() -> Router:
 
 GROUPS = {"group", "supergroup"}
 NOT_ADMIN = ("Решать уроки могут только администратор и ответственный за отметки. "
-             "Привяжите Telegram по ссылке-приглашению из панели.")
+             "Привяжите Telegram кодом со своей карточки сотрудника.")
 
 
 def build_group_router() -> Router:
@@ -353,8 +387,9 @@ def build_group_router() -> Router:
             await message.reply("✅ Готово: сюда будут приходить отметки преподавателей и карточки уроков "
                                 "без отметки. Решать по карточкам могут администратор и ответственные за отметки.")
         else:
-            await message.reply("Эта команда — для администратора отметок. Сначала привяжите Telegram "
-                                "по ссылке-приглашению из панели (раздел «Сотрудники»).")
+            await message.reply("Эта команда — для администратора отметок. Сначала привяжите Telegram: "
+                                "напишите боту в личные сообщения код со своей карточки сотрудника "
+                                "(«Сотрудники» → вы → «Карточка»).")
 
     @router.message(F.migrate_to_chat_id)
     async def on_migrate(message: Message) -> None:

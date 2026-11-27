@@ -1,6 +1,6 @@
-"""Бот преподавателей, слой сервиса: привязка по ссылке, язык, согласие, блокировка,
+"""Бот преподавателей, слой сервиса: привязка по коду сотрудника, язык, согласие, блокировка,
 «мои уроки сегодня» и «мои часы за месяц» — без Telegram."""
-from datetime import date, timedelta
+from datetime import date
 
 from backend import db
 from backend.checkin import clock, locales, service, store
@@ -9,48 +9,49 @@ from conftest import load_db
 MON = date(2026, 11, 23)
 
 
-def invite(user_id=2, days_ago=0, code="CODE-abc_123"):
+def staff_code(user_id=2, code="TCHR2345"):
+    """Код для бота у сотрудника — как на карточке."""
     def _apply(database):
-        user = db.find_user(database, user_id)
-        user.update(invite_code=code, checkin_tracked=True,
-                    invite_created_at=clock.iso(clock.now_utc() - timedelta(days=days_ago)))
+        db.find_user(database, user_id).update(bot_code=code, checkin_tracked=True)
     db.transaction(_apply)
     return code
 
 
-def test_invite_binds_once():
-    code = invite()
-    status, user = service.bind_invite(code, 900, "uchitel")
+def test_code_binds_first_account_and_stays():
+    code = staff_code()
+    status, user = service.bind_code(code, 900, "uchitel")
     assert status == "ok" and user["id"] == 2
     saved = db.find_user(load_db(), 2)
-    assert (saved["tg_id"], saved["tg_username"], saved["invite_code"]) == (900, "uchitel", None)
-    assert saved["tg_bound_at"] and saved["checkin_tracked"] is True
-    assert service.bind_invite(code, 900, "uchitel")[0] == "already_me", "повторный переход — свой"
-    assert service.bind_invite(code, 901, "chuzhoy")[0] == "not_found", "код одноразовый"
+    assert (saved["tg_id"], saved["tg_username"], saved["bot_code"]) == (900, "uchitel", code), "код остаётся"
+    assert saved["tg_bound_at"]
+    assert service.bind_code(code, 900, "uchitel")[0] == "already_me", "свой код ещё раз — свой"
+    assert service.bind_code(code, 901, "chuzhoy") == ("taken", None), "второй аккаунт код не заберёт"
     with store.tx() as conn:
         audit = store.row(conn.execute("SELECT * FROM audit_log WHERE action = 'telegram_bound'").fetchone())
     assert store.loads(audit["after"])["tg_id"] == 900 and audit["user_name"] == "Учитель"
 
 
-def test_expired_and_unknown_invites():
-    code = invite(days_ago=8)
-    assert service.bind_invite(code, 900, None) == ("expired", None)
-    assert db.find_user(load_db(), 2)["tg_id"] is None
-    assert service.bind_invite("nope", 900, None) == ("not_found", None)
+def test_code_is_read_as_typed():
+    code = staff_code()
+    assert service.bind_code("tchr 2345", 900, None)[0] == "ok"
+    assert service.bind_code("TCHR-2345", 900, None)[0] == "already_me"
+    assert service.user_by_code(" tchr2345 ")["id"] == 2
+    assert service.bind_code("nope", 901, None) == ("not_found", None)
+    assert service.user_by_code("") is None
 
 
 def test_one_telegram_one_employee():
     def _bound(database):
         db.find_user(database, 1)["tg_id"] = 900
     db.transaction(_bound)
-    code = invite()
-    assert service.bind_invite(code, 900, None) == ("other_user", None)
-    assert db.find_user(load_db(), 2)["invite_code"] == code, "чужая попытка код не гасит"
+    code = staff_code()
+    assert service.bind_code(code, 900, None) == ("other_user", None)
+    assert db.find_user(load_db(), 2)["tg_id"] is None, "чужая попытка не привязывает"
 
 
 def test_lang_consent_and_block():
-    code = invite()
-    service.bind_invite(code, 900, None)
+    code = staff_code()
+    service.bind_code(code, 900, None)
     assert service.set_lang(2, "uz")["lang"] == "uz"
     assert service.set_lang(2, "fr")["lang"] == "ru", "неизвестный язык — русский"
     assert service.give_consent(2)["consent_at"]

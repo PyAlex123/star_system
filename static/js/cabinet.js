@@ -89,39 +89,25 @@ function renderCabinetBot() {
     return;
   }
   const tg = data.telegram;
+  const off = data.tracked ? "" : `<p class="me-p muted">Отметки для вас пока не включены — их включает администратор.</p>`;
   let html;
-  if (!data.tracked) {
-    html = `<p class="me-p">Отметки для вас не включены — их включает администратор.
-      Когда включит, здесь появится кнопка «Подключить Telegram».</p>`;
-  } else if (tg.bound && tg.blocked) {
+  if (tg.bound && tg.blocked) {
     html = `<p class="me-p sc-warn">${icon("warning", "ic ic-xs")}Вы остановили бота — отметки не приходят.
       Откройте бот в Telegram и нажмите «Старт».</p>`;
   } else if (tg.bound) {
     html = `<p class="me-p"><span class="tag tag-ok">${icon("check", "ic ic-xs")}Telegram привязан${tg.username ? ` · @${escapeHtml(tg.username)}` : ""}</span></p>
-      <p class="me-p">Приехав на урок, откройте бот${data.bot.username ? ` <b>@${escapeHtml(data.bot.username)}</b>` : ""},
-        нажмите «Я на месте» и запишите кругляшок 5 секунд.${tg.consent ? "" : " Сначала бот попросит согласие."}</p>`;
-  } else if (data.bot.ready) {
-    html = `<p class="me-p">Привяжите свой Telegram — в нём вы будете отмечаться на уроках.</p>
-      <button class="btn btn-sm" onclick="myInvite()">${icon("send", "ic ic-sm")}Подключить Telegram</button>`;
+      ${data.tracked ? `<p class="me-p">Приехав на урок, откройте бот${data.bot.username ? ` <b>@${escapeHtml(data.bot.username)}</b>` : ""},
+        нажмите «Я на месте» и запишите кругляшок 5 секунд.${tg.consent ? "" : " Сначала бот попросит согласие."}</p>` : off}`;
+  } else if (data.code) {
+    // Как на карточке сотрудника: QR с экрана — телефоном, или код боту текстом
+    html = `${staffCodeBlock(data.code, `${BASE}/api/checkin/my/qr.png?size=6`, state.me.name)}
+      ${data.link ? `<a class="btn btn-sm" href="${escapeHtml(data.link)}" target="_blank" rel="noopener">${icon("send", "ic ic-sm")}Открыть в Telegram</a>`
+        : `<p class="me-p muted">Telegram-бот пока не подключён к сайту — код заработает, когда его подключат.</p>`}
+      ${off}`;
   } else {
-    html = `<p class="me-p">Telegram-бот пока не подключён к сайту. Когда подключат, здесь появится кнопка «Подключить Telegram».</p>`;
+    html = `<p class="me-p">Telegram-бот пока не подключён к сайту.</p>${off}`;
   }
   $("meBot").innerHTML = html;
-}
-
-async function myInvite() {
-  try {
-    const result = await api("/api/checkin/my/invite", { method: "POST" });
-    if (!result.link) return toast("Telegram-бот пока не подключён к сайту", "error");
-    lastInviteLink = result.link;
-    showInfo("Ссылка в бот", `
-      <p>Откройте её на телефоне, где ваш Telegram. Ссылка действует ${result.days}
-        ${plural(result.days, "день", "дня", "дней")} и срабатывает один раз.</p>
-      <div class="invite-box"><b>${escapeHtml(result.link)}</b>
-        <a class="btn btn-sm" href="${escapeHtml(result.link)}" target="_blank" rel="noopener">${icon("send", "ic ic-sm")}Открыть в Telegram</a></div>`);
-  } catch (error) {
-    toast(error.message, "error");
-  }
 }
 
 /** Подпись состояния урока для самого преподавателя. */

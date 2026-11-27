@@ -711,8 +711,9 @@
         <label for="userRate">Ставка, сум в час</label>
         <input type="text" id="userRate" inputmode="numeric" autocomplete="off" placeholder="пусто — в отчёте только часы">
       </div>
-      <div class="user-tg" id="userTelegram" hidden></div>
     </div>
+    <!-- Код для бота, QR и карточка — у каждого сотрудника, как у ученика (static/js/checkin.js) -->
+    <div class="user-tg" id="userTelegram" hidden></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('modalUser')">Отмена</button>
       <button class="btn" onclick="saveUser()">Сохранить</button>

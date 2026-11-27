@@ -6,13 +6,15 @@ MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust",
 TEXTS = {
     # Bogʻlash
     "start_unbound": "👋 Bu oʻqituvchilar davomati boti.\n\n"
-                     "Boshlash uchun administrator yuborgan taklif havolasini oching.",
-    "invite_not_found": "😕 Havola ishlamadi: u allaqachon ishlatilgan yoki notoʻgʻri. "
-                        "Administratordan yangisini soʻrang.",
-    "invite_expired": "⌛ Havolaning muddati tugagan. Administratordan yangisini soʻrang.",
-    "invite_other_user": "🔒 Bu Telegram boshqa xodimga bogʻlangan. "
-                         "Agar bu xato boʻlsa, administratorga yozing.",
-    "invite_ok": "Assalomu alaykum, {name}! Telegram bogʻlandi.",
+                     "Boshlash uchun telefon kamerasini xodim kartochkasidagi QR-kodga qarating "
+                     "yoki kartochkadagi kodni (8 belgi) shu yerga yuboring.",
+    "code_not_found": "😕 Bunday kod yoʻq. Xodim kartochkasidagi kodni tekshiring "
+                      "yoki administratordan yangi kartochka soʻrang.",
+    "code_taken": "🔒 Bu kod boshqa Telegramga bogʻlangan. Agar kartochka sizniki boʻlsa — "
+                  "administratordan yangi kod soʻrang.",
+    "code_other_user": "🔒 Bu Telegram boshqa xodimga bogʻlangan. "
+                       "Agar bu xato boʻlsa, administratorga yozing.",
+    "code_ok": "Assalomu alaykum, {name}! Telegram bogʻlandi.",
     "choose_lang": "Выберите язык / Tilni tanlang",
     "lang_set": "Til: oʻzbekcha.",
     "consent": "Boshlashdan oldin — davomat qanday ishlaydi:\n\n"

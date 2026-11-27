@@ -1,4 +1,5 @@
 """Карточки класса с QR-кодами: то, что учитель печатает и раздаёт детям.
+Карточки сотрудников — так же: код для бота, QR и вход в панель (только администратор).
 
 Вид — по макету docs/design/«Звёзды - Печать.dc.html»: лист А4, 8 карточек
 (2×4, 95×69,25 мм), метки реза на полях, двойная рамка, QR 32 мм. Оформление —
@@ -9,16 +10,16 @@
 """
 import html
 import io
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import qrcode
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from qrcode.image.pil import PilImage
 
 from .. import assets, config, db, themes
-from ..security import panel_user, require_panel, require_teacher_page
+from ..security import panel_user, require_panel, require_superadmin, require_superadmin_page, require_teacher_page
 from .common import class_or_404, student_or_404
 
 router = APIRouter(tags=["cards"])
@@ -204,24 +205,15 @@ def class_cards(class_id: int, request: Request):
     students.sort(key=lambda s: s["name"].lower())
     site = html.escape(config.site_url("/enter").replace("https://", "").replace("http://", ""))
 
-    sheets = []
-    for start in range(0, len(students), CARDS_PER_SHEET):
-        chunk = students[start:start + CARDS_PER_SHEET]
-        cells = "".join(_card_html(s, school, cls["name"], site, bot) for s in chunk)
-        cells += '<div class="cell blank"></div>' * (CARDS_PER_SHEET - len(chunk))
-        sheets.append(f'<section class="a4"><div class="a4-grid">{cells}</div>{_MARKS}</section>')
-
     count = len(students)
-    pages = len(sheets)
+    pages = (count + CARDS_PER_SHEET - 1) // CARDS_PER_SHEET
     if students:
-        body = '<div class="sheets" id="sheets" data-light>' + "".join(sheets) + "</div>"
+        body = _sheets([_card_html(s, school, cls["name"], site, bot) for s in students])
         sheets_text = f" · {pages} {_plural(pages, 'лист', 'листа', 'листов')} А4, по {CARDS_PER_SHEET} карточек"
     else:
         body = '<p class="empty">В этом классе пока нет учеников.</p>'
         sheets_text = ""
 
-    base = config.URL_PREFIX
-    title = html.escape(f"{cls['name']} — {school}")
     # Не учителю этой школы (директору, завучу) журнала нет — возвращаем в раздел «Карточки»
     back_hash, back_label = ("", "В журнал") if db.teaches_in(user, cls["school_id"]) else ("#cards", "К классам")
     # Галочку меняет только администратор: бот один на все школы
@@ -233,12 +225,20 @@ def class_cards(class_id: int, request: Request):
     bot_switch = f"""<div class="pswitch-box"><label class="pswitch" title="{'Бот один на все школы — настройка общая' if admin else 'Менять может только администратор'}">
       <input type="checkbox" {'checked' if bot else ''} {'' if admin else 'disabled'} onchange="setBot(this)">
       <span>QR и вход через Telegram-бота</span></label>{locked}</div>"""
+    return _print_page(request, theme, f"{cls['name']} — {school}", f"Карточки класса {cls['name']}",
+                       f"{school} · учеников: {count}{sheets_text}", body, back_hash, back_label, bot_switch)
+
+
+def _print_page(request: Request, theme: str, title: str, heading: str, sub: str, body: str,
+                back_hash: str, back_label: str, extra: str = "") -> HTMLResponse:
+    """Лист карточек для печати: панель с кнопками сверху (не печатается) и листы А4."""
+    base = config.URL_PREFIX
     return HTMLResponse(f"""<!DOCTYPE html>
 <html lang="ru" {themes.html_attrs(theme, themes.page_mode(request))}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Карточки: {title}</title>
+<title>Карточки: {html.escape(title)}</title>
 {FAVICON}
 <link rel="stylesheet" href="{base}{assets.versioned('css/tokens.css')}">
 <link rel="stylesheet" href="{base}{assets.versioned('css/theme.css')}">
@@ -249,15 +249,15 @@ def class_cards(class_id: int, request: Request):
 <div class="ptoolbar no-print">
   <div class="ptoolbar-in">
     <div class="ptitle">
-      <span class="ptitle-main">Карточки класса {html.escape(cls['name'])}</span>
-      <span class="ptitle-sub">{html.escape(school)} · учеников: {count}{sheets_text}</span>
+      <span class="ptitle-main">{html.escape(heading)}</span>
+      <span class="ptitle-sub">{html.escape(sub)}</span>
     </div>
-    {bot_switch}
+    {extra}
     <div class="seg" role="radiogroup" aria-label="Превью печати">
       <button type="button" role="radio" aria-checked="true" id="modeColor" onclick="setBw(false)">Цвет</button>
       <button type="button" role="radio" aria-checked="false" id="modeBw" onclick="setBw(true)">Ч/б-превью</button>
     </div>
-    <a class="btn btn-ghost btn-md" href="{base}/teacher{back_hash}"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>{back_label}</a>
+    <a class="btn btn-ghost btn-md" href="{base}/teacher{back_hash}"><svg class="ic ic-sm"><use href="#i-arrow-left"></use></svg>{html.escape(back_label)}</a>
     <button type="button" class="btn btn-ghost btn-md" id="pickBtn" onclick="togglePickMode()">
       <svg class="ic ic-sm"><use href="#i-square-check"></use></svg><span id="pickLabel">Печатать выбранных</span></button>
     <button type="button" class="btn btn-md" onclick="window.print()"><svg class="ic ic-sm"><use href="#i-printer"></use></svg>Печать</button>
@@ -267,3 +267,158 @@ def class_cards(class_id: int, request: Request):
 {_SCRIPT}
 </body>
 </html>""")
+
+
+def _sheets(cells: List[str]) -> str:
+    """Карточки по листам А4: по 8 на лист, пустые места — пустые ячейки, метки реза на полях."""
+    sheets = []
+    for start in range(0, len(cells), CARDS_PER_SHEET):
+        chunk = cells[start:start + CARDS_PER_SHEET]
+        filler = '<div class="cell blank"></div>' * (CARDS_PER_SHEET - len(chunk))
+        sheets.append(f'<section class="a4"><div class="a4-grid">{"".join(chunk)}{filler}</div>{_MARKS}</section>')
+    return '<div class="sheets" id="sheets" data-light>' + "".join(sheets) + "</div>"
+
+
+# ── Карточки сотрудников: код для бота, QR и вход в панель ───────────────────
+
+POST_SHORT = {db.POST_DIRECTOR: "директор", db.POST_HEAD_PRIMARY: "завуч нач.",
+              db.POST_HEAD_SECONDARY: "завуч сред.", db.POST_TEACHER: "учитель"}
+
+
+def staff_qr_target(user: Dict[str, Any]) -> str:
+    """QR сотрудника — в бот по его коду; пока имя бота неизвестно — на вход в панель."""
+    return config.staff_link(user.get("bot_code") or "") or config.site_url("/login")
+
+
+@router.get("/api/users/{user_id}/qr.png")
+def staff_qr(user_id: int, size: int = 10, me: Dict[str, Any] = Depends(require_superadmin)):
+    user = db.find_user(db.load_db(), user_id)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    png = _qr_png(staff_qr_target(user), box_size=max(4, min(20, size)))
+    return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/checkin/my/qr.png")
+def my_qr(size: int = 10, me: Dict[str, Any] = Depends(require_panel)):
+    """Свой QR в бот — для «Моего кабинета»: навести телефон на экран компьютера."""
+    png = _qr_png(staff_qr_target(me), box_size=max(4, min(20, size)))
+    return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+def _posts_label(user: Dict[str, Any], school_id: Optional[int]) -> str:
+    """«учитель», «директор, учитель» — в этой школе; без школы — по всем школам без повторов."""
+    if school_id is not None:
+        posts = db.posts_in(user, school_id)
+    else:
+        posts = [p for p in db.POSTS if any(p in v for v in (user.get("posts") or {}).values())]
+    return ", ".join(POST_SHORT[p] for p in db.POSTS if p in posts) or ("администратор" if db.is_superadmin(user) else "сотрудник")
+
+
+def _staff_card_html(user: Dict[str, Any], school: str, post: str, site: str, bot: bool) -> str:
+    """Карточка сотрудника — как у ученика: школа и должность, имя, QR в бот и код 4+4,
+    ниже вход в панель (адрес, логин, пароль — пока сотрудник не сменил его сам)."""
+    name = html.escape(user.get("name") or user.get("login") or "")
+    code = html.escape(user.get("bot_code") or "")
+    login = html.escape(user.get("login") or "—")
+    shown = user.get("password_shown")
+    password = f"<b>{html.escape(shown)}</b>" if shown else "<i>свой пароль</i>"
+    long_login = " long" if len(user.get("login") or "") > 20 else ""
+    size = " xlong" if len(user.get("name") or "") > 28 else " long" if len(user.get("name") or "") > 22 else ""
+    label = html.escape(post)
+    if bot and code:
+        side = f"""<div class="c-side">
+            <span class="c-caps">Код для бота</span>
+            <span class="c-code" aria-label="{code}">{code[:4]}<span class="gap"></span>{code[4:]}</span>
+            <span class="c-hint">Наведите камеру телефона на QR — откроется бот для отметок. Или отправьте боту код.</span>
+            <span class="c-web">
+              <span class="c-caps">Панель учителя</span>
+              <span class="c-site">{site}</span>
+              <span class="c-cred{long_login}">логин <b>{login}</b></span>
+              <span class="c-cred">пароль {password}</span>
+            </span>
+          </div>"""
+    else:
+        side = f"""<div class="c-side web-only">
+            <span class="c-caps">Вход в панель</span>
+            <span class="c-hint">Наведите камеру на QR — откроется страница входа. Telegram-бот пока не подключён.</span>
+            <span class="c-web">
+              <span class="c-site">{site}</span>
+              <span class="c-cred big{long_login}">логин <b>{login}</b></span>
+              <span class="c-cred big">пароль {password}</span>
+            </span>
+          </div>"""
+    return f"""
+    <div class="cell" data-id="{user['id']}">
+      <button class="pick no-print" type="button" aria-pressed="true" aria-label="Убрать из печати: {name}"
+              onclick="togglePick(this)"><span class="box"><svg class="ic"><use href="#i-check"></use></svg></span></button>
+      <div class="frame"><div class="card">
+        <div class="deco-nb" aria-hidden="true"><span><svg class="ic"><use href="#i-star"></use></svg></span></div>
+        {_SKY_MARK}
+        <div class="deco-stk" aria-hidden="true"><span>{label}</span></div>
+        <div class="deco-q" aria-hidden="true">КАРТОЧКА СОТРУДНИКА</div>
+        <div class="c-top"><span class="c-school">{html.escape(school)}</span><span class="c-class">{label}</span></div>
+        <div class="c-name{size}" title="{name}">{name}</div>
+        <div class="c-row">
+          <img class="qr" src="{config.URL_PREFIX}/api/users/{user['id']}/qr.png?size=10" alt="QR-код для бота: {name}">
+          {side}
+        </div>
+      </div></div>
+    </div>"""
+
+
+def _staff_page(request: Request, users: List[Dict[str, Any]], school: Optional[Dict[str, Any]],
+                heading: str, back_hash: str, back_label: str) -> HTMLResponse:
+    bot = bool(config.BOT_USERNAME)
+    site = html.escape(config.site_url("/login").replace("https://", "").replace("http://", ""))
+    school_id = school["id"] if school else None
+    all_schools = db.load_db().get("schools", [])
+    cells = []
+    for user in users:
+        school_ids = {int(k) for k in (user.get("posts") or {})}
+        name = school["name"] if school else ", ".join(
+            s["name"] for s in all_schools if s["id"] in school_ids) or config.SCHOOL_NAME
+        cells.append(_staff_card_html(user, name, _posts_label(user, school_id), site, bot))
+    count = len(users)
+    if users:
+        body = _sheets(cells)
+        pages = (count + CARDS_PER_SHEET - 1) // CARDS_PER_SHEET
+        sub = f" · {pages} {_plural(pages, 'лист', 'листа', 'листов')} А4, по {CARDS_PER_SHEET} карточек"
+    else:
+        body = '<p class="empty">В этой школе пока нет сотрудников.</p>'
+        sub = ""
+    theme = themes.school_theme(school) if school else themes.first_school_theme(db.load_db())
+    where = school["name"] if school else (users[0].get("name", "") if users else "")
+    return _print_page(request, theme, heading, heading, f"{where} · сотрудников: {count}{sub}",
+                       body, back_hash, back_label)
+
+
+def _leaders_first(school_id: int):
+    def key(user: Dict[str, Any]):
+        lead = any(p in db.ADMIN_POSTS for p in db.posts_in(user, school_id))
+        return (0 if lead else 1, (user.get("name") or "").lower())
+    return key
+
+
+@router.get("/cards/staff/{user_id}", response_class=HTMLResponse,
+            dependencies=[Depends(require_superadmin_page)])
+def staff_card(user_id: int, request: Request):
+    """Карточка одного сотрудника: из окна сотрудника — «Карточка»."""
+    user = db.find_user(db.load_db(), user_id)
+    if not user:
+        raise HTTPException(404, "Пользователь не найден")
+    return _staff_page(request, [user], None, f"Карточка сотрудника: {user.get('name', '')}", "#users", "К сотрудникам")
+
+
+@router.get("/cards/school/{school_id}/staff", response_class=HTMLResponse,
+            dependencies=[Depends(require_superadmin_page)])
+def school_staff_cards(school_id: int, request: Request):
+    """Карточки всех сотрудников школы: сначала руководство, потом учителя."""
+    database = db.load_db()
+    school = next((s for s in database.get("schools", []) if s["id"] == school_id), None)
+    if not school:
+        raise HTTPException(404, "Школа не найдена")
+    users = [u for u in database.get("users", []) if str(school_id) in (u.get("posts") or {})]
+    users.sort(key=_leaders_first(school_id))
+    return _staff_page(request, users, school, f"Карточки сотрудников — {school['name']}",
+                       f"#schools/{school_id}", "К школе")

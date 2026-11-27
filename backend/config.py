@@ -160,7 +160,6 @@ WEBHOOK_PATH = f"/telegram/{WEBHOOK_SECRET}" if WEBHOOK_SECRET else ""
 CHECKIN_DB_FILE = DATA_DIR / "checkin.sqlite"
 # Согласованный снимок для бэкапа: его делает планировщик ночью и deploy/backup.sh
 CHECKIN_BACKUP_FILE = DATA_DIR / "checkin.backup.sqlite"
-CHECKIN_INVITE_DAYS = 7          # ссылка-приглашение преподавателя действует неделю
 # Все расчёты отметок — по часам школ. В Узбекистане нет перехода на летнее время.
 TZ_NAME = os.getenv("TZ_NAME", "").strip() or "Asia/Tashkent"
 
@@ -182,11 +181,15 @@ def webhook_url() -> str:
     return site_url(WEBHOOK_PATH)
 
 
-def checkin_invite_link(code: str) -> str:
-    """Ссылка-приглашение преподавателя в бот (тот же, что у учеников). Пусто — имя бота неизвестно."""
-    if not BOT_USERNAME:
+STAFF_START_PREFIX = "inv_"       # /start inv_<код> — сотрудник, /start <код> — ученик
+
+
+def staff_link(code: str) -> str:
+    """Ссылка сотрудника в бот (тот же, что у учеников) — по его постоянному коду, она же в QR
+    карточки сотрудника. Пусто — имя бота неизвестно."""
+    if not BOT_USERNAME or not code:
         return ""
-    return f"https://t.me/{BOT_USERNAME}?start=inv_{code}"
+    return f"https://t.me/{BOT_USERNAME}?start={STAFF_START_PREFIX}{code}"
 
 
 def deep_link(token: str) -> str:

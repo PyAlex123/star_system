@@ -197,17 +197,17 @@ def test_entry_bounds_label_and_day_before():
     assert eval_common("dayBefore('2027-01-01')", CHECKIN) == "2026-12-31"
 
 
-def test_invite_state():
-    now = "Date.parse('2026-11-24T10:00:00Z')"
-    cases = {
-        "{tg_id: 900}": "bound",
-        "{tg_id: 900, tg_blocked_at: '2026-11-20'}": "blocked",
-        "{}": "none",
-        "{invite_code: 'x', invite_created_at: '2026-11-20T10:00:00+00:00'}": "pending",
-        "{invite_code: 'x', invite_created_at: '2026-11-16T10:00:00+00:00'}": "expired",
-    }
+def test_tg_state_and_code_text():
+    """Код сотрудника постоянный — состояний «ждём по ссылке» и «ссылка истекла» больше нет."""
+    cases = {"{tg_id: 900}": "bound", "{tg_id: 900, tg_blocked_at: '2026-11-20'}": "blocked",
+             "{}": "none", "{bot_code: 'TCHR2345'}": "none"}
     for user, expected in cases.items():
-        assert eval_common(f"inviteState({user}, {now})", CHECKIN) == expected, user
+        assert eval_common(f"tgState({user})", CHECKIN) == expected, user
+    assert eval_common("codeText('TCHR2345')", CHECKIN) == "TCHR 2345"
+    assert eval_common("codeText(null)", CHECKIN) == ""
+    assert eval_common("staffLink('TCHR2345', 'faraday_system_bot')", CHECKIN) == \
+        "https://t.me/faraday_system_bot?start=inv_TCHR2345"
+    assert eval_common("staffLink('TCHR2345', null)", CHECKIN) == "", "бот не подключён — ссылки нет"
 
 
 # ── Раздел «Отметки» (static/js/checkin-page.js) ─────────────────────────────

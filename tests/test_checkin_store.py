@@ -1,5 +1,6 @@
 """Отметки преподавателей, этап 1: часы, хранилище SQLite, схема 9 основной базы."""
 import json
+import re
 import sqlite3
 from datetime import date, datetime, timezone
 
@@ -158,7 +159,7 @@ V8 = {
 def test_v8_gets_checkin_fields_everywhere():
     config.DB_FILE.write_text(json.dumps(V8, ensure_ascii=False), encoding="utf-8")
     data = db.load_db()
-    assert data["version"] == db.DB_VERSION == 11
+    assert data["version"] == db.DB_VERSION == 12
     school = data["schools"][0]
     assert school["theme"] == "quest", "тема не сбрасывается"
     assert school["lat"] is None and school["lon"] is None and school["radius_m"] == 150
@@ -201,11 +202,26 @@ def test_v9_migration_is_idempotent():
     assert config.DB_FILE.stat().st_mtime_ns == mtime
 
 
-def test_invite_code_is_admin_only():
-    user = dict(V8["users"][1], invite_code="INVITE123")
-    assert "invite_code" not in db.public_user(user)
+def test_bot_code_is_admin_only():
+    user = dict(V8["users"][1], bot_code="TCHR2345")
+    assert "bot_code" not in db.public_user(user)
     assert "password_shown" not in db.public_user(user)
-    assert db.public_user(user, with_password=True)["invite_code"] == "INVITE123"
+    assert db.public_user(user, with_password=True)["bot_code"] == "TCHR2345"
+
+
+def test_v12_staff_codes_replace_invites():
+    """11 -> 12: каждому сотруднику — постоянный код для бота, уникальный и среди кодов учеников;
+    одноразовые приглашения убраны, привязанный Telegram остался."""
+    old = json.loads(json.dumps(V8))
+    old["users"][1].update(invite_code="Abc-12_xyz", invite_created_at="2026-11-20T00:00:00+00:00", tg_id=900)
+    config.DB_FILE.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+    database = db.load_db()
+    codes = [u["bot_code"] for u in database["users"]]
+    assert all(re.fullmatch(r"[A-HJ-NP-Z2-9]{8}", c) for c in codes)
+    tokens = {s["token"] for s in database["students"]}
+    assert len(set(codes)) == len(codes) and not tokens & set(codes)
+    assert all("invite_code" not in u and "invite_created_at" not in u for u in database["users"])
+    assert database["users"][1]["tg_id"] == 900 and database["version"] == db.DB_VERSION == 12
 
 
 def test_new_school_and_staff_and_schedule_get_fields(teacher):
@@ -245,11 +261,12 @@ def test_ids_are_never_reused(teacher):
     assert other == school + 1
 
 
-def test_invite_code_never_reaches_non_admins(teacher, school_teacher):
-    """Код приглашения — ключ к привязке Telegram: учитель не видит его ни у себя, ни у других."""
+def test_bot_code_never_reaches_non_admins(teacher, school_teacher):
+    """Код для бота — ключ к привязке Telegram: учитель не видит чужие коды (свой — только
+    в «Моём кабинете», через /api/checkin/my)."""
     def _apply(database):
         for user in database["users"]:
-            user["invite_code"] = f"INV{user['id']}SECRET"
+            user["bot_code"] = f"INV{user['id']}SECRET"
             user["hourly_rate"] = 90000
     db.transaction(_apply)
     state = school_teacher.get("/api/state").json()
@@ -257,7 +274,7 @@ def test_invite_code_never_reaches_non_admins(teacher, school_teacher):
     assert "SECRET" not in text
     assert "users" not in state
     assert all(set(s) <= {"id", "name", "role", "avatar", "posts"} for s in state["staff"]), \
-        "о коллегах — только имя, роль, должности и фото: без ставки, Telegram и кода приглашения"
+        "о коллегах — только имя, роль, должности и фото: без ставки, Telegram и кода для бота"
     assert "hourly_rate" not in state["me"], "свою ставку сотрудник не видит — деньги только у администратора"
     admin_state = teacher.get("/api/state").json()
-    assert any(u.get("invite_code") for u in admin_state["users"]), "администратору — видно"
+    assert any(u.get("bot_code") for u in admin_state["users"]), "администратору — видно"

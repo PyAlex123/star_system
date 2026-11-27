@@ -12,7 +12,7 @@ SA_LOGIN, SA_PASSWORD = "director", "direktor-2026"
 # Не панель: вход, кабинет ученика, вебхук бота. Смена своего пароля и выход — всем ролям.
 ALLOWED_FOR_ALL = {"/api/auth/teacher", "/api/auth/teacher/password", "/api/auth/teacher/logout",
                    "/api/auth/teacher/photo",   # своё фото в профиле — всем ролям
-                   "/api/checkin/my/invite"}    # свой Telegram для отметок — всем ролям
+                   "/api/checkin/my/qr.png"}    # свой QR в бот для отметок — всем ролям
 # /api/m/… — страница опроса ученика: без входа, по ссылке школы.
 NOT_PANEL = re.compile(r"^/api/(me|m|telegram|auth/(twa|dev|student))(/|$)")
 

@@ -108,6 +108,8 @@ function renderSchoolCard(school) {
           <div class="sc-acts">
             <button class="btn btn-ghost btn-sm" onclick="openSchoolStaff()">${icon("users", "ic ic-sm")}Добавить из сотрудников</button>
             <button class="btn btn-sm" onclick="openUser(null, { school: ${school.id}, post: 'teacher' })">${icon("plus", "ic ic-sm")}Новый сотрудник</button>
+            <a class="btn btn-ghost btn-sm" href="${BASE}/cards/school/${school.id}/staff" target="_blank" rel="noopener"
+               title="Код для бота, QR и вход в панель — как у учеников">${icon("printer", "ic ic-sm")}Карточки сотрудников</a>
           </div>
         </div>
         <h3 class="sc-group">Руководство <span>директор и завучи: оформление, призы школы, карточки, расписание</span></h3>

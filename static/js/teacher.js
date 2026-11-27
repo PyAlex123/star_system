@@ -2343,12 +2343,15 @@ async function saveUser() {
 
 function showCredentials(user, password) {
   showInfo("Данные для входа", `
-    <p>Передайте сотруднику. Пароль виден в списке «Сотрудники», пока сотрудник не сменит его сам.</p>
+    <p>Передайте сотруднику. Пароль виден в списке «Сотрудники», пока сотрудник не сменит его сам.
+      На карточке сотрудника — то же и QR в Telegram-бот, как у учеников.</p>
     <div class="cred-box">
       <span>сайт</span><b>${escapeHtml(location.host + BASE)}/login</b>
       <span>логин</span><b>${escapeHtml(user.login)}</b>
       <span>пароль</span><b>${escapeHtml(password)}</b>
-    </div>`);
+      ${user.bot_code ? `<span>код для бота</span><b>${escapeHtml(codeText(user.bot_code))}</b>` : ""}
+    </div>
+    <a class="btn btn-sm" href="${BASE}/cards/staff/${user.id}" target="_blank" rel="noopener">${icon("printer", "ic ic-sm")}Карточка сотрудника</a>`);
 }
 
 function resetUserPassword(id) {

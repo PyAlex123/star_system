@@ -90,7 +90,7 @@ const CK_WHAT = {
   "lesson:reopen": "вернул урок", "lesson:hours": "изменил часы урока", "lesson:create": "добавил разовый урок",
   "exception:create": "добавил в календарь", "exception:delete": "убрал из календаря",
   "settings:update": "изменил настройки", "settings:report_chat": "подключил группу «Отметки»",
-  "school:location": "задал место школы", "user:update": "изменил сотрудника", "user:invite": "выдал приглашение",
+  "school:location": "задал место школы", "user:update": "изменил сотрудника", "user:invite": "выдал приглашение", "user:new_code": "выдал новый код",
   "user:unbind_telegram": "отвязал Telegram", "user:telegram_bound": "привязал Telegram",
 };
 
@@ -225,8 +225,7 @@ function readinessHtml() {
       ${mine ? `<button class="btn btn-ghost btn-sm" onclick="openCheckinSchoolLocation(${school.id})">${icon("pin", "ic ic-sm")}Место на карте</button>` : ""}</li>`);
   }
   for (const user of ready.tracked_without_telegram) {
-    const why = { pending: "ссылка выдана, ждём", expired: "ссылка истекла", none: "ссылки нет" }[user.invite] || "";
-    items.push(`<li><span>${escapeHtml(user.name)} отмечается, но Telegram не привязан${why ? ` (${why})` : ""}.</span>
+    items.push(`<li><span>${escapeHtml(user.name)} отмечается, но Telegram не привязан — выдайте карточку сотрудника с QR.</span>
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" onclick="switchPage('users'); openUser(${user.id})">Сотрудник</button>` : ""}</li>`);
   }
   for (const user of ready.tracked_without_lessons || []) {
@@ -724,8 +723,8 @@ async function renderCheckinSettings() {
         <h2 class="eyebrow">Telegram</h2>
         <p class="ck-note">${botLine}</p>
         <p class="ck-note">${chatLine}</p>
-        <p class="ck-note muted">Преподаватель подключается по ссылке-приглашению из раздела «Сотрудники»: выбирает язык,
-          соглашается на отметки — и в меню бота появляется кнопка «Я на месте».</p>
+        <p class="ck-note muted">Преподаватель подключается кодом с карточки сотрудника («Сотрудники» → сотрудник → «Карточка»):
+          сканирует QR или присылает боту код, выбирает язык, соглашается на отметки — и в меню бота появляется кнопка «Я на месте».</p>
       </section>
     </div>`;
 }

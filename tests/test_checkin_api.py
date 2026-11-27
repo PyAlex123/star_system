@@ -2,7 +2,7 @@
 срок действия занятий."""
 import io
 import re
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -60,7 +60,8 @@ def test_only_superadmin_sees_the_section(teacher):
 def test_staff_checkin_fields_are_superadmin_only(teacher):
     plain = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
     assert plain.patch("/api/users/2", json={"hourly_rate": 1}).status_code == 403
-    assert plain.post("/api/users/2/invite").status_code == 403
+    assert plain.post("/api/users/2/code").status_code == 403
+    assert plain.get("/api/users/2/qr.png").status_code == 403
     assert plain.delete("/api/users/2/telegram").status_code == 403
 
 
@@ -79,34 +80,67 @@ def test_rate_and_tracking_with_history(teacher):
     assert len(rows) == 2, "переименование без полей отметок в историю отметок не пишется"
 
 
-def test_invite_link_and_unbind(teacher):
-    r = teacher.post("/api/users/2/invite")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["link"].startswith("https://t.me/test_stars_bot?start=inv_") and data["days"] == 7
-    code = data["link"].split("inv_", 1)[1]
-    assert re.fullmatch(r"[A-Za-z0-9_-]{8,40}", code), "Telegram пропускает только такие символы"
-    saved = db.find_user(load_db(), 2)
-    assert saved["invite_code"] == code and saved["checkin_tracked"] is True
+def test_staff_code_new_code_and_unbind(teacher):
+    """Код сотрудника — как карточка ученика: постоянный, «Новый код» отвязывает Telegram,
+    «Отвязать» код не меняет."""
+    code = db.find_user(load_db(), 2)["bot_code"]
+    assert re.fullmatch(r"[A-HJ-NP-Z2-9]{8}", code), "8 символов без O/0 и I/1"
     assert code not in str(panel_client(TEACHER_LOGIN, TEACHER_PASSWORD).get("/api/state").json())
-    assert teacher.get("/api/checkin/teachers").json()["teachers"][-1]["invite"] in ("pending",)
     assert code not in str(teacher.get("/api/checkin/teachers").json()), "в разделе отметок кода нет"
+    row = next(t for t in teacher.get("/api/checkin/teachers").json()["teachers"] if t["id"] == 2)
+    assert row["tg"] == "none"
 
     def _bind(database):
         db.find_user(database, 2).update(tg_id=900, tg_username="uchitel", consent_at="2026-11-20T04:00:00+00:00")
     db.transaction(_bind)
     row = next(t for t in teacher.get("/api/checkin/teachers").json()["teachers"] if t["id"] == 2)
-    assert row["tg_bound"] and row["consent"] and row["invite"] == "bound"
+    assert row["tg_bound"] and row["consent"] and row["tg"] == "bound"
+
     assert teacher.delete("/api/users/2/telegram").status_code == 200
     saved = db.find_user(load_db(), 2)
-    assert saved["tg_id"] is None and saved["consent_at"] is None and saved["invite_code"] is None
+    assert saved["tg_id"] is None and saved["consent_at"] is None and saved["bot_code"] == code, "код прежний"
+
+    db.transaction(_bind)
+    r = teacher.post("/api/users/2/code")
+    assert r.status_code == 200
+    data = r.json()
+    new = data["code"]
+    assert new != code and data["link"] == f"https://t.me/test_stars_bot?start=inv_{new}"
+    saved = db.find_user(load_db(), 2)
+    assert saved["bot_code"] == new and saved["tg_id"] is None and saved["consent_at"] is None
+    assert service.bind_code(code, 901, None)[0] == "not_found", "старая карточка не работает"
+    with store.tx() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'new_code'").fetchone()[0] == 1
 
 
-def test_expired_invite_is_shown(teacher):
-    teacher.post("/api/users/2/invite")
-    clock.freeze(clock.now_utc() + timedelta(days=8))
-    row = next(t for t in teacher.get("/api/checkin/teachers").json()["teachers"] if t["id"] == 2)
-    assert row["invite"] == "expired"
+def test_staff_qr_and_cards(teacher):
+    r = teacher.get("/api/users/2/qr.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert teacher.get("/api/users/999/qr.png").status_code == 404
+    user = db.find_user(load_db(), 2)
+    page = teacher.get("/cards/staff/2")
+    assert page.status_code == 200
+    html = page.text
+    assert f"{user['bot_code'][:4]}" in html and user["login"] in html and "КАРТОЧКА СОТРУДНИКА" in html
+    school_page = teacher.get("/cards/school/1/staff")
+    assert school_page.status_code == 200 and user["login"] in school_page.text
+    assert teacher.get("/cards/school/999/staff").status_code == 404
+    plain = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
+    assert plain.get("/cards/staff/2").status_code == 404, "учителю — нет: там коды и пароли"
+    assert plain.get("/cards/school/1/staff").status_code == 404
+
+
+def test_staff_card_password_only_until_changed(teacher):
+    def _apply(database):
+        db.find_user(database, 2)["password_shown"] = "uchitel-2026"
+    db.transaction(_apply)
+    assert "uchitel-2026" in teacher.get("/cards/staff/2").text
+
+    def _changed(database):
+        db.find_user(database, 2)["password_shown"] = None
+    db.transaction(_changed)
+    html = teacher.get("/cards/staff/2").text
+    assert "uchitel-2026" not in html and "свой пароль" in html
 
 
 # ── Школа на карте ───────────────────────────────────────────────────────────

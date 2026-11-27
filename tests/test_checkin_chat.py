@@ -335,16 +335,14 @@ def test_drain_without_bot_does_nothing():
 
 # ── Администратор привязывает Telegram для группы ────────────────────────────
 
-def test_admin_invite_does_not_make_them_tracked(teacher):
-    r = teacher.post("/api/users/1/invite")
-    assert r.status_code == 200
-    saved = db.find_user(load_db(), 1)
-    assert saved["checkin_tracked"] is False, "занятия администратора в проверку не попадают"
-    code = r.json()["link"].split("inv_", 1)[1]
+def test_admin_binds_by_code_and_is_not_tracked(teacher):
+    """Администратору Telegram нужен для кнопок в группе, а не для отметок."""
+    code = db.find_user(load_db(), 1)["bot_code"]
     chat = TeacherChat(tg_id=ADMIN_TG)
     reply = chat.text(f"/start inv_{code}", at("07:00"))
     assert len(reply) == 1 and "/setchat" in reply[0] and "администратор отметок" in reply[0]
-    assert db.find_user(load_db(), 1)["tg_id"] == ADMIN_TG
+    saved = db.find_user(load_db(), 1)
+    assert saved["tg_id"] == ADMIN_TG and saved["checkin_tracked"] is False
 
 
 def test_reason_only_from_who_pressed():

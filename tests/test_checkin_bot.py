@@ -23,6 +23,7 @@ from conftest import load_db
 
 MON = date(2026, 11, 23)
 TG = 900
+CODE = "TCHR2345"          # код с карточки сотрудника
 LAT, LON = 41.311, 69.279
 METRE = 1 / 111_195
 
@@ -138,8 +139,7 @@ def prepare(bound=True, consent=True, lang="ru", tracked=True, coords=True):
         teacher.update(checkin_tracked=tracked, lang=lang,
                        tg_id=TG if bound else None,
                        consent_at="2026-11-01T00:00:00+00:00" if consent else None,
-                       invite_code=None if bound else "INVITE_code1",
-                       invite_created_at=None if bound else clock.iso(clock.now_utc()))
+                       bot_code=CODE)
         database["schools"][0].update(lat=LAT if coords else None, lon=LON if coords else None, radius_m=150)
         database["schedule"] = [
             {"id": 1, "class_id": 1, "weekday": 1, "start": "09:00", "end": "09:45", "room": "12", "user_id": 2,
@@ -157,10 +157,11 @@ def lesson_status():
 
 # ── Привязка ─────────────────────────────────────────────────────────────────
 
-def test_invite_language_consent_menu():
+def test_code_language_consent_menu():
+    """QR карточки сотрудника: /start inv_<код> → привязан → язык → согласие → меню."""
     prepare(bound=False, consent=False)
     chat = TeacherChat()
-    replies = chat.text("/start inv_INVITE_code1")
+    replies = chat.text(f"/start inv_{CODE}")
     assert "Telegram привязан" in replies[0] and "Учитель" in replies[0]
     assert "Выберите язык" in replies[1]
     assert db.find_user(load_db(), 2)["tg_id"] == TG
@@ -178,14 +179,48 @@ def test_invite_language_consent_menu():
     assert db.find_user(load_db(), 2)["consent_at"]
 
 
-def test_bad_invite_and_stranger():
+def test_bad_code_and_stranger():
     prepare(bound=False, consent=False)
-    replies = TeacherChat().text("/start inv_nonexistent")
-    assert "Ссылка не подошла" in replies[0] and "Havola ishlamadi" in replies[0]
+    replies = TeacherChat().text("/start inv_NOPE2345")
+    assert "Такого кода нет" in replies[0] and "Bunday kod" in replies[0]
     stranger = TeacherChat(tg_id=777)
-    assert "ссылку-приглашение" in stranger.text("/start")[0]
-    assert "ссылку-приглашение" in stranger.location(at("08:50"))[0], "чужой не отмечается"
+    assert "карточки сотрудника" in stranger.text("/start")[0]
+    assert "карточки сотрудника" in stranger.location(at("08:50"))[0], "чужой не отмечается"
     assert lesson_status() == ("planned", None, "")
+
+
+@pytest.mark.parametrize("message", [f"/start {CODE}", CODE.lower()[:4] + " " + CODE.lower()[4:],
+                                     CODE[:4] + "-" + CODE[4:]])
+def test_code_without_qr(message):
+    """Камера не читает QR: код с карточки — командой или текстом, с пробелом, дефисом, строчными."""
+    prepare(bound=False, consent=False)
+    replies = TeacherChat().text(message)
+    assert "Telegram привязан" in replies[0], replies
+    assert db.find_user(load_db(), 2)["tg_id"] == TG
+
+
+def test_code_is_permanent_and_taken_by_first():
+    """Как карточка ученика: код не гаснет после привязки, но второй аккаунт его не заберёт."""
+    prepare(bound=False, consent=False)
+    TeacherChat().text(f"/start inv_{CODE}")
+    assert db.find_user(load_db(), 2)["bot_code"] == CODE, "код остался"
+    again = TeacherChat().text(f"/start inv_{CODE}")
+    assert "Перед началом" in again[0], "свой код ещё раз — просто дальше по шагам"
+    stolen = TeacherChat(tg_id=778).text(f"/start inv_{CODE}")
+    assert "уже привязан к другому Telegram" in stolen[0]
+    assert db.find_user(load_db(), 2)["tg_id"] == TG
+
+
+def test_one_telegram_one_employee():
+    prepare(bound=True)
+
+    def _apply(database):
+        other = db.find_user(database, 1)
+        other.update(bot_code="ADMN2345", tg_id=None)
+    db.transaction(_apply)
+    replies = TeacherChat().text("/start inv_ADMN2345")
+    assert "уже привязан к другому сотруднику" in replies[0]
+    assert db.find_user(load_db(), 1)["tg_id"] is None
 
 
 # ── Один бот: ученик и преподаватель ─────────────────────────────────────────
@@ -377,5 +412,5 @@ def test_names_are_escaped_for_html():
     def _rename(database):
         db.find_user(database, 2)["name"] = "<b>Учитель</b>"
     db.transaction(_rename)
-    reply = TeacherChat().text("/start inv_INVITE_code1")[0]
+    reply = TeacherChat().text(f"/start inv_{CODE}")[0]
     assert "&lt;b&gt;" in reply

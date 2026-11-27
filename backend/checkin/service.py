@@ -650,15 +650,12 @@ def audit_page(before_id: Optional[int] = None, limit: int = 50) -> List[Dict[st
         return _audit_rows(store.rows(rows))
 
 
-def _invite_state(user: Dict[str, Any], now: datetime) -> str:
+def tg_state(user: Dict[str, Any]) -> str:
+    """Telegram сотрудника: bound — привязан, blocked — остановил бота, none — не привязан
+    (код для бота у него на карточке сотрудника)."""
     if user.get("tg_id"):
-        return "bound"
-    if not user.get("invite_code"):
-        return "none"
-    created = clock.parse(user.get("invite_created_at"))
-    if created is None or now - created > timedelta(days=config.CHECKIN_INVITE_DAYS):
-        return "expired"
-    return "pending"
+        return "blocked" if user.get("tg_blocked_at") else "bound"
+    return "none"
 
 
 def teachers(database: Optional[Dict[str, Any]] = None, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -675,7 +672,7 @@ def teachers(database: Optional[Dict[str, Any]] = None, now: Optional[datetime] 
             "hourly_rate": user.get("hourly_rate"), "lang": user.get("lang") or "ru",
             "tg_bound": bool(user.get("tg_id")), "tg_username": user.get("tg_username"),
             "tg_blocked": bool(user.get("tg_blocked_at")), "consent": bool(user.get("consent_at")),
-            "invite": _invite_state(user, now),
+            "tg": tg_state(user),
         })
     return sorted(rows, key=lambda r: (r["name"] or "").lower())
 
@@ -701,7 +698,7 @@ def readiness(database: Dict[str, Any], now: datetime) -> Dict[str, Any]:
     staff = [users[i] for i in tracked if i in users]
     return {
         "schools_without_coords": [{"id": s["id"], "name": s.get("name", "")} for s in schools],
-        "tracked_without_telegram": [{"id": u["id"], "name": u.get("name", ""), "invite": _invite_state(u, now)}
+        "tracked_without_telegram": [{"id": u["id"], "name": u.get("name", "")}
                                      for u in staff if not u.get("tg_id")],
         "blocked_bot": [{"id": u["id"], "name": u.get("name", "")} for u in staff if u.get("tg_blocked_at")],
         "tracked_without_lessons": [{"id": u["id"], "name": u.get("name", "")} for u in staff
@@ -832,40 +829,49 @@ def _actor(user: Dict[str, Any]) -> Dict[str, Any]:
     return {"id": user["id"], "name": user.get("name", "")}
 
 
-def bind_invite(code: str, tg_id: int, username: Optional[str],
-                now: Optional[datetime] = None) -> tuple:
-    """Привязка Telegram по ссылке-приглашению. Код одноразовый и живёт неделю.
+def user_by_code(code: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Сотрудник по коду для бота (с карточки, из QR или набранный руками)."""
+    return db.find_by_staff_code(db.load_db(), code)
 
-    Итог (статус, сотрудник): ok | already_me | not_found | expired | other_user.
+
+def bind_code(code: str, tg_id: int, username: Optional[str],
+              now: Optional[datetime] = None) -> tuple:
+    """Привязка Telegram по коду сотрудника — как карточка ученика: код постоянный,
+    срока у него нет, привязывается к первому аккаунту.
+
+    Итог (статус, сотрудник): ok | already_me | taken (код у другого Telegram) |
+    other_user (этот Telegram уже у другого сотрудника) | not_found.
     """
     now = now or clock.now_utc()
     result: Dict[str, Any] = {}
 
     def _apply(database: Dict[str, Any]):
-        users = database.get("users", [])
-        mine = next((u for u in users if u.get("tg_id") == tg_id), None)
-        user = next((u for u in users if code and u.get("invite_code") == code), None)
+        user = db.find_by_staff_code(database, code)
         if not user:
-            # Повторный переход по уже сработавшей ссылке — просто пускаем своего
-            result.update(status="already_me" if mine else "not_found", user=mine)
+            result.update(status="not_found", user=None)
             return db.NO_SAVE
-        created = clock.parse(user.get("invite_created_at"))
-        if created is None or now - created > timedelta(days=config.CHECKIN_INVITE_DAYS):
-            result.update(status="expired", user=None)
+        if user.get("tg_id") == tg_id:
+            result.update(status="already_me", user=dict(user))
+            if username and user.get("tg_username") != username:
+                user["tg_username"] = username
+                return None
             return db.NO_SAVE
-        if mine and mine["id"] != user["id"]:
+        if user.get("tg_id"):
+            result.update(status="taken", user=None)
+            return db.NO_SAVE
+        mine = next((u for u in database.get("users", []) if u.get("tg_id") == tg_id), None)
+        if mine:
             result.update(status="other_user", user=None)
             return db.NO_SAVE
         result["before"] = dict(user)
-        user.update(tg_id=tg_id, tg_username=username, tg_bound_at=clock.iso(now), tg_blocked_at=None,
-                    invite_code=None, invite_created_at=None)
+        user.update(tg_id=tg_id, tg_username=username, tg_bound_at=clock.iso(now), tg_blocked_at=None)
         result.update(status="ok", user=dict(user))
         return None
 
     db.transaction(_apply)
     status, user = result["status"], result.get("user")
     with store.tx() as conn:
-        store.log_event(conn, f"invite_{status}", (user or {}).get("id"), tg_id)
+        store.log_event(conn, f"code_{status}", (user or {}).get("id"), tg_id)
     if status == "ok":
         audit_staff(_actor(user), user["id"], "telegram_bound", result["before"], user)
     return status, user

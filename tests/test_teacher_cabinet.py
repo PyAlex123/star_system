@@ -57,19 +57,16 @@ def test_school_admin_opens_own_cabinet(teacher):
     assert data["tracked"] is False and data["lessons"] == []
 
 
-def test_self_invite_only_when_tracked_and_not_bound(teacher):
+def test_own_code_link_and_qr(teacher):
+    """«Мой кабинет»: свой код для бота, ссылка и QR — как на карточке сотрудника."""
     prepare(bound=False)
     me = panel_client(TEACHER_LOGIN, TEACHER_PASSWORD)
-    r = me.post("/api/checkin/my/invite")
-    assert r.status_code == 200, r.text
-    assert r.json()["link"].startswith("https://t.me/test_stars_bot?start=inv_")
-    code = db.find_user(load_db(), 2)["invite_code"]
-    assert r.json()["link"].endswith(code)
-    # Ссылка работает в боте
+    data = _mine(me)
+    code = db.find_user(load_db(), 2)["bot_code"]
+    assert data["code"] == code and data["link"] == f"https://t.me/test_stars_bot?start=inv_{code}"
+    r = me.get("/api/checkin/my/qr.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     replies = TeacherChat().text(f"/start inv_{code}", at=clock.now_utc())
     assert "Telegram привязан" in replies[0]
-    assert me.post("/api/checkin/my/invite").json()["detail"] == "Telegram уже привязан"
+    assert _mine(me)["telegram"]["bound"] is True
 
-    teacher.patch("/api/users/2", json={"checkin_tracked": False})
-    r = me.post("/api/checkin/my/invite")
-    assert r.status_code == 400 and "не включены" in r.json()["detail"]
