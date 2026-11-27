@@ -2,6 +2,8 @@
 
 Карта кода и решения — в `ARCHITECTURE.md`. Запуск и развёртывание — в `README.md`.
 ТЗ «Мониторинга» (опросы на уроке) — `MDs/07-monitoring.md`; данные — `data/monitoring.sqlite3`.
+ТЗ «Рабочего стола учителя» (главная, посещаемость, задачи и просьбы, план занятий, чаты) — `MDs/08-teacher-desk.md`;
+работа по нему идёт в ветке `teacher-desk`, по этапам.
 
 ## Дизайн
 Источник: `docs/design/HANDOFF-Zvezdy.md`. Темы: notebook · quest · sky · clear · sticker (все в проде),
