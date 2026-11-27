@@ -1007,3 +1007,23 @@ button.hrow:hover { background: var(--surface-2); }
 .poll-go { flex: none; height: 44px; padding: 0 16px; }
 /* Карточка не закрывает конец списка */
 body.has-poll #content { padding-bottom: calc(64px + env(safe-area-inset-bottom) + 86px); }
+
+/* ── Мои покупки (школа включила «Ученики покупают сами») ── */
+.orders-block { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.orders-card { overflow: hidden; }
+.ord-row { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 14px; }
+.ord-row + .ord-row { border-top: 1px solid var(--line-soft); }
+.ord-img { width: 48px; height: 48px; border-radius: var(--r10); object-fit: cover; flex: none; }
+.ord-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ord-mid b { font: var(--dw) 15px/20px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ord-state { display: inline-flex; align-items: flex-start; gap: 5px; font-size: 13px; line-height: 17px; font-weight: 600; }
+.ord-state .ic { margin-top: 2px; flex: none; }
+.ord-state.wait { color: var(--star-text); }
+.ord-state.ok { color: var(--success); }
+.ord-state.off { color: var(--muted); font-weight: 500; }
+.ord-cost { font: var(--nw) 16px/1 var(--font-num); white-space: nowrap; color: var(--muted); }
+.ord-row.waiting .ord-cost { color: var(--text); }
+.ord-row.cancelled .ord-mid b { color: var(--muted); }
+/* «Да, списать N ★» — второе нажатие подтверждает покупку */
+.cel-btn.sure { background: var(--ok-bg); border-color: var(--ok-bg); color: var(--ok-fg); }
+.cel-btn .ic { margin-right: 6px; }

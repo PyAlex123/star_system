@@ -1,5 +1,6 @@
 """Кабинет ученика. Отдаёт только его собственные данные, топ-5 класса, параллели
 и школы, расписание класса и его активность."""
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -10,6 +11,8 @@ from ..security import require_student
 router = APIRouter(prefix="/api/me", tags=["student"])
 
 TOP_SIZE = 5
+ORDERS_DAYS = 14          # закрытые покупки ученик видит в «Мои покупки» две недели
+REPEAT_SECONDS = 10       # тот же приз ещё раз за 10 секунд — это двойное нажатие, а не вторая покупка
 
 
 def avatar_url(student: Dict[str, Any]) -> str:
@@ -111,12 +114,16 @@ def get_me(request: Request, student: Dict[str, Any] = Depends(require_student))
 
     # Выданные призы: запись истории знает номер приза — ребёнку показываем его фото и название
     all_prizes = {p["id"]: p for p in database["prizes"]}
+    orders = my_orders(database, fresh["id"])
+    status_of = {o["id"]: o["status"] for o in database.get("orders", []) if o.get("student_id") == fresh["id"]}
     history = []
     for entry in fresh.get("history", []):
         item = dict(entry)
         prize = all_prizes.get(entry.get("prize_id"))
         if prize:
             item["prize"] = {"id": prize["id"], "name": prize["name"], "image": prize.get("image") or ""}
+        if entry.get("order_id") in status_of:
+            item["order"] = {"id": entry["order_id"], "status": status_of[entry["order_id"]]}
         history.append(item)
 
     return {
@@ -140,7 +147,71 @@ def get_me(request: Request, student: Dict[str, Any] = Depends(require_student))
         "next_prize": next_prize,
         "history": history,
         "avatar_presets": db.AVATAR_PRESETS,
+        "self_buy": db.self_buy_on(db.school_of_student(database, fresh)),
+        "orders": orders,
     }
+
+
+def my_orders(database: Dict[str, Any], student_id: int) -> List[Dict[str, Any]]:
+    """Мои покупки: что ждёт выдачи — всё, выданное и отменённое — за последние две недели."""
+    since = (datetime.now() - timedelta(days=ORDERS_DAYS)).isoformat(timespec="seconds")
+    result = []
+    for order in database.get("orders", []):
+        if order.get("student_id") != student_id:
+            continue
+        if order.get("status") != db.ORDER_WAITING and (order.get("closed_at") or "") < since:
+            continue
+        result.append({k: order.get(k) for k in ("id", "prize_id", "prize_name", "prize_image", "cost", "status",
+                                                  "created_at", "closed_at", "cancel_reason")})
+    return result
+
+
+@router.post("/orders")
+def buy_prize(payload: schemas.OrderCreate, request: Request,
+              student: Dict[str, Any] = Depends(require_student)):
+    """Ученик покупает приз сам: звёзды списываются сразу, приз ждёт выдачи у учителя."""
+    _forbid_preview(request, "Это предпросмотр кабинета — купить приз за ученика нельзя.")
+
+    def _apply(database: Dict[str, Any]):
+        fresh = db.find_student(database, student["id"])
+        if not fresh:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Ученик не найден")
+        school = db.school_of_student(database, fresh)
+        if not db.self_buy_on(school):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "В твоей школе призы выдаёт учитель — подойди к нему")
+        prize = next((p for p in database["prizes"] if p["id"] == payload.prize_id), None)
+        if not prize or prize.get("active") is False or not db.prize_for_school(prize, {school["id"]}):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Такого приза нет на витрине")
+        cost = max(1, int(prize["cost"]))
+
+        # Двойное нажатие: та же покупка только что — отдаём её, второй раз не списываем
+        recent = (datetime.now() - timedelta(seconds=REPEAT_SECONDS)).isoformat(timespec="seconds")
+        for order in database.get("orders", []):
+            if (order.get("student_id") == fresh["id"] and order.get("prize_id") == prize["id"]
+                    and order.get("status") == db.ORDER_WAITING and (order.get("created_at") or "") >= recent):
+                return {"order": dict(order), "total_stars": fresh["total_stars"], "repeat": True}
+
+        if fresh["total_stars"] < cost:
+            need = cost - fresh["total_stars"]
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f"Не хватает {need} ★ — накопи ещё немного")
+        order = {
+            "id": db.next_counted_id(database, "orders"),
+            "student_id": fresh["id"], "prize_id": prize["id"],
+            "prize_name": prize["name"], "prize_image": prize.get("image") or "", "cost": cost,
+            "status": db.ORDER_WAITING, "created_at": db.now_iso(),
+            "closed_at": None, "closed_by": None, "closed_by_name": None, "cancel_reason": "",
+        }
+        database.setdefault("orders", []).insert(0, order)
+        fresh["total_stars"] -= cost
+        fresh.setdefault("history", []).insert(0, {
+            "date": db.today(), "delta": -cost, "reason": f"Приз: {prize['name']}",
+            "prize_id": prize["id"], "order_id": order["id"],
+        })
+        return {"order": dict(order), "total_stars": fresh["total_stars"], "repeat": False}
+
+    result = db.transaction(_apply)
+    return {"ok": True, **result}
 
 
 def _mark_seen(request: Request, student_id: int) -> None:

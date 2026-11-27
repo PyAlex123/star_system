@@ -380,5 +380,15 @@ class PollJoin(BaseModel):
     code: Optional[Annotated[str, Field(max_length=8)]] = None
 
 
+class OrderCreate(BaseModel):
+    """Ученик покупает приз в кабинете."""
+    prize_id: int
+
+
+class OrderCancel(BaseModel):
+    """Учитель отменяет покупку — звёзды вернутся ученику. Причину ученик увидит."""
+    reason: Optional[Annotated[str, Field(max_length=200)]] = None
+
+
 class MonitorToken(BaseModel):
     token: Annotated[str, Field(max_length=64)]

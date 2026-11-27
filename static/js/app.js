@@ -12,6 +12,7 @@ let filter = "all";
 let view = "prizes";
 let affordableBefore = null;   // какие призы были доступны при прошлом обновлении
 let balanceBefore = null;
+let ordersBefore = null;        // статусы моих покупок до обновления: выдали или отменили — уведомление
 let isPreview = false;         // кабинет открыт учителем «глазами ученика»
 let refreshTimer = null;
 let draftAvatar = null;        // выбор в шторке — применяется по «Готово»
@@ -374,7 +375,7 @@ function cardHtml(p, index) {
     ? `<span class="pin ${isGoal ? "on" : ""}" role="button" tabindex="0" onclick="togglePin(${p.id}, event)"
          aria-label="${isGoal ? "Цель выбрана — нажми, чтобы снять" : "Сделать целью"}" title="${isGoal ? "Цель выбрана" : "Сделать целью"}">${icon("pin", "ic ic-sm")}</span>` : "";
   const status = p.affordable
-    ? `<span class="can-take">${icon("check", "ic ic-sm")}<span>Можно забрать — подойди к учителю</span></span>`
+    ? `<span class="can-take">${icon("check", "ic ic-sm")}<span>${data.self_buy ? "Можно купить" : "Можно забрать — подойди к учителю"}</span></span>`
     : `<span class="not-yet">
         ${theme === "sky" ? `<span class="mini-constel">${constellation(p.cost, bal / p.cost, { small: true, h: 34 })}</span>`
                           : `<span class="pbar"><i style="width:${pct}%"></i></span>`}
@@ -412,7 +413,7 @@ function listRowHtml(p) {
       <span class="prow-mid">
         <span class="prow-name">${escapeHtml(p.name)}</span>
         ${p.from_school ? `<span class="pfrom">${icon("school", "ic ic-xs")}от администрации школы</span>` : ""}
-        ${p.affordable ? `<span class="ok-chip">${icon("check", "ic ic-xs")}Можно забрать</span>`
+        ${p.affordable ? `<span class="ok-chip">${icon("check", "ic ic-xs")}${data.self_buy ? "Можно купить" : "Можно забрать"}</span>`
           : `<span class="prow-bar"><span class="pbar"><i style="width:${pct}%"></i></span><span class="still">ещё ${p.left}&nbsp;★</span></span>`}
       </span>
       <span class="price-plain">${starIc("ic ic-sm")}<b>${fmt(p.cost)}</b></span>
@@ -554,6 +555,10 @@ function renderRating() {
 
 function entryTitle(item) {
   if (/^Урок \(/.test(item.reason || "")) return { title: "Урок", sub: `Звёзды за урок в ${data.student.class_name}` };
+  if (item.order) {
+    const name = item.prize?.name || String(item.reason || "").replace(/^Приз: /, "");
+    return { title: `Приз: ${name}`, sub: item.order.status === "issued" ? "Куплено · выдан" : "Куплено · ждёт выдачи" };
+  }
   if (item.prize) return { title: `Приз: ${item.prize.name}`, sub: "Выдал учитель" };
   if (item.delta > 0) return { title: item.reason || "Начисление", sub: "Начислил учитель" };
   return { title: item.reason || "Списание", sub: "Списал учитель" };
@@ -682,7 +687,8 @@ function renderHistory() {
       <div class="hcard">${g.items.map(({ item, i }) => {
         const { title, sub } = entryTitle(item);
         const plusItem = item.delta > 0;
-        const clickable = !plusItem && item.prize;
+        // «Приз выдан» — только у выданного; купленное и ждущее выдачи — без штампа
+        const clickable = !plusItem && item.prize && (!item.order || item.order.status === "issued");
         return `<${clickable ? "button" : "div"} class="hrow" ${clickable ? `onclick="openIssued(${i}, ${after[i]})"` : ""}>
           ${plusItem ? `<span class="stamp sm"><span>${icon("star")}</span></span>` : `<span class="minus-ring">${icon("gift")}</span>`}
           <span class="htext"><span class="ht">${escapeHtml(title)}</span><span class="hs">${escapeHtml(sub)}</span></span>
@@ -859,7 +865,10 @@ function openCelebrate(prizeId) {
   const pic = img(p.image);
   const theme = T();
   const later = `<button class="later" onclick="closeSheets()">Позже</button>`;
-  const show = `<button class="btn btn-lg btn-block cel-btn" onclick="closeSheets()">Покажу учителю</button>`;
+  const buy = data.self_buy;
+  const show = buy
+    ? `<button class="btn btn-lg btn-block cel-btn" onclick="buyPrize(${p.id}, this)">${icon("gift", "ic")}Купить за ${fmt(p.cost)}&nbsp;★</button>`
+    : `<button class="btn btn-lg btn-block cel-btn" onclick="closeSheets()">Покажу учителю</button>`;
   let html;
 
   if (theme === "quest") {
@@ -900,19 +909,21 @@ function openCelebrate(prizeId) {
         <div class="cel-c-photo">${pic}<svg class="flash" viewBox="0 0 24 24" aria-hidden="true"><polygon points="${STAR_POINTS}"/></svg></div>
         <div class="ok-line">${icon("check-circle", "ic ic-sm")}Хватает на приз</div>
         <div class="sheet-title">Тебе хватает!</div>
-        <div class="muted">Подойди к учителю — он выдаст <b>${name}</b> и спишет <b>${p.cost}&nbsp;★</b>. Останется <b>${after}&nbsp;★</b>.</div>
-        <button class="btn btn-lg btn-block" onclick="closeSheets()">Понятно</button>
+        <div class="muted">${buy
+          ? `Купи <b>${name}</b> — спишется <b>${p.cost}&nbsp;★</b>, останется <b>${after}&nbsp;★</b>. Приз выдаст учитель.`
+          : `Подойди к учителю — он выдаст <b>${name}</b> и спишет <b>${p.cost}&nbsp;★</b>. Останется <b>${after}&nbsp;★</b>.`}</div>
+        ${buy ? `${show}${later}` : `<button class="btn btn-lg btn-block" onclick="closeSheets()">Понятно</button>`}
       </div>`;
   } else {
     html = `<div class="cel-scrim" onclick="closeSheets()"></div>
       <div class="cel-nb" role="dialog" aria-label="Тебе хватает на приз">
         <div class="cel-nb-frame"><div class="cel-nb-in ruled-bg">
-          <span class="cel-nb-caps">Отметка для учителя</span>
+          <span class="cel-nb-caps">${buy ? "Можно купить" : "Отметка для учителя"}</span>
           ${stampHtml()}
           <div class="cel-nb-title">${first}, тебе хватает на ${name}!</div>
           <div class="cel-nb-prize">${pic}<span><span>Приз стоит <b class="st">${p.cost}&nbsp;★</b></span>
             <span>У тебя <b>${fmt(bal)}&nbsp;★</b>, останется <b>${after}&nbsp;★</b></span></span></div>
-          <div class="muted cel-nb-note">Покажи этот экран учителю — он выдаст приз и спишет звёзды.</div>
+          <div class="muted cel-nb-note">${buy ? "Звёзды спишутся сразу, а приз выдаст учитель." : "Покажи этот экран учителю — он выдаст приз и спишет звёзды."}</div>
           ${show}${later}
         </div></div>
       </div>`;
@@ -923,6 +934,69 @@ function openCelebrate(prizeId) {
   if (insideTelegram) {
     try { tg.BackButton.show(); } catch (_) {}
   }
+}
+
+/* ── Покупка приза (школа включила «Ученики покупают сами») ── */
+
+/** Первое нажатие — «Да, списать N ★», второе — покупка. */
+async function buyPrize(prizeId, button) {
+  const p = data.prizes.find((x) => x.id === prizeId);
+  if (!p) return;
+  if (!button.dataset.sure) {
+    button.dataset.sure = "1";
+    button.classList.add("sure");
+    button.innerHTML = `${icon("check", "ic")}Да, списать ${fmt(p.cost)}&nbsp;★`;
+    haptic();
+    return;
+  }
+  button.disabled = true;
+  try {
+    const result = await api("/api/me/orders", { method: "POST", json: { prize_id: prizeId } });
+    haptic("success");
+    closeSheets();
+    openBought(result.order, result.total_stars);
+    balanceBefore = result.total_stars;          // списание — не «новые звёзды»
+    await refresh();
+  } catch (error) {
+    button.disabled = false;
+    toast(error.message, "error");
+  }
+}
+
+/** Шторка «Куплено»: штамп, сколько списано и что дальше. */
+function openBought(order, left) {
+  $("issuedBody").innerHTML = `
+    <span class="grip"></span>
+    <div class="issued-photo">${img(order.prize_image)}<span class="issued-stamp">Куплено</span></div>
+    <div class="col-gap6"><div class="sheet-title">${escapeHtml(quoted(order.prize_name))} — твой!</div>
+      <div class="muted">Подойди к учителю — он выдаст приз. Пока он ждёт тебя в «Моих покупках».</div></div>
+    <div class="issued-sum">
+      <div><span>Списано</span><b class="muted">−${fmt(order.cost)} ★</b></div>
+      <div><span>Осталось</span><b>${fmt(left)} ★</b></div>
+    </div>
+    <button class="btn btn-lg btn-block" onclick="closeSheets()">Понятно</button>`;
+  openSheet("issuedSheet");
+}
+
+/** «Мои покупки» над витриной: что ждёт выдачи, выданное и отменённое за две недели. */
+function renderOrders() {
+  const orders = data.orders || [];
+  $("ordersBlock").hidden = !orders.length;
+  if (!orders.length) return;
+  const waiting = orders.filter((o) => o.status === "waiting").length;
+  $("ordersTitle").textContent = waiting ? `Мои покупки · ждут выдачи: ${waiting}` : "Мои покупки";
+  $("ordersList").innerHTML = orders.map((o) => {
+    const state = o.status === "waiting"
+      ? `<span class="ord-state wait">${icon("clock", "ic ic-xs")}Ждёт выдачи — подойди к учителю</span>`
+      : o.status === "issued"
+        ? `<span class="ord-state ok">${icon("check", "ic ic-xs")}Выдан ${escapeHtml(formatDay(String(o.closed_at).slice(0, 10), { year: false }))}</span>`
+        : `<span class="ord-state off">${icon("refresh", "ic ic-xs")}Отменена — ${fmt(o.cost)}&nbsp;★ вернулись${o.cancel_reason ? `. ${escapeHtml(o.cancel_reason)}` : ""}</span>`;
+    return `<div class="ord-row ${o.status}">
+      ${img(o.prize_image, "ord-img")}
+      <span class="ord-mid"><b>${escapeHtml(o.prize_name)}</b>${state}</span>
+      <span class="ord-cost">${o.status === "cancelled" ? "" : "−"}${fmt(o.cost)}&nbsp;★</span>
+    </div>`;
+  }).join("");
 }
 
 /* ── Уведомление «+5 звёзд за урок» ───────────────────────── */
@@ -944,6 +1018,7 @@ function showStarsToast(delta, entry) {
 
 function renderAll() {
   renderHero();
+  renderOrders();
   renderPrizes();
   renderRating();
   renderHistory();
@@ -952,9 +1027,21 @@ function renderAll() {
 }
 
 function afterRefresh() {
+  // Покупку выдали или отменили — уведомление; звёзды отмены — не «+N за урок»
+  const orders = data.orders || [];
+  let refunded = false;
+  if (ordersBefore) {
+    for (const o of orders) {
+      if (ordersBefore.get(o.id) !== "waiting" || o.status === "waiting") continue;
+      if (o.status === "issued") toast(`Приз выдан: ${quoted(o.prize_name)}`, "success");
+      else { refunded = true; toast(`Покупка ${quoted(o.prize_name)} отменена — ${fmt(o.cost)} ★ вернулись`); }
+    }
+  }
+  ordersBefore = new Map(orders.map((o) => [o.id, o.status]));
+
   // Новые звёзды — уведомление; новый доступный приз — праздник
   const bal = data.student.total_stars;
-  if (balanceBefore !== null && bal > balanceBefore) {
+  if (balanceBefore !== null && bal > balanceBefore && !refunded) {
     haptic("success");
     showStarsToast(bal - balanceBefore, data.history?.[0]);
   }

@@ -286,6 +286,7 @@ function renderAll() {
   renderJournal();
   renderTable();
   renderPanel();
+  renderOrdersPanel();
   renderPrizes();
   renderLessons();
   renderTodayStrip();
@@ -1641,6 +1642,16 @@ function renderGive() {
   const bal = student.total_stars;
   const prizes = schoolPrizes(classById(student.class_id)?.school_id).filter((p) => p.active !== false)
     .slice().sort((a, b) => a.cost - b.cost);
+  // Купил сам и ждёт приза — сначала выдать купленное, чтобы не списать звёзды второй раз
+  const bought = (state.orders || []).filter((o) => o.student_id === student.id && o.status === "waiting");
+  $("giveBought").hidden = !bought.length;
+  $("giveBought").innerHTML = bought.length ? `<span class="caps">Купил сам — звёзды уже списаны</span>` + bought.map((o) => `
+    <div class="give-item bought">
+      ${o.prize_image ? `<img src="${escapeHtml(assetUrl(o.prize_image))}" alt="" loading="lazy">` : `<img alt="">`}
+      <span class="gx"><span class="gn">${escapeHtml(o.prize_name)}</span><span class="gs">${escapeHtml(orderAgo(o.created_at))}</span></span>
+      <span class="gp">${o.cost} ★</span>
+      <button class="btn btn-sm" onclick="issueOrder(${o.id})">${icon("check", "ic ic-sm")}Выдан</button>
+    </div>`).join("") : "";
   $("giveList").innerHTML = prizes.length ? prizes.map((p) => {
     const ok = bal >= p.cost;
     const sel = givePrize === p.id;
@@ -1838,6 +1849,108 @@ function renderPrizeScope(prizes) {
   $("prizeScope").innerHTML = scopes.map(([key, label, count]) => `
     <button type="button" role="radio" aria-checked="${prizeScope === key}" onclick="pickPrizeScope('${key}')">
       <span class="ps-label">${escapeHtml(label)}</span><span class="ps-count">${count}</span></button>`).join("");
+}
+
+/* ── Покупки учеников: приз куплен в кабинете, звёзды списаны — ждёт выдачи ── */
+
+/** Покупки учеников выбранной школы (сервер отдаёт только тем, кто выдаёт: учителям и администратору). */
+function schoolOrders(status = null) {
+  return (state.orders || []).filter((o) => {
+    const student = studentById(o.student_id);
+    return student && classById(student.class_id)?.school_id === activeSchool && (!status || o.status === status);
+  });
+}
+
+function orderAgo(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = localToday();
+  const day = iso.slice(0, 10);
+  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return day === today ? `сегодня, ${time}` : `${formatDay(day, { year: false })}, ${time}`;
+}
+
+function orderRow(o, open) {
+  const student = studentById(o.student_id);
+  const cls = classById(student?.class_id)?.name || "";
+  const name = escapeHtml(student?.name || "Ученик");
+  const prize = escapeHtml(o.prize_name);
+  const state = o.status === "issued" ? `<span class="ord-tag ok">${icon("check", "ic ic-xs")}выдан · ${escapeHtml(o.closed_by_name || "")}</span>`
+    : o.status === "cancelled" ? `<span class="ord-tag off">${icon("refresh", "ic ic-xs")}отменена, звёзды вернулись${o.cancel_reason ? ` · ${escapeHtml(o.cancel_reason)}` : ""}</span>` : "";
+  return `
+    <div class="ord-line">
+      <img class="av-sm" src="${escapeHtml(avatarUrl(student))}" alt="" loading="lazy">
+      <span class="ord-who"><b>${name}</b><small>${escapeHtml(cls)} · ${escapeHtml(orderAgo(o.created_at))}</small></span>
+      <span class="ord-prize">${icon("gift", "ic ic-sm")}<span>${prize}</span></span>
+      <span class="pill-star">${icon("star")}<b>${fmt(o.cost)}</b></span>
+      ${open ? `<span class="ord-acts">
+        <button class="btn btn-sm" onclick="issueOrder(${o.id})">${icon("check", "ic ic-sm")}Выдан</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelOrder(${o.id})" aria-label="Отменить покупку: ${name}, ${prize}">Отменить…</button>
+      </span>` : state}
+    </div>`;
+}
+
+function renderOrdersPanel() {
+  const waiting = schoolOrders("waiting");
+  const closed = schoolOrders().filter((o) => o.status !== "waiting").slice(0, 20);
+  const box = $("ordersPanel");
+  box.hidden = !rewardsHere() || !teachesHere() || (!waiting.length && !closed.length);
+  const count = teachesHere() && rewardsHere() ? waiting.length : 0;
+  $("prizesNavCount").textContent = count > 99 ? "99+" : String(count);
+  $("prizesNavCount").hidden = !count;
+  $("ordersHint").hidden = !count;
+  $("ordersHint").innerHTML = `${icon("gift", "ic ic-sm")}<span><b>${count} ${plural(count, "приз ждёт", "приза ждут", "призов ждут")} выдачи</b> — ученики купили сами</span>${icon("chevron-right", "ic ic-sm")}`;
+  if (box.hidden) return;
+  box.innerHTML = `
+    <h2 class="caps ord-title" id="ordersPanelTitle">Ждут выдачи · ${waiting.length}</h2>
+    <p class="page-sub">Ученики купили сами — звёзды уже списаны. Отдайте приз и нажмите «Выдан»; если приза нет — «Отменить», звёзды вернутся.</p>
+    ${waiting.length ? `<div class="card ord-list">${waiting.map((o) => orderRow(o, true)).join("")}</div>`
+      : `<p class="muted ord-empty">Сейчас никто не ждёт приза.</p>`}
+    ${closed.length ? `<details class="ord-done"><summary>Недавно выданы и отменены · ${closed.length}</summary>
+      <div class="card ord-list">${closed.map((o) => orderRow(o, false)).join("")}</div></details>` : ""}`;
+}
+
+async function issueOrder(id) {
+  const order = (state.orders || []).find((o) => o.id === id);
+  try {
+    await api(`/api/orders/${id}/issue`, { method: "POST" });
+    await loadState();
+    if ($("modalGive").classList.contains("open")) renderGive();
+    toast(`Выдано: ${order?.prize_name || "приз"} · ${studentById(order?.student_id)?.name || ""}`, "success", "gift");
+  } catch (error) {
+    toast(error.message, "error");
+    loadState().catch(() => {});
+  }
+}
+
+function cancelOrder(id) {
+  const order = (state.orders || []).find((o) => o.id === id);
+  if (!order) return;
+  const student = studentById(order.student_id);
+  confirmAction("Отменить покупку?",
+    `${escapeHtml(student?.name || "Ученику")} вернутся <b>${fmt(order.cost)} ★</b> за ${escapeHtml(quoted(order.prize_name))}, запись покупки исчезнет из истории.
+     <label class="field ord-reason"><span class="field-label">Причина — ученик её увидит</span>
+       <input type="text" id="cancelReason" maxlength="200" placeholder="Например: приз закончился"></label>`,
+    async () => {
+      await api(`/api/orders/${id}/cancel`, { method: "POST", json: { reason: $("cancelReason")?.value || "" } });
+      await loadState();
+      toast(`Покупка отменена — ${fmt(order.cost)} ★ вернулись ученику`, "success");
+    }, "Отменить покупку");
+}
+
+/** Раз в минуту — не купил ли кто-то приз: счётчик в меню и блок «Ждут выдачи». */
+async function pollOrders() {
+  if (document.hidden || !state.me || !teachesHere() || !rewardsHere()) return;
+  try {
+    const { orders } = await api("/api/orders/waiting");
+    const known = new Set((state.orders || []).filter((o) => o.status === "waiting").map((o) => o.id));
+    const fresh = orders.map((o) => o.id);
+    if (fresh.length !== known.size || fresh.some((id) => !known.has(id))) {
+      if (!topModal() && !(currentPage() === "journal" && journalView === "class" && usedBank())) await loadState();
+    }
+  } catch (_) {
+    // нет связи — проверим в следующий раз
+  }
 }
 
 function renderPrizes() {
@@ -2648,6 +2761,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!document.hidden && currentPage() === "journal" && journalView === "home") renderJournalHome();
   }, 60000);
   startBellClock();          // звонок — каждую секунду, «Сотрудники» — раз в 30 секунд
+  setInterval(pollOrders, 60000);   // покупки учеников — раз в минуту
 
   // Кнопка «Открыть в панели» из группы «Отметки» ведёт на /teacher#checkin-lesson-<номер>
   window.addEventListener("hashchange", openCheckinFromHash);
