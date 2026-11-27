@@ -194,7 +194,8 @@ sudo nginx -t && sudo systemctl reload nginx
 
 1. Создайте бота у [@BotFather](https://t.me/BotFather): `/newbot`, имя (его видят дети),
    username (например `school_stars_bot`).
-2. Токен и username впишите в `.env`, затем `docker compose restart`.
+2. Токен и username впишите в `.env`, затем `docker compose up -d --force-recreate`
+   (`docker compose restart` не перечитывает `.env` — бот остался бы со старым токеном).
 3. В логах должна появиться строка `Бот запущен (webhook)`.
 
 Настраивать Menu Button в BotFather не нужно — кнопка приходит прямо в сообщении бота.
